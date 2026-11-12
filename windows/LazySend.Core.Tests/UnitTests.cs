@@ -286,7 +286,7 @@ public class NetworkTests
     [InlineData("10.1.2.3", true)]
     [InlineData("172.20.10.2", true)]
     [InlineData("192.168.42.129", true)]
-    [InlineData("100.64.1.1", true)]
+    [InlineData("100.64.1.1", false)]
     [InlineData("fe80::1", true)]
     [InlineData("fd00::1", true)]
     [InlineData("::ffff:192.168.1.5", true)]
@@ -317,5 +317,18 @@ public class NetworkTests
         Assert.Equal(43, SpkiFingerprint.Text(fingerprint).Length);
         Assert.Equal(6, SpkiFingerprint.CheckCode(fingerprint).Length);
         Assert.True(certificate.HasPrivateKey);
+    }
+}
+
+public class SharedAddressTests
+{
+    [Fact]
+    public void SharedAddressSpaceIsAllowedOnlyInsideAnOwnSubnet()
+    {
+        var peer = IPAddress.Parse("100.64.1.1");
+
+        Assert.False(LocalNetworks.IsLocalAddress(peer));
+        Assert.True(new LocalSubnet(IPAddress.Parse("100.64.1.9"), 10).Contains(peer));
+        Assert.False(new LocalSubnet(IPAddress.Parse("192.168.1.9"), 24).Contains(peer));
     }
 }

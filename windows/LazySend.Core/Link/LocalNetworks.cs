@@ -75,8 +75,8 @@ public static class LocalNetworks
                    .Select(a => a.ToString())];
 
     /// <summary>
-    /// Whether a connection from <paramref name="remote"/> is answered: from this computer, a private,
-    /// link-local, shared (100.64.0.0/10) or unique-local address, or one in the subnet of an address
+    /// link-local or unique-local address, or one in the subnet of an address of this computer. The shared
+    /// 100.64.0.0/10 range (carrier-grade NAT, Tailscale) counts only through that last rule.
     /// of this computer.
     /// </summary>
     public static bool IsAllowedPeer(IPAddress remote)
@@ -105,8 +105,7 @@ public static class LocalNetworks
             return b[0] == 10
                    || (b[0] == 172 && (b[1] & 0xF0) == 16)
                    || (b[0] == 192 && b[1] == 168)
-                   || (b[0] == 169 && b[1] == 254)
-                   || (b[0] == 100 && (b[1] & 0xC0) == 64);
+                   || (b[0] == 169 && b[1] == 254);
         }
         if (address.AddressFamily == AddressFamily.InterNetworkV6)
         {

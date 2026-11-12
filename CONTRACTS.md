@@ -28,7 +28,7 @@ The code the computer shows as a QR is the URI above. `v` is the protocol versio
 
 The addresses are those of every interface that is up, whatever its type, loopback and IPv6 link-local ones left out. USB networking is not special: an iPhone's Personal Hotspot over USB gives the computer an address such as 172.20.10.x and Android USB tethering usually 192.168.42.x, and both are in the list like a Wi-Fi address. Self-assigned 169.254.x.x addresses go last. The phone tries the addresses in turn and checks the fingerprint on whichever answers.
 
-The server listens on every interface, IPv4 and IPv6, on one port. It answers only peers from loopback, private, link-local, shared (100.64.0.0/10) and unique-local addresses, or from the subnet of one of the computer's own addresses; anything else is closed before TLS starts.
+The server listens on every interface, IPv4 and IPv6, on one port. It answers only peers from loopback, private, link-local and unique-local addresses, or from the subnet of one of the computer's own addresses (which is how a 100.64.0.0/10 address, as Tailscale uses, gets in); anything else is closed before TLS starts.
 
 1. The user opens pairing on the computer. A session starts: a random token, good for 5 minutes and for one pairing.
 2. The phone scans the code and sends `POST /v1/pair` with the token and who it is.
