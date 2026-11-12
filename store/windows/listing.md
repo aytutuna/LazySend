@@ -8,4 +8,4 @@ The package declares `runFullTrust` and nothing else. Partner Center asks for a 
 
 ## Identity
 
-Copy three values from Partner Center, Product identity, into the repository's Actions variables: Name as `STORE_IDENTITY_NAME`, Publisher as `STORE_PUBLISHER` and PublisherDisplayName as `STORE_PUBLISHER_DISPLAY_NAME`. Run the Release workflow and upload the `.msixupload` from its `lazysend-store` artifact.
+Copy three values from Partner Center, Product identity, into the repository's Actions variables: Name as `STORE_IDENTITY_NAME`, Publisher as `STORE_PUBLISHER` and PublisherDisplayName as `STORE_PUBLISHER_DISPLAY_NAME`. Publish `x64` and `arm64` self-contained (`dotnet publish windows/LazySend.App/LazySend.App.csproj -c Release -r win-x64 --self-contained`) and build the upload on the PC with `scripts/make_msix.ps1`, giving the three values. Do not build it in CI: run artifacts of a public repository can be downloaded by any signed-in GitHub user. The Release workflow only checks that the package packs.

@@ -1,8 +1,9 @@
 name: Release
 
-# Packs the Windows app for the Microsoft Store: an .msixupload with an x64 and an arm64 package in a
+# Checks that the Windows app packs for the Microsoft Store: an .msixupload with an x64 and an arm64 package in a
 # bundle, built self-contained so nobody has to install .NET. It is not signed: the Store signs what it
-# publishes. Run it by hand from the Actions tab.
+# publishes. Run it by hand from the Actions tab. Nothing is uploaded: run artifacts of a public repository can
+# be downloaded by any signed-in GitHub user, so the upload is built on the PC with scripts/make_msix.ps1.
 on:
   workflow_dispatch:
 
@@ -50,8 +51,3 @@ jobs:
             -IdentityName $env:IDENTITY_NAME `
             -Publisher $env:PUBLISHER `
             -PublisherDisplayName $env:PUBLISHER_DISPLAY_NAME
-      - uses: actions/upload-artifact@v7
-        with:
-          name: lazysend-store
-          path: ${{ runner.temp }}/store/*.msixupload
-          if-no-files-found: error
