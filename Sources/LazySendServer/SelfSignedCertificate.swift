@@ -28,7 +28,7 @@ public enum SelfSignedCertificate {
     static let subjectAltNameOid: [UInt64] = [2, 5, 29, 17]
     static let serverAuthOid: [UInt64] = [1, 3, 6, 1, 5, 5, 7, 3, 1]
 
-    /// "AYTU-MAC Lazy Send".
+    /// "Office-Mac Lazy Send".
     public static func commonName(hostName: String) -> String {
         "\(hostName) Lazy Send"
     }
