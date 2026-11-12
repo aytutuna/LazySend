@@ -85,6 +85,7 @@ public final class AppModel: ObservableObject {
     private var reconciling = false
     private var reconcileAgain = false
     private let locator = FileLocator()
+    private var receiveScope: URL?
 
     init(service: LinkService, advertiser: Advertiser? = nil, pasteboard: NSPasteboard = .general, scratch: URL? = nil,
          notify: @escaping (String, String) -> Void = { _, _ in }) {
@@ -296,6 +297,8 @@ public final class AppModel: ObservableObject {
 
     private func second() {
         let now = Date()
+        // A listener that could not start (the Local Network prompt still open, say) is tried again.
+        if startError != nil, wantsServer, !service.server.isRunning { reconcileServer() }
         let devices = service.devices.devices
         let seen = phones.map { phone -> PhoneRow in
             var phone = phone
@@ -492,6 +495,7 @@ public final class AppModel: ObservableObject {
 
     /// Waiting items that left the outbox were picked up by the phone, or withdrawn here.
     private func refreshSent() {
+        locator.keep(Set(service.outbox.all.map { $0.id }))
         let paired = Set(service.devices.devices.map(\.id))
         for index in timeline.indices where timeline[index].sent && timeline[index].canCancel {
             guard let outboxId = timeline[index].outboxId, service.outbox.find(timeline[index].deviceId, outboxId) == nil else { continue }
@@ -520,26 +524,37 @@ public final class AppModel: ObservableObject {
     /// Takes a folder the user chose as the receive folder, kept across launches by a bookmark.
     public func chooseReceiveFolder(_ url: URL) {
         let bookmark = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
-        _ = url.startAccessingSecurityScopedResource()
+        openReceiveScope(url)
         service.settings.setReceiveRoot(url, bookmark: bookmark)
         receiveFolder = url.path
     }
 
     public func useDefaultReceiveFolder() {
+        closeReceiveScope()
         service.settings.setReceiveRoot(nil)
         receiveFolder = service.settings.receiveRoot.path
     }
 
-    /// Opens the chosen receive folder again after a launch.
+    /// Opens the chosen receive folder again after a launch; once is enough.
     public func resumeReceiveFolder() {
-        guard let bookmark = service.settings.receiveBookmark else { return }
+        guard receiveScope == nil, let bookmark = service.settings.receiveBookmark else { return }
         var stale = false
-        guard let url = try? URL(resolvingBookmarkData: bookmark, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &stale),
-              url.startAccessingSecurityScopedResource() else { return }
+        guard let url = try? URL(resolvingBookmarkData: bookmark, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &stale) else { return }
+        openReceiveScope(url)
         if url.path != service.settings.receiveRoot.path || stale {
             service.settings.setReceiveRoot(url, bookmark: try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil))
         }
         receiveFolder = url.path
+    }
+
+    private func openReceiveScope(_ url: URL) {
+        closeReceiveScope()
+        if url.startAccessingSecurityScopedResource() { receiveScope = url }
+    }
+
+    private func closeReceiveScope() {
+        receiveScope?.stopAccessingSecurityScopedResource()
+        receiveScope = nil
     }
 
     private func clearScratch() {
@@ -582,18 +597,31 @@ public final class AppModel: ObservableObject {
 /// Opens the files of a queued item again after the sandbox forgot their paths, by the bookmark kept with the item.
 final class FileLocator: @unchecked Sendable {
     private let lock = NSLock()
-    private var scopes: [URL] = []
+    private var scopes: [String: URL] = [:]
 
+    /// One access per queued item, kept until the item leaves the queue, so a download that resumes does not open
+    /// the file again.
     func locate(_ item: OutboxItem) -> URL? {
         if let path = item.path, FileManager.default.isReadableFile(atPath: path) { return URL(fileURLWithPath: path) }
+        lock.lock()
+        defer { lock.unlock() }
+        if let url = scopes[item.id] { return url }
         guard let bookmark = item.bookmark else { return item.path.map { URL(fileURLWithPath: $0) } }
         var stale = false
         guard let url = try? URL(resolvingBookmarkData: bookmark, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &stale),
               url.startAccessingSecurityScopedResource() else { return nil }
-        lock.lock()
-        scopes.append(url)
-        lock.unlock()
+        scopes[item.id] = url
         return url
+    }
+
+    /// Lets go of the files of items that are no longer queued.
+    func keep(_ ids: Set<String>) {
+        lock.lock()
+        defer { lock.unlock() }
+        for (id, url) in scopes where !ids.contains(id) {
+            url.stopAccessingSecurityScopedResource()
+            scopes[id] = nil
+        }
     }
 }
 
