@@ -15,7 +15,7 @@ final class FakePc: @unchecked Sendable {
     }
 
     let desktopId = "pc-test-0001"
-    let phoneId = "phone-test-0001"
+    private(set) var phoneId = "phone-test-0001"
     let secret = Base64Url.encode(Data(repeating: 7, count: 32))
     let token = Base64Url.encode(Data(repeating: 9, count: 16))
     private(set) var server: TestServer!
@@ -77,6 +77,7 @@ final class FakePc: @unchecked Sendable {
             let body = object(request.body)
             guard body["token"] as? String == token else { return .error(403, "tokenInvalid") }
             guard approves else { return .error(403, "declined") }
+            if let id = body["phoneId"] as? String { phoneId = id }
             return .json("{\"protocolVersion\":1,\"desktopId\":\"\(desktopId)\",\"desktopName\":\"Test PC\",\"deviceSecret\":\"\(secret)\"}")
         }
         guard authorized(request) else { return .error(401, "unauthorized") }

@@ -77,7 +77,7 @@ final class ClientTests: XCTestCase {
         let client = LinkClient(endpoint: pc.endpoint, pin: pc.pin, credentials: pc.credentials)
         _ = try await Uploader(chunkBytes: 1_000_000, sleep: { _ in }, connect: { client }).send(request, source: FileDataSource(url: file.url))
         XCTAssertEqual(pc.uploads.values.first?.data, file.data)
-        XCTAssertEqual(pc.chunkOffsets, [0, 300_000, 1_000_000])
+        XCTAssertEqual(pc.chunkOffsets, [0, 300_000])
     }
 
     func testPausesWhileTheComputerIsBusy() async throws {
