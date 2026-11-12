@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>LazySend.Core</RootNamespace>
     <Description>Platform-neutral core of Lazy Send: the phone link's server, pairing, and the stores for what
-phones send and what waits for them. No UI and no OS-specific APIs.</Description>
+phones send and what waits for them. No UI; the one Windows-specific step is marking received files as downloaded.</Description>
   </PropertyGroup>
 
   <ItemGroup>

@@ -52,7 +52,7 @@ Requests and answers are JSON (`application/json; charset=utf-8`) unless said ot
 | `GET /v1/items/{id}` | | 200 `{id, offset, done}`; 404 for an unknown item or another phone's |
 | `PUT /v1/items/{id}/data` | header `X-Offset: <n>`, `Content-Length`, the bytes | 200 `{id, offset, done}` |
 | `POST /v1/gallery/check` | `{ids: [...]}`, at most 1000 | 200 `{missing: [...]}` |
-| `GET /v1/outbox?wait=<seconds>` | | 200 `{items: [...]}` |
+| `GET /v1/outbox?wait=<seconds>` | | 200 `{items: [...], more?}` |
 | `GET /v1/outbox/{id}/data` | optional `Range: bytes=<n>-` | 200 or 206 with the file's bytes |
 | `DELETE /v1/outbox/{id}` | | 204 |
 
@@ -67,8 +67,8 @@ Requests and answers are JSON (`application/json; charset=utf-8`) unless said ot
 `PUT /v1/items/{id}/data` appends a chunk of at most 64 MiB at `X-Offset`.
 
 - The offset must be the file's current length. Otherwise the answer is 409 `offsetMismatch` with `offset` set to the current length, and the phone continues from there. The whole body of such a refused chunk is read and dropped first, so the answer is never lost to a reset.
-- A chunk that would end past the file's size, or has no length, gets 400; one over 64 MiB gets 413; one that would leave under 1 GiB free gets 507.
-- When the offset reaches `size` the item completes: the SHA-256, when given, is checked (a mismatch deletes the file and answers 422 `hashMismatch`, and the phone starts the file again with a new `POST`), the part file is renamed into place, the file's modified time is set from `modified`, and the answer is 200 `{id, offset: size, done: true}`. The hash is computed while the data arrives when the file went up in one run, so completing a multi-gigabyte file is not slow; after a resume across a restart the file is read once more.
+- A chunk without a `Content-Length` gets 411 `lengthRequired`; one that would end past the file's size, or whose offset is past it, gets 400; one over 64 MiB gets 413; one that would leave under 1 GiB free gets 507. An empty chunk at an offset equal to the size is not an error: it finishes a file whose part is already full but was never put in place, and answers as the last chunk does. An empty chunk anywhere else is 400 or 409.
+- When the offset reaches `size` the item completes: the SHA-256, when given, is checked (a mismatch deletes the file and answers 422 `hashMismatch`, and the phone starts the file again with a new `POST`), the part file is renamed into place, the file's modified time is set from `modified` (dates before 1980 or after 2100 are ignored, and the arrival date is used for the gallery folder), and the answer is 200 `{id, offset: size, done: true}`. The hash is computed while the data arrives when the file went up in one run, so completing a multi-gigabyte file is not slow; after a resume across a restart the file is read once more.
 - A chunk sent for a file that is already done answers its done state, so a phone whose last answer was lost can carry on.
 - One chunk is written at a time per file. A newer request for the same file takes over from one still open (the phone has given up on that connection): the older one stops, keeping what it had written. If the takeover takes more than 5 seconds the newer one gets 409 `busy`.
 
@@ -82,9 +82,9 @@ A refused chunk or item request's unread body is dropped up to 1 MiB before the 
 
 The computer queues items per phone: text, a link, or a file reference with name, size and optional mime. The file stays where it is on the computer and is read when downloaded. At most 1000 items wait per phone, and the queue is kept on disk, so it survives a restart of the app.
 
-`GET /v1/outbox?wait=<seconds>` answers `{items: [{id, kind, text?, url?, name?, size?, mime?}]}` with everything pending for the phone, oldest first. With nothing pending it waits up to `wait` seconds (0 if absent, 25 at most, more is cut to 25) and answers as soon as an item is queued, or empty when the time is up. The phone asks again straight away. An item stays in the list until it is acknowledged, so a phone must not treat one it already has as new.
+`GET /v1/outbox?wait=<seconds>` answers `{items: [{id, kind, text?, url?, name?, size?, mime?}]}` with everything pending for the phone, oldest first. With nothing pending it waits up to `wait` seconds (0 if absent, 25 at most, more is cut to 25) and answers as soon as an item is queued, or empty when the time is up. A reply holds at most 100 items and at most 4 MiB of text and links together (always at least one item); when more is pending it carries `"more": true`, and the phone acknowledges what it got and asks again. The phone asks again straight away. An item stays in the list until it is acknowledged, so a phone must not treat one it already has as new.
 
-`GET /v1/outbox/{id}/data` streams the file. Without `Range` the answer is 200 with the whole file; with `Range: bytes=<n>-` it is 206 with `Content-Range: bytes n-(size-1)/size` and the rest of the file, so a download resumes where it broke. Any other form of `Range`, or a start at or past the end, is 416 `rangeNotSatisfiable`. A missing file is 404, and a file whose size no longer matches what was queued is 409 `changed`. Answers carry `Accept-Ranges: bytes` and the item's mime type, or `application/octet-stream`.
+`GET /v1/outbox/{id}/data` streams the file. Without `Range` the answer is 200 with the whole file; with `Range: bytes=<n>-` it is 206 with `Content-Range: bytes n-(size-1)/size` and the rest of the file, so a download resumes where it broke. Any other form of `Range`, or a start at or past the end of a file that is not empty, is 416 `rangeNotSatisfiable` with `Content-Range: bytes */size`; an empty file is always sent whole. A missing file is 404, and a file whose size no longer matches what was queued is 409 `changed`. Answers carry `Accept-Ranges: bytes` and the item's mime type, or `application/octet-stream`.
 
 `DELETE /v1/outbox/{id}` acknowledges: the item is removed. It is 204 also when the item is gone already.
 
@@ -116,7 +116,7 @@ An address counts as one peer whether it is written as IPv4 or as an IPv4-mapped
 
 Files go to a receive folder the user can change; it defaults to `%USERPROFILE%\Downloads\Lazy Send`. Inside it each phone has a folder named after the phone (`<root>\<device name>\`), and files from a gallery sync, those with a `sourceId`, go to `<root>\<device name>\Gallery\YYYY-MM\` by their `modified` date in local time (the arrival date when it is absent). The folder is fixed when a transfer starts, so changing the receive folder later does not strand a transfer.
 
-Names come from the phone and are made safe: path separators, characters Windows refuses and control characters become `_`, trailing dots and spaces go, a device name such as `NUL` or `COM1` gets `_` in front, and the name is cut to 240 UTF-8 bytes, keeping the extension. A name already taken gets ` (2)`, ` (3)` and so on before the extension. A file is written as `<id>.part` in its folder and renamed once complete; part files and their records older than 7 days are deleted at start.
+Names come from the phone and are made safe: path separators, characters Windows refuses and control characters become `_`, trailing dots and spaces go, a device name such as `NUL` or `COM1` gets `_` in front, and the name is cut to 240 UTF-8 bytes, keeping the extension. A name already taken gets ` (2)`, ` (3)` and so on before the extension. Every received file gets a `Zone.Identifier` stream with `ZoneId=3`, as a browser download does, so SmartScreen and Office checks apply to what a phone sends (an `.exe`, `.lnk` or `.url`). A file is written as `<id>.part` in its folder and renamed once complete; part files and their records older than 7 days are deleted at start.
 
 | Path | Holds |
 | --- | --- |
