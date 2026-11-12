@@ -160,7 +160,8 @@ public final class PinnedSession: @unchecked Sendable {
     public init(pin: Data) {
         delegate = SessionDelegate(pin: pin)
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 30
+        // Every request sets its own timeout (pairing waits 130 s, the outbox up to 40), which a shorter one here could cut.
+        configuration.timeoutIntervalForRequest = 3600
         configuration.waitsForConnectivity = false
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.connectionProxyDictionary = [:]
