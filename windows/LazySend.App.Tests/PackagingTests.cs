@@ -1,4 +1,3 @@
-using System.IO;
 using LazySend.App.Services;
 
 namespace LazySend.App.Tests;
@@ -16,14 +15,16 @@ public sealed class PackagingTests
     [Fact]
     public void TheTestHostIsNotPackaged() => Assert.False(Packaging.IsPackaged);
 
+
     [Fact]
-    public void TheSendToShortcutStartsTheExeOrThePackagesAlias()
+    public void APackagedAppOffersNoSendToShortcut()
     {
-        Assert.Equal(Environment.ProcessPath, ShellIntegration.SendToTarget);
+        Assert.True(ShellIntegration.SendToAvailable);
         Packaging.IsPackaged = true;
         try
         {
-            Assert.EndsWith(Path.Combine("Microsoft", "WindowsApps", "LazySend.exe"), ShellIntegration.SendToTarget);
+            Assert.False(ShellIntegration.SendToAvailable);
+            Assert.False(ShellIntegration.SendToShortcut);
         }
         finally
         {

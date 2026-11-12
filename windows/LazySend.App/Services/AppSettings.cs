@@ -31,15 +31,8 @@ public static class ShellIntegration
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string RunValue = "Lazy Send";
     private const string StartupTaskId = "LazySendStartup";
-    private const string Alias = "LazySend.exe";
 
     public static string SendToPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.SendTo), "Lazy Send.lnk");
-
-    /// <summary>What the Send to shortcut starts: the package's execution alias, since the exe inside WindowsApps cannot be launched by path.</summary>
-    internal static string SendToTarget =>
-        Packaging.IsPackaged
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "WindowsApps", Alias)
-            : Environment.ProcessPath!;
 
     public static bool StartWithWindows
     {
@@ -85,11 +78,15 @@ public static class ShellIntegration
             throw new InvalidOperationException("Start with Windows is turned off in Windows. Turn it on under Settings, Apps, Startup.");
     }
 
+    // TODO: a packaged app cannot add a Send to entry (its AppData writes stay in the package); a share target would.
+    public static bool SendToAvailable => !Packaging.IsPackaged;
+
     public static bool SendToShortcut
     {
-        get => File.Exists(SendToPath);
+        get => SendToAvailable && File.Exists(SendToPath);
         set
         {
+            if (!SendToAvailable) return;
             if (!value)
             {
                 File.Delete(SendToPath);
@@ -100,7 +97,7 @@ public static class ShellIntegration
             try
             {
                 dynamic link = shell.CreateShortcut(SendToPath);
-                link.TargetPath = SendToTarget;
+                link.TargetPath = Environment.ProcessPath;
                 link.Description = "Send to a phone with Lazy Send";
                 link.Save();
             }

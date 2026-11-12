@@ -22,6 +22,7 @@ public partial class SettingsWindow : Window
             FooterStatus.Text = locked;
         }
         SendToBox.IsChecked = ShellIntegration.SendToShortcut;
+        if (!ShellIntegration.SendToAvailable) SendToBox.Visibility = Visibility.Collapsed;
         _loading = false;
     }
 
