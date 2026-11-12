@@ -1,3 +1,4 @@
+using System.IO;
 using LazySend.App.Services;
 using LazySend.Core;
 
@@ -110,5 +111,59 @@ public class InstanceChannelTimeoutTests
         Assert.True(InstanceChannel.Send([@"C:\a\b.txt"], pipe, 8000));
 
         Assert.Equal([@"C:\a\b.txt"], await received.Task.WaitAsync(TimeSpan.FromSeconds(10)));
+    }
+}
+
+public class ClipboardFilesTests
+{
+    [Fact]
+    public void PastedNamesDifferEvenInTheSameSecond()
+    {
+        var now = new DateTime(2026, 11, 11, 12, 0, 0);
+        var names = Enumerable.Range(0, 50).Select(_ => ClipboardFiles.NewImagePath(@"C:\x", now)).ToHashSet();
+
+        Assert.True(names.Count > 40);
+        Assert.All(names, n => Assert.Contains("Clipboard 2026-11-11 12-00-00 ", n));
+    }
+
+    [Fact]
+    public void CleanupKeepsOnlyWhatIsStillWaiting()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "lazysend-clip-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            string kept = Path.Combine(folder, "a.png"), gone = Path.Combine(folder, "b.png");
+            File.WriteAllText(kept, "x");
+            File.WriteAllText(gone, "x");
+
+            ClipboardFiles.Cleanup(folder, [kept.ToUpperInvariant()]);
+
+            Assert.True(File.Exists(kept));
+            Assert.False(File.Exists(gone));
+        }
+        finally
+        {
+            Directory.Delete(folder, true);
+        }
+    }
+
+    [Fact]
+    public void OversizedAndBrokenPicturesGiveNoThumbnail()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "lazysend-thumb-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            string broken = Path.Combine(folder, "broken.png");
+            File.WriteAllText(broken, "not a picture");
+
+            Assert.Null(AppModel.DecodeThumbnail(broken));
+            Assert.Null(AppModel.DecodeThumbnail(Path.Combine(folder, "missing.png")));
+        }
+        finally
+        {
+            Directory.Delete(folder, true);
+        }
     }
 }

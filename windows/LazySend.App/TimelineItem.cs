@@ -46,7 +46,20 @@ public sealed class TimelineItem : INotifyPropertyChanged
     /// <summary>The outbox item of something sent, to follow its delivery.</summary>
     public string? OutboxId { get; init; }
 
-    public ImageSource? Thumbnail { get; init; }
+    private ImageSource? _thumbnail;
+
+    /// <summary>Set when the picture has been decoded, a moment after the row appears.</summary>
+    public ImageSource? Thumbnail
+    {
+        get => _thumbnail;
+        set
+        {
+            _thumbnail = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Thumbnail)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasThumbnail)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ShowGlyph)));
+        }
+    }
 
     /// <summary>Set before a waiting item is withdrawn, so its removal reads as cancelled and not delivered.</summary>
     public bool Cancelling { get; set; }

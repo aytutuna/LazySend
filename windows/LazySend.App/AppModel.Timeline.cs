@@ -37,10 +37,14 @@ public sealed partial class AppModel
 {
     private static readonly string[] ImageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".heic"];
     private static readonly TimeSpan GalleryIdle = TimeSpan.FromSeconds(8);
+    private const int MaxRows = 500;
+    private const long MaxThumbnailPixels = 50_000_000;
+    private static readonly SemaphoreSlim ThumbnailSlots = new(2);
 
     private readonly Dictionary<string, TimelineItem> _galleries = [];
     private DispatcherTimer? _tick;
     private string? _selectedId;
+    private int _refreshQueued;
 
     /// <summary>What arrived and what was sent, newest first.</summary>
     public ObservableCollection<TimelineItem> Timeline { get; } = [];
@@ -62,7 +66,15 @@ public sealed partial class AppModel
     {
         Service.Router.TextReceived += (_, item) => _ui.BeginInvoke(() => AddReceivedText(item));
         Service.Inbox.FileReceived += (_, file) => _ui.BeginInvoke(() => AddReceivedFile(file));
-        Service.Outbox.Changed += (_, _) => _ui.BeginInvoke(RefreshSent);
+        Service.Outbox.Changed += (_, _) =>
+        {
+            if (Interlocked.Exchange(ref _refreshQueued, 1) != 0) return;
+            _ui.BeginInvoke(() =>
+            {
+                Volatile.Write(ref _refreshQueued, 0);
+                RefreshSent();
+            });
+        };
         Service.Devices.Changed += (_, _) => _ui.BeginInvoke(RefreshPhones);
         RefreshPhones();
         foreach (var item in Service.History.Items.Reverse()) AddReceivedText(item, arrived: false);
@@ -70,6 +82,8 @@ public sealed partial class AppModel
         {
             foreach (var waiting in Service.Outbox.Pending(phone.Id)) AddWaiting(waiting, phone.Name);
         }
+        ClipboardFiles.Cleanup(System.IO.Path.Combine(Paths.State, "clipboard"),
+                               Service.Devices.Devices.SelectMany(d => Service.Outbox.Pending(d.Id)).Select(i => i.Path).OfType<string>());
         _tick = new DispatcherTimer(DispatcherPriority.Background, _ui) { Interval = TimeSpan.FromSeconds(2) };
         _tick.Tick += (_, _) =>
         {
@@ -127,7 +141,7 @@ public sealed partial class AppModel
         };
         row.Heading = link ? $"Link from {item.DeviceName}" : $"Text from {item.DeviceName}";
         row.Detail = Stamp(item.Received);
-        Timeline.Insert(0, row);
+        Push(row);
         if (arrived && !link && Settings.CopyReceivedText) CopyToClipboard(item.Text);
         if (arrived) Arrived?.Invoke(this, row);
     }
@@ -143,11 +157,11 @@ public sealed partial class AppModel
         var row = new TimelineItem(TimelineKind.File, false, file.DeviceId, file.DeviceName, now)
         {
             Path = file.Path,
-            Thumbnail = Thumbnail(file.Path, file.Size),
         };
         row.Heading = System.IO.Path.GetFileName(file.Path);
         row.Detail = $"{LinkDetector.FormatSize(file.Size)}, from {file.DeviceName}, {Stamp(now)}";
-        Timeline.Insert(0, row);
+        Push(row);
+        LoadThumbnail(row, file.Path, file.Size);
         Arrived?.Invoke(this, row);
     }
 
@@ -161,7 +175,7 @@ public sealed partial class AppModel
                 Active = true,
             };
             _galleries[file.DeviceId] = row;
-            Timeline.Insert(0, row);
+            Push(row);
             Arrived?.Invoke(this, row);
         }
         row.Count++;
@@ -189,8 +203,6 @@ public sealed partial class AppModel
         }
     }
 
-    // MARK: Sending
-
     public bool SendText(string text)
     {
         if (!HasTarget(out var phone)) return false;
@@ -217,32 +229,20 @@ public sealed partial class AppModel
     public int SendFiles(IEnumerable<string> paths)
     {
         if (!HasTarget(out var phone)) return 0;
-        int sent = 0;
+        var files = new List<string>();
         string? problem = null;
         foreach (string path in paths)
         {
-            try
-            {
-                if (Directory.Exists(path))
-                {
-                    problem = "Folders cannot be sent yet. Send the files in them, or zip the folder first.";
-                    continue;
-                }
-                AddSent(Service.Outbox.QueueFile(phone.Id, path), phone);
-                sent++;
-            }
-            catch (FileNotFoundException)
-            {
-                problem = $"{System.IO.Path.GetFileName(path)} is not there any more.";
-            }
-            catch (InvalidOperationException)
-            {
-                problem = $"Too many items are waiting for {phone.Name}. Wait until it picks some up.";
-                break;
-            }
+            if (Directory.Exists(path)) problem = "Folders cannot be sent yet. Send the files in them, or zip the folder first.";
+            else if (!File.Exists(path)) problem = $"{System.IO.Path.GetFileName(path)} is not there any more.";
+            else files.Add(path);
         }
+        // One save for the whole drop, however many files it holds.
+        var queued = files.Count == 0 ? [] : Service.Outbox.QueueFiles(phone.Id, files);
+        foreach (var item in queued) AddSent(item, phone);
+        if (queued.Count < files.Count) problem = $"Too many items are waiting for {phone.Name}. Wait until it picks some up.";
         if (problem is not null) Notice?.Invoke(this, problem);
-        return sent;
+        return queued.Count;
     }
 
     private bool HasTarget(out PhoneRow phone)
@@ -265,7 +265,6 @@ public sealed partial class AppModel
             Text = item.Kind == ItemKind.Link ? item.Url : item.Text,
             Path = item.Path,
             OutboxId = item.Id,
-            Thumbnail = item.Path is { } path ? Thumbnail(path, item.Size ?? 0) : null,
         };
         row.Heading = item.Kind switch
         {
@@ -275,7 +274,8 @@ public sealed partial class AppModel
         };
         row.CanCancel = true;
         DescribeSent(row, "Waiting for " + phone.Name);
-        Timeline.Insert(0, row);
+        Push(row);
+        if (item.Path is { } path) LoadThumbnail(row, path, item.Size ?? 0);
     }
 
     private void AddWaiting(OutboxItem item, string deviceName) =>
@@ -320,21 +320,54 @@ public sealed partial class AppModel
 
     private static string Stamp(DateTimeOffset time) => time.ToLocalTime().ToString("g");
 
-    private static ImageSource? Thumbnail(string path, long size)
+    /// <summary>Adds a row at the top; past <see cref="MaxRows"/> the oldest rows go, except those still waiting for a phone.</summary>
+    private void Push(TimelineItem row)
     {
-        if (size > 64L * 1024 * 1024 || !ImageExtensions.Contains(System.IO.Path.GetExtension(path), StringComparer.OrdinalIgnoreCase)) return null;
+        Timeline.Insert(0, row);
+        for (int i = Timeline.Count - 1; i >= 0 && Timeline.Count > MaxRows; i--)
+        {
+            if (!Timeline[i].CanCancel) Timeline.RemoveAt(i);
+        }
+    }
+
+    /// <summary>Decodes the picture on the pool, two at a time, and puts it on the row when ready.</summary>
+    private void LoadThumbnail(TimelineItem row, string path, long size)
+    {
+        if (size > 64L * 1024 * 1024 || !ImageExtensions.Contains(System.IO.Path.GetExtension(path), StringComparer.OrdinalIgnoreCase)) return;
+        _ = Task.Run(async () =>
+        {
+            await ThumbnailSlots.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                if (DecodeThumbnail(path) is { } image) _ = _ui.BeginInvoke(() => row.Thumbnail = image);
+            }
+            finally
+            {
+                ThumbnailSlots.Release();
+            }
+        });
+    }
+
+    /// <summary>A frozen 112-pixel-wide copy of the picture; null for what cannot be read or is over about 50 megapixels.</summary>
+    internal static ImageSource? DecodeThumbnail(string path)
+    {
         try
         {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            var frame = BitmapDecoder.Create(stream, BitmapCreateOptions.IgnoreColorProfile, BitmapCacheOption.None).Frames[0];
+            if ((long)frame.PixelWidth * frame.PixelHeight > MaxThumbnailPixels) return null;
+            stream.Position = 0;
             var image = new BitmapImage();
             image.BeginInit();
-            image.UriSource = new Uri(path);
+            image.StreamSource = stream;
             image.DecodePixelWidth = 112;
+            image.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
             image.CacheOption = BitmapCacheOption.OnLoad;
             image.EndInit();
             image.Freeze();
             return image;
         }
-        catch (Exception e) when (e is NotSupportedException or IOException or InvalidOperationException or UriFormatException
+        catch (Exception e) when (e is NotSupportedException or IOException or InvalidOperationException or UnauthorizedAccessException
                                       or System.Runtime.InteropServices.COMException or FileFormatException)
         {
             return null;

@@ -275,3 +275,49 @@ public class OutboxLimitTests
         new GalleryIndex(folder).Clear("device-one");
     }
 }
+
+public class OutboxBatchTests
+{
+    [Fact]
+    public async Task ManyFilesAreQueuedWithOneSave()
+    {
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+        string folder = Path.Combine(h.Root, "many");
+        Directory.CreateDirectory(folder);
+        var paths = Enumerable.Range(0, 1000).Select(i =>
+        {
+            string path = Path.Combine(folder, $"f{i}.txt");
+            File.WriteAllText(path, "x");
+            return path;
+        }).ToList();
+        int changes = 0;
+        h.Service.Outbox.Changed += (_, _) => changes++;
+
+        var queued = h.Service.Outbox.QueueFiles(phone.Id, paths);
+
+        Assert.Equal(1000, queued.Count);
+        Assert.Equal(1, changes);
+        Assert.Equal(1000, new Outbox(h.Paths.OutboxFile).Pending(phone.Id).Count);
+    }
+
+    [Fact]
+    public async Task BatchStopsAtTheLimitAndSkipsMissingFiles()
+    {
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+        string folder = Path.Combine(h.Root, "some");
+        Directory.CreateDirectory(folder);
+        var paths = Enumerable.Range(0, Outbox.MaxItemsPerDevice + 5).Select(i =>
+        {
+            string path = Path.Combine(folder, $"f{i}.txt");
+            File.WriteAllText(path, "x");
+            return path;
+        }).Append(Path.Combine(folder, "missing.txt")).ToList();
+
+        var queued = h.Service.Outbox.QueueFiles(phone.Id, paths);
+
+        Assert.Equal(Outbox.MaxItemsPerDevice, queued.Count);
+        Assert.Empty(h.Service.Outbox.QueueFiles(phone.Id, [Path.Combine(folder, "f1.txt")]));
+    }
+}

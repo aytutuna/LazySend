@@ -7,6 +7,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using LazySend.App.Services;
 using LazySend.Core;
 
 namespace LazySend.App;
@@ -91,8 +92,6 @@ public partial class MainWindow : Window
         if (answer == MessageBoxResult.OK) _model.RemovePhone(phone);
     }
 
-    // MARK: Sending
-
     private void Send_Click(object sender, RoutedEventArgs e) => SendComposed();
 
     private void SendComposed()
@@ -142,7 +141,17 @@ public partial class MainWindow : Window
             }
             else if (Clipboard.ContainsImage() && Clipboard.GetImage() is { } image)
             {
-                _model.SendFiles([SaveClipboardImage(image)]);
+                string saved;
+                try
+                {
+                    saved = SaveClipboardImage(image);
+                }
+                catch (IOException error)
+                {
+                    ShowNotice($"Could not save the pasted image: {error.Message}");
+                    return;
+                }
+                _model.SendFiles([saved]);
             }
             else if (Clipboard.ContainsText())
             {
@@ -159,15 +168,13 @@ public partial class MainWindow : Window
     {
         string folder = Path.Combine(_model.Paths.State, "clipboard");
         Directory.CreateDirectory(folder);
-        string path = Path.Combine(folder, $"Clipboard {DateTime.Now:yyyy-MM-dd HH-mm-ss}.png");
+        string path = ClipboardFiles.NewImagePath(folder, DateTime.Now);
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(image));
         using var stream = File.Create(path);
         encoder.Save(stream);
         return path;
     }
-
-    // MARK: Rows
 
     private static TimelineItem? ItemOf(object sender) => (sender as FrameworkElement)?.DataContext as TimelineItem;
 

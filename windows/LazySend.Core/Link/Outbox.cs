@@ -68,6 +68,21 @@ public sealed class Outbox
         return Add(new OutboxItem { Kind = ItemKind.File, Path = info.FullName, Name = info.Name, Size = info.Length, Mime = mime }, deviceId);
     }
 
+    /// <summary>
+    /// Queues the existing files among <paramref name="paths"/> with one save and one change event, as many as
+    /// fit under <see cref="MaxItemsPerDevice"/>; returns the items queued.
+    /// </summary>
+    public IReadOnlyList<OutboxItem> QueueFiles(string deviceId, IEnumerable<string> paths)
+    {
+        var items = new List<OutboxItem>();
+        foreach (string path in paths)
+        {
+            var info = new FileInfo(path);
+            if (info.Exists) items.Add(new OutboxItem { Kind = ItemKind.File, Path = info.FullName, Name = info.Name, Size = info.Length });
+        }
+        return AddRange(items, deviceId, atMost: true);
+    }
+
     public IReadOnlyList<OutboxItem> Pending(string deviceId)
     {
         lock (_gate) return [.. _file.Items.Where(i => i.DeviceId == deviceId)];
@@ -128,19 +143,31 @@ public sealed class Outbox
 
     private OutboxItem Add(OutboxItem item, string deviceId)
     {
-        item.Id = Protocol.NewId();
-        item.DeviceId = deviceId;
-        item.Queued = _clock();
+        var added = AddRange([item], deviceId, atMost: false);
+        return added[0];
+    }
+
+    private IReadOnlyList<OutboxItem> AddRange(List<OutboxItem> items, string deviceId, bool atMost)
+    {
         TaskCompletionSource? signal;
         lock (_gate)
         {
-            if (_file.Items.Count(i => i.DeviceId == deviceId) >= MaxItemsPerDevice) throw new InvalidOperationException("Too many items wait for this phone.");
-            _file.Items.Add(item);
+            int room = MaxItemsPerDevice - _file.Items.Count(i => i.DeviceId == deviceId);
+            if (!atMost && items.Count > room) throw new InvalidOperationException("Too many items wait for this phone.");
+            if (items.Count > room) items = items.GetRange(0, Math.Max(room, 0));
+            if (items.Count == 0) return items;
+            foreach (var item in items)
+            {
+                item.Id = Protocol.NewId();
+                item.DeviceId = deviceId;
+                item.Queued = _clock();
+            }
+            _file.Items.AddRange(items);
             JsonFile.Save(_path, _file);
             if (_waiting.Remove(deviceId, out signal)) signal.TrySetResult();
         }
         Changed?.Invoke(this, EventArgs.Empty);
-        return item;
+        return items;
     }
 }
 
