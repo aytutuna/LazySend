@@ -78,7 +78,7 @@ public sealed partial class AppModel
                     phones = ScanUsb();
                     missing = !phones.Any(p => p.Apple) && UsbDevices.AppleMobileDevicePresent();
                 }
-                catch (COMException)
+                catch (Exception e) when (e is COMException or InvalidCastException)
                 {
                     phones = [];
                     missing = false;
