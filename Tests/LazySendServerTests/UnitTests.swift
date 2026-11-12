@@ -10,7 +10,8 @@ final class HttpParserTests: XCTestCase {
     }
 
     func testAPlainRequestIsParsed() {
-        let result = parse("PUT /v1/items/abc/data?x=1 HTTP/1.1\r\nHost: a\r\nContent-Length: 12\r\nX-Offset: 3\r\n\r\nbody")
+        let head = "PUT /v1/items/abc/data?x=1 HTTP/1.1\r\nHost: a\r\nContent-Length: 12\r\nX-Offset: 3\r\n\r\n"
+        let result = parse(head + "body")
         XCTAssertEqual(result.status, .complete)
         XCTAssertEqual(result.head?.method, "PUT")
         XCTAssertEqual(result.head?.path, "/v1/items/abc/data")
