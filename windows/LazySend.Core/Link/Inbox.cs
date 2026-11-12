@@ -352,7 +352,7 @@ public sealed class Inbox
     }
 
     /// <summary>Tags the file as coming from the internet zone, so SmartScreen and Office checks apply to what a phone sends (.exe, .lnk, .url…).</summary>
-    private static void MarkAsDownloaded(string path)
+    internal static void MarkAsDownloaded(string path)
     {
         if (!OperatingSystem.IsWindows()) return;
         try
