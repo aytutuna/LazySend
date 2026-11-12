@@ -54,7 +54,7 @@
         <!-- What the Send to shortcut starts. -->
         <uap5:Extension Category="windows.appExecutionAlias" Executable="LazySend.exe" EntryPoint="Windows.FullTrustApplication">
           <uap5:AppExecutionAlias>
-            <desktop:ExecutionAlias Alias="LazySend.exe" />
+            <uap5:ExecutionAlias Alias="LazySend.exe" />
           </uap5:AppExecutionAlias>
         </uap5:Extension>
       </Extensions>
