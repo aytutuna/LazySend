@@ -23,7 +23,7 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
-        bool minimized = e.Args.Contains(MinimizedFlag);
+        bool minimized = e.Args.Contains(MinimizedFlag) || Packaging.StartedAtSignIn();
         var files = FilesOf(e.Args);
         _instance = new Mutex(true, InstanceMutexName, out bool first);
         if (!first)
@@ -64,7 +64,7 @@ public partial class App : Application
     }
 
     internal static IReadOnlyList<string> FilesOf(IEnumerable<string> args) =>
-        [.. args.Where(arg => arg.Length > 0 && !arg.StartsWith("--", StringComparison.Ordinal)).Select(Path.GetFullPath)];
+        [.. args.Where(arg => arg.Length > 0 && !arg.StartsWith("--", StringComparison.Ordinal) && !arg.StartsWith("lazysend:", StringComparison.OrdinalIgnoreCase)).Select(Path.GetFullPath)];
 
     /// <summary>Files handed over by a second start (Explorer's Send to); an empty list asks for the window.</summary>
     private void Opened(IReadOnlyList<string> paths) => Dispatcher.BeginInvoke(() =>
