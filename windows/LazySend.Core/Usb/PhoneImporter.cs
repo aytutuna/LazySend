@@ -154,6 +154,10 @@ public sealed class PhoneImporter(GalleryIndex index, Func<string> receiveRoot)
                     chunk(read);
                 }
             }
+            if (item.Size > 0 && (written == 0 || (written != item.Size && !CanBeConverted(item.Name))))
+            {
+                throw new Unreadable(new IOException($"{item.Name} came to {written} of {item.Size} bytes."));
+            }
             string path = Path.Combine(directory, FileNames.Unique(directory, FileNames.Clean(item.Name)));
             File.Move(part, path);
             Inbox.MarkAsDownloaded(path);
@@ -173,6 +177,10 @@ public sealed class PhoneImporter(GalleryIndex index, Func<string> receiveRoot)
             throw;
         }
     }
+
+    // An iPhone set to Automatic sends a JPEG for a HEIC photo, so only those may differ from the listed size.
+    private static bool CanBeConverted(string name) =>
+        Path.GetExtension(name).ToLowerInvariant() is ".heic" or ".heif";
 
     private static Stream OpenSource(IPhoneSource phone, PhoneMedia item)
     {

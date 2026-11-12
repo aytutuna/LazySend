@@ -283,7 +283,8 @@ internal static class WpdDevices
             try
             {
                 device.Content(out var content);
-                bool any = Wpd.Children(content, Wpd.RootId).Count > 0;
+                // A trusted iPhone that is locked lists its storage with nothing in it.
+                bool any = Wpd.Children(content, Wpd.RootId).Any(storage => Wpd.Children(content, storage).Count > 0);
                 Marshal.ReleaseComObject(content);
                 return any ? UsbState.Ready : apple ? UsbState.LockedApple : UsbState.NoFileAccess;
             }

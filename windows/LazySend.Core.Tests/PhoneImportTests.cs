@@ -215,6 +215,28 @@ public sealed class PhoneImportTests : IDisposable
     }
 
     [Fact]
+    public void ACutOffFileIsNotKeptOrIndexed()
+    {
+        var phone = new FakePhone().Add("a.jpg", 3000, May).Add("b.mov", 3000, May).Add("c.heic", 3000, May).Add("d.heic", 3000, May);
+        phone.Data["o0"] = new byte[1000];
+        phone.Data["o1"] = [];
+        phone.Data["o2"] = new byte[2000];
+        phone.Data["o3"] = [];
+
+        var result = _importer.Run(phone, null, default);
+
+        Assert.Equal(3, result.Unreadable);
+        Assert.Equal(1, result.Imported);
+        Assert.Equal(["c.heic"], Directory.EnumerateFiles(Gallery, "*", SearchOption.AllDirectories).Select(Path.GetFileName));
+
+        phone.Data["o0"] = new byte[3000];
+        var again = _importer.Run(phone, null, default);
+
+        Assert.Equal(1, again.Imported);
+        Assert.Equal(1, again.Skipped);
+    }
+
+    [Fact]
     public void ProgressEndsAtTheTotals()
     {
         var phone = new FakePhone().Add("a.jpg", 2500000, May).Add("b.jpg", 100, June);
