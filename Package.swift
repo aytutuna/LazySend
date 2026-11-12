@@ -4,7 +4,8 @@ import PackageDescription
 // LazySendKit is the phone side of the link in CONTRACTS.md and needs Foundation and Network only, so the
 // Mac app can use it too. LazySendIOS holds the iPhone's views and services (every file is wrapped in
 // `#if os(iOS)`); ios/project.yml starts it from a thin app target. LazySendServer is the computer's side of
-// the link. The code stays in the Swift 5 language mode.
+// the link and LazySendMac the Mac app's views and services (every file is wrapped in `#if os(macOS)`);
+// mac/project.yml starts it the same way. The code stays in the Swift 5 language mode.
 let package = Package(
     name: "LazySend",
     platforms: [.macOS(.v14), .iOS(.v18)],
@@ -12,11 +13,13 @@ let package = Package(
         .library(name: "LazySendKit", targets: ["LazySendKit"]),
         .library(name: "LazySendIOS", targets: ["LazySendIOS"]),
         .library(name: "LazySendServer", targets: ["LazySendServer"]),
+        .library(name: "LazySendMac", targets: ["LazySendMac"]),
     ],
     targets: [
         .target(name: "LazySendKit", path: "Sources/LazySendKit"),
         .target(name: "LazySendIOS", dependencies: ["LazySendKit"], path: "Sources/LazySendIOS"),
         .target(name: "LazySendServer", dependencies: ["LazySendKit"], path: "Sources/LazySendServer"),
+        .target(name: "LazySendMac", dependencies: ["LazySendKit", "LazySendServer"], path: "Sources/LazySendMac"),
         .testTarget(
             name: "LazySendKitTests",
             dependencies: ["LazySendKit"],
@@ -32,6 +35,12 @@ let package = Package(
             name: "LazySendServerTests",
             dependencies: ["LazySendKit", "LazySendServer"],
             path: "Tests/LazySendServerTests",
+            resources: [.copy("Fixtures")]
+        ),
+        .testTarget(
+            name: "LazySendMacTests",
+            dependencies: ["LazySendKit", "LazySendServer", "LazySendMac"],
+            path: "Tests/LazySendMacTests",
             resources: [.copy("Fixtures")]
         ),
     ],
