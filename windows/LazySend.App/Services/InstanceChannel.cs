@@ -18,16 +18,18 @@ internal sealed class InstanceChannel : IDisposable
 
     /// <summary>A message larger than this is not read; no command line comes near it.</summary>
     private const int MaxMessageBytes = 1 << 20;
+    private readonly TimeSpan _readTimeout;
 
     private readonly string _pipeName;
     private readonly Action<IReadOnlyList<string>> _opened;
     private readonly CancellationTokenSource _stop = new();
 
     /// <param name="opened">Called on a pool thread with the paths of each message.</param>
-    public InstanceChannel(Action<IReadOnlyList<string>> opened, string? pipeName = null)
+    public InstanceChannel(Action<IReadOnlyList<string>> opened, string? pipeName = null, TimeSpan? readTimeout = null)
     {
         _opened = opened;
         _pipeName = pipeName ?? PipeName;
+        _readTimeout = readTimeout ?? TimeSpan.FromSeconds(5);
         _ = Task.Run(ListenAsync);
     }
 
@@ -82,16 +84,23 @@ internal sealed class InstanceChannel : IDisposable
                 await pipe.WaitForConnectionAsync(_stop.Token);
                 using var message = new MemoryStream();
                 var buffer = new byte[4096];
+                // A client that connects and says nothing must not hold the listener.
+                using var readLimit = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
+                readLimit.CancelAfter(_readTimeout);
                 int read;
-                while ((read = await pipe.ReadAsync(buffer, _stop.Token)) > 0 && message.Length <= MaxMessageBytes)
+                while ((read = await pipe.ReadAsync(buffer, readLimit.Token)) > 0 && message.Length <= MaxMessageBytes)
                 {
                     message.Write(buffer, 0, read);
                 }
                 if (message.Length <= MaxMessageBytes && Decode(message.ToArray()) is { } paths) _opened(paths);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (_stop.IsCancellationRequested)
             {
                 return;
+            }
+            catch (OperationCanceledException)
+            {
+                // The client was too slow; listen for the next.
             }
             catch (IOException)
             {

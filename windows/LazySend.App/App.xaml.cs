@@ -29,14 +29,12 @@ public partial class App : Application
         if (!first)
         {
             // The running instance takes the files (or comes forward); a second start at sign-in has nothing to hand over.
-            bool handed = minimized || InstanceChannel.Send(files);
+            bool handed = minimized || InstanceChannel.Send(files) || InstanceChannel.Send(files);
             _instance.Dispose();
             _instance = null;
-            if (handed)
-            {
-                Shutdown();
-                return;
-            }
+            if (!handed) MessageBox.Show("Lazy Send is already running, but it did not answer. Quit it from the tray icon or Task Manager and start it again.", "Lazy Send", MessageBoxButton.OK, MessageBoxImage.Information);
+            Shutdown();
+            return;
         }
         DispatcherUnhandledException += OnUnhandled;
         base.OnStartup(e);
@@ -53,7 +51,11 @@ public partial class App : Application
         }
         _model.Start();
         _model.Arrived += OnArrived;
-        if (first) _channel = new InstanceChannel(Opened);
+        _model.PairingRequested += (_, name) =>
+        {
+            if (MainWindow is not { IsVisible: true }) _tray?.Balloon("Pairing request", $"{name} wants to pair. Open Lazy Send to answer.", force: true);
+        };
+        _channel = new InstanceChannel(Opened);
         var window = new MainWindow(_model);
         MainWindow = window;
         _tray = new TrayIcon(window.ShowAndActivate, Quit);

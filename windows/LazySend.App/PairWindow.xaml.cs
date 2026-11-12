@@ -146,6 +146,8 @@ public partial class PairWindow : Window
         var answer = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         Dispatcher.BeginInvoke(() =>
         {
+            // The prompt must be seen even when the app sits in the tray.
+            if (Owner is MainWindow main) main.ShowAndActivate();
             _answer = answer;
             string kind = request.Platform.Length > 0 ? $" ({request.Platform})" : "";
             ApprovalText.Text = $"\"{PairedDeviceStore.CleanName(request.PhoneName)}\"{kind} wants to pair with this PC. Allow it only if you just scanned the code yourself.";

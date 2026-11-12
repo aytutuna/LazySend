@@ -22,7 +22,11 @@ public sealed partial class AppModel : IDisposable
         Paths = paths;
         Settings = new AppSettings(paths);
         Service = new LinkService(paths, certificate, new LinkServerOptions { AllowPeer = LocalNetworks.IsAllowedPeer });
-        Service.Router.ApprovePairing = (request, cancellation) => Approver?.Invoke(request, cancellation) ?? Task.FromResult(false);
+        Service.Router.ApprovePairing = (request, cancellation) =>
+        {
+            _ui.BeginInvoke(() => PairingRequested?.Invoke(this, request.PhoneName));
+            return Approver?.Invoke(request, cancellation) ?? Task.FromResult(false);
+        };
         _network.Changed += (_, _) => _ui.BeginInvoke(RefreshNetwork);
     }
 
@@ -50,6 +54,9 @@ public sealed partial class AppModel : IDisposable
 
     /// <summary>The computer's addresses changed: a pairing code shown now is out of date.</summary>
     public event EventHandler? AddressesChanged;
+
+    /// <summary>A phone presented a valid pairing code and waits for an answer; the argument is its name.</summary>
+    public event EventHandler<string>? PairingRequested;
 
     public FirewallVerdict FirewallVerdict => Port == 0 ? FirewallVerdict.Unknown : Firewall.Verdict(Environment.ProcessPath ?? "", Port);
 

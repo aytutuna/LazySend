@@ -95,3 +95,20 @@ public class QrTests
         Assert.InRange(modules!.Size, 21, 177);
     }
 }
+
+public class InstanceChannelTimeoutTests
+{
+    [Fact]
+    public async Task SilentClientDoesNotStallTheListener()
+    {
+        string pipe = "LazySend.Test." + Guid.NewGuid().ToString("N");
+        var received = new TaskCompletionSource<IReadOnlyList<string>>();
+        using var channel = new InstanceChannel(received.SetResult, pipe, TimeSpan.FromMilliseconds(300));
+        using var silent = new System.IO.Pipes.NamedPipeClientStream(".", pipe, System.IO.Pipes.PipeDirection.Out);
+        silent.Connect(5000);
+
+        Assert.True(InstanceChannel.Send([@"C:\a\b.txt"], pipe, 8000));
+
+        Assert.Equal([@"C:\a\b.txt"], await received.Task.WaitAsync(TimeSpan.FromSeconds(10)));
+    }
+}
