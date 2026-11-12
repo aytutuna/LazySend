@@ -62,6 +62,7 @@ public sealed partial class AppModel : IDisposable
             StartError = $"Lazy Send could not listen for phones: {e.Message}";
         }
         Advertise();
+        StartTimeline();
         StatusChanged?.Invoke(this, EventArgs.Empty);
         ReadFirewall();
     }
