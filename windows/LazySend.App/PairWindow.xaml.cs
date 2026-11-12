@@ -91,7 +91,7 @@ public partial class PairWindow : Window
         if (_pairedName is not null)
         {
             ExpiryText.Text = $"Paired with {_pairedName}.";
-            NewCodeButton.Content = "Pair another phone";
+            NewCodeButton.Content = "Another phone";
             NewCodeButton.Visibility = Visibility.Visible;
             return;
         }

@@ -128,6 +128,7 @@ public sealed partial class AppModel
         row.Heading = link ? $"Link from {item.DeviceName}" : $"Text from {item.DeviceName}";
         row.Detail = Stamp(item.Received);
         Timeline.Insert(0, row);
+        if (arrived && !link && Settings.CopyReceivedText) CopyToClipboard(item.Text);
         if (arrived) Arrived?.Invoke(this, row);
     }
 
@@ -302,6 +303,19 @@ public sealed partial class AppModel
         if (!row.CanCancel || row.OutboxId is null) return;
         row.Cancelling = true;
         if (!Service.Outbox.Acknowledge(row.DeviceId, row.OutboxId)) RefreshSent();
+    }
+
+    private static void CopyToClipboard(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return;
+        try
+        {
+            System.Windows.Clipboard.SetText(text);
+        }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+            // Another program holds the clipboard; the text is still in the timeline.
+        }
     }
 
     private static string Stamp(DateTimeOffset time) => time.ToLocalTime().ToString("g");

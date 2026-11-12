@@ -15,6 +15,11 @@ public partial class App : Application
     private Mutex? _instance;
     private InstanceChannel? _channel;
     private AppModel? _model;
+    private TrayIcon? _tray;
+    private bool _toldAboutTray;
+
+    /// <summary>Set once the user chose Quit; until then closing the window only hides it.</summary>
+    public static bool Quitting { get; private set; }
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -23,8 +28,8 @@ public partial class App : Application
         _instance = new Mutex(true, InstanceMutexName, out bool first);
         if (!first)
         {
-            // The running instance takes the files (or just comes forward); nothing more to do here, unless nobody answers.
-            bool handed = InstanceChannel.Send(files);
+            // The running instance takes the files (or comes forward); a second start at sign-in has nothing to hand over.
+            bool handed = minimized || InstanceChannel.Send(files);
             _instance.Dispose();
             _instance = null;
             if (handed)
@@ -47,21 +52,63 @@ public partial class App : Application
             return;
         }
         _model.Start();
+        _model.Arrived += OnArrived;
         if (first) _channel = new InstanceChannel(Opened);
         var window = new MainWindow(_model);
         MainWindow = window;
-        if (!minimized) window.Show();
+        _tray = new TrayIcon(window.ShowAndActivate, Quit);
+        if (!minimized || files.Count > 0) window.Show();
+        if (files.Count > 0) SendOrShow(files);
     }
 
     /// <summary>The files a command line names: every argument but the flags is a path.</summary>
     internal static IReadOnlyList<string> FilesOf(IEnumerable<string> args) =>
         [.. args.Where(arg => arg.Length > 0 && !arg.StartsWith("--", StringComparison.Ordinal)).Select(Path.GetFullPath)];
 
-    /// <summary>Files handed over by a second start; an empty list asks for the window.</summary>
+    /// <summary>Files handed over by a second start (Explorer's Send to); an empty list asks for the window.</summary>
     private void Opened(IReadOnlyList<string> paths) => Dispatcher.BeginInvoke(() =>
     {
-        if (MainWindow is MainWindow window) window.ShowAndActivate();
+        if (paths.Count == 0) (MainWindow as MainWindow)?.ShowAndActivate();
+        else SendOrShow(paths);
     });
+
+    /// <summary>Sends the files to the selected phone; with no phone to send to, the window opens to say so.</summary>
+    private void SendOrShow(IReadOnlyList<string> paths)
+    {
+        if (_model is null || MainWindow is not MainWindow window) return;
+        int sent = _model.SendFiles(paths);
+        if (sent == 0) window.ShowAndActivate();
+        else if (!window.IsVisible) _tray?.Balloon("Lazy Send", $"{sent} {(sent == 1 ? "file is" : "files are")} waiting for {_model.SelectedPhone?.Name}.", force: true);
+    }
+
+    private void OnArrived(object? sender, TimelineItem item)
+    {
+        if (MainWindow is { IsVisible: true, WindowState: not WindowState.Minimized }) return;
+        string text = item.Kind switch
+        {
+            TimelineKind.File => $"{item.Heading} from {item.DeviceName}",
+            TimelineKind.Gallery => item.Heading,
+            _ => item.Heading,
+        };
+        _tray?.Balloon("Lazy Send", text);
+    }
+
+    /// <summary>Called when the window is closed to the tray.</summary>
+    internal void WindowHidden()
+    {
+        if (_toldAboutTray) return;
+        _toldAboutTray = true;
+        _tray?.Balloon("Lazy Send is still running", "It stays in the tray so phones can send. Quit it from the tray menu.", force: true);
+    }
+
+    private void Quit()
+    {
+        Quitting = true;
+        _tray?.Dispose();
+        _tray = null;
+        MainWindow?.Close();
+        Shutdown();
+    }
 
     private void OnUnhandled(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
     {
@@ -81,6 +128,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _tray?.Dispose();
         _channel?.Dispose();
         _model?.Dispose();
         _instance?.ReleaseMutex();

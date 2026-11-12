@@ -20,6 +20,7 @@ public sealed partial class AppModel : IDisposable
     {
         _ui = ui;
         Paths = paths;
+        Settings = new AppSettings(paths);
         Service = new LinkService(paths, certificate, new LinkServerOptions { AllowPeer = LocalNetworks.IsAllowedPeer });
         Service.Router.ApprovePairing = (request, cancellation) => Approver?.Invoke(request, cancellation) ?? Task.FromResult(false);
         _network.Changed += (_, _) => _ui.BeginInvoke(RefreshNetwork);
@@ -28,6 +29,7 @@ public sealed partial class AppModel : IDisposable
     public SendPaths Paths { get; }
     public LinkService Service { get; }
     public LinkRouter Router => Service.Router;
+    public AppSettings Settings { get; }
 
     /// <summary>The port phones connect to; 0 when the server could not start.</summary>
     public int Port { get; private set; }

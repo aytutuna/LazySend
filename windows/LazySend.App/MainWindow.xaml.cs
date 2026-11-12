@@ -81,6 +81,8 @@ public partial class MainWindow : Window
         _pairWindow.Show();
     }
 
+    private void Settings_Click(object sender, RoutedEventArgs e) => new SettingsWindow(_model) { Owner = this }.ShowDialog();
+
     private void RemovePhone_Click(object sender, RoutedEventArgs e)
     {
         if (((FrameworkElement)sender).DataContext is not PhoneRow phone) return;
@@ -208,6 +210,18 @@ public partial class MainWindow : Window
     private void CancelItem_Click(object sender, RoutedEventArgs e)
     {
         if (ItemOf(sender) is { } item) _model.Cancel(item);
+    }
+
+    /// <summary>Closing the window keeps the app in the tray, so phones can still send.</summary>
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        if (!App.Quitting)
+        {
+            e.Cancel = true;
+            Hide();
+            (Application.Current as App)?.WindowHidden();
+        }
+        base.OnClosing(e);
     }
 
     /// <summary>Brings the window forward, from the tray or from a second start.</summary>

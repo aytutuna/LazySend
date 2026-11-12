@@ -16,6 +16,7 @@
         <Border Background="{DynamicResource LayerFillColorDefaultBrush}" Padding="16,20,16,16">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Bottom">
+                    <Button Content="Settings" ui:Icon.Glyph="&#xE713;" HorizontalAlignment="Left" Style="{StaticResource SubtleButtonStyle}" Click="Settings_Click" />
                     <TextBlock x:Name="StatusText" Style="{StaticResource CaptionText}" TextWrapping="Wrap" Margin="0,8,0,0"
                                Foreground="{DynamicResource TextFillColorSecondaryBrush}" AutomationProperties.LiveSetting="Polite" />
                 </StackPanel>
