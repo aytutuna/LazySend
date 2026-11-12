@@ -38,6 +38,9 @@ class FakePc : AutoCloseable {
     /** What happens to the next chunk requests, in order. */
     val chunkDrops = ArrayDeque<Drop>()
 
+    /** Error answers (status to code) given to the next chunk requests, in order. */
+    val chunkErrors = ArrayDeque<Pair<Int, String>>()
+
     enum class Drop { None, AnswerLost }
 
     val endpoint get() = Endpoint(server.hostName, server.port)
@@ -116,6 +119,7 @@ class FakePc : AutoCloseable {
     }
 
     private fun putChunk(request: RecordedRequest): MockResponse {
+        chunkErrors.removeFirstOrNull()?.let { return error(it.first, it.second) }
         val drop = chunkDrops.removeFirstOrNull() ?: Drop.None
         val offset = request.headers["X-Offset"]!!.toLong()
         if (offset != received.size().toLong()) return error(409, "offsetMismatch", received.size().toLong())

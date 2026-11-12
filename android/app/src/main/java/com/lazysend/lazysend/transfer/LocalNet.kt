@@ -26,6 +26,9 @@ data class Subnet(val name: String, val address: Int, val prefix: Int) {
         return (address and mask) == (host and mask)
     }
 
+    /** Wi-Fi, hotspot, USB tether and wired interfaces; never a mobile network or a VPN. */
+    fun probeable(): Boolean = kind() != LinkKind.Other || name.lowercase().startsWith("eth")
+
     fun kind(): LinkKind {
         val n = name.lowercase()
         return when {
@@ -71,7 +74,7 @@ fun localSubnets(): List<Subnet> = try {
  * Hosts on this phone's own networks (up to a /24 around each address) that accept a connection on
  * [port]; the way to find a PC on a USB tether or a hotspot, where nothing announces it.
  */
-suspend fun probeSubnets(port: Int, subnets: List<Subnet> = localSubnets(), timeoutMs: Int = 400): List<String> = coroutineScope {
+suspend fun probeSubnets(port: Int, subnets: List<Subnet> = localSubnets().filter { it.probeable() }, timeoutMs: Int = 400): List<String> = coroutineScope {
     val candidates = subnets.flatMap { s ->
         val prefix = maxOf(s.prefix, 24)
         val base = s.address and (-1 shl (32 - prefix))

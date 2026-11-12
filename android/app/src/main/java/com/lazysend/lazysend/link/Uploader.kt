@@ -50,27 +50,37 @@ class Uploader(
                 return client.postItem(request)
             } catch (e: IOException) {
                 failures = backOff(failures, e)
+            } catch (e: LinkException) {
+                if (!transient(e)) throw e
+                failures = backOff(failures, e)
             }
         }
     }
+
+    // The PC asks for a pause (rate limit) or is still finishing the previous request for this file.
+    private fun transient(e: LinkException) = e.status == 429 || e.code == "busy" || e.code == "rateLimited"
 
     private suspend fun sendChunk(state: ItemState, length: Long, source: DataSource): ItemState {
         var failures = 0
         while (true) {
             try {
                 return client.putChunk(state.id, state.offset, length, source)
-            } catch (e: IOException) {
+            } catch (e: Exception) {
+                if (e is LinkException && !transient(e)) throw e
+                if (e !is IOException && e !is LinkException) throw e
                 failures = backOff(failures, e)
                 // The chunk may have landed before the answer was lost, so ask before sending it again.
                 try {
                     return client.itemState(state.id)
                 } catch (_: IOException) {
+                } catch (e: LinkException) {
+                    if (!transient(e)) throw e
                 }
             }
         }
     }
 
-    private suspend fun backOff(failures: Int, cause: IOException): Int {
+    private suspend fun backOff(failures: Int, cause: Exception): Int {
         if (failures >= retryDelaysMs.size) throw cause
         delay(retryDelaysMs[failures])
         client = try {

@@ -61,7 +61,7 @@ class Sender(
         )
         timeline.add(entry)
         return try {
-            val reached = connector.connect(pc).reachedOrNull() ?: throw IOException("${pc.name} is not reachable.")
+            val reached = connector.connect(pc, userAction = true).reachedOrNull() ?: throw IOException("${pc.name} is not reachable.")
             reached.postItem(item)
             timeline.update(entry.id) { it.copy(state = EntryState.Done) }
             null
@@ -115,7 +115,7 @@ class Sender(
         try {
             val meta = withContext(Dispatchers.IO) { describe(uri) }
             timeline.update(id) { it.copy(title = meta.name, totalBytes = meta.size, mime = meta.mime) }
-            val first = connector.connect(pc).reachedOrNull() ?: throw IOException("${pc.name} is not reachable.")
+            val first = connector.connect(pc, userAction = true).reachedOrNull() ?: throw IOException("${pc.name} is not reachable.")
             val source = DataSource { offset -> open(uri, offset) }
             shown.value = SendProgress(meta.name, pc.name, 0, meta.size)
             val hash = withContext(Dispatchers.IO) { sha256Hex(source) }

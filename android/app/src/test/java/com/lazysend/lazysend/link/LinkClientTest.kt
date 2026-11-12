@@ -142,6 +142,22 @@ class LinkClientTest {
     }
 
     @Test
+    fun aBusyOrRateLimitedAnswerIsWaitedOutNotFailed() = runTest {
+        val data = bytes(10_000)
+        pc.chunkErrors += listOf(409 to "busy", 429 to "rateLimited")
+        uploader().sendFile(fileRequest(data), source(data))
+        assertArrayEquals(data, pc.received.toByteArray())
+    }
+
+    @Test
+    fun otherRefusalsStillFailTheUpload() = runTest {
+        val data = bytes(10_000)
+        pc.chunkErrors += (507 to "diskFull")
+        val e = failure<LinkException> { uploader().sendFile(fileRequest(data), source(data)) }
+        assertEquals("diskFull", e.code)
+    }
+
+    @Test
     fun givesUpAfterTheRetries() = runTest {
         val data = bytes(100)
         val dead = Uploader({ FakePc().also { it.close() }.client() }, 4096, listOf(0, 0))

@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
 
@@ -35,14 +37,22 @@ class PcConnector(
     private val pcs: PcStore,
     private val nsd: NsdFinder?,
     private val http: OkHttpClient = OkHttpClient(),
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
+    /** What looking around the local networks found: announcements by PC id, and hosts that took a connection on a port. */
+    private class Search(val at: Long, val announced: Map<String, List<String>>, val probed: Map<Int, List<String>>)
+
+    private val searchLock = Mutex()
+    private var lastSearch: Search? = null
+
     private val links = MutableStateFlow<Map<String, LinkKind>>(emptyMap())
 
     /** The link each PC was last reached on; a PC is missing while it is out of reach. */
     val current: StateFlow<Map<String, LinkKind>> get() = links
 
-    suspend fun connect(pc: Pc, search: Boolean = true): Reach {
-        val result = findHost(pc, search)
+    /** [userAction] is for a person waiting on the answer: it may look around again sooner than the background checks. */
+    suspend fun connect(pc: Pc, search: Boolean = true, userAction: Boolean = false): Reach {
+        val result = findHost(pc, search, userAction)
         links.update { if (result is Reach.Reached) it + (pc.id to result.link) else it - pc.id }
         return result
     }
@@ -59,7 +69,7 @@ class PcConnector(
         }
     }
 
-    private suspend fun findHost(pc: Pc, search: Boolean): Reach {
+    private suspend fun findHost(pc: Pc, search: Boolean, userAction: Boolean): Reach {
         val pin = decodeBase64Url(pc.fingerprint) ?: return Reach.Unreachable
         val known = (listOfNotNull(pc.lastAddress) + pc.addresses).filter { '%' !in it }.distinct()
         var forgotten = false
@@ -73,9 +83,20 @@ class PcConnector(
         attempt(known)?.let { return it }
         if (forgotten) return Reach.Forgotten
         if (!search) return Reach.Unreachable
-        attempt(nsd?.find(pc.id, 2500).orEmpty().filter { '%' !in it })?.let { return it }
-        attempt(probeSubnets(pc.port).filter { '%' !in it })?.let { return it }
+        val around = lookAround(userAction)
+        attempt(around.announced[pc.id].orEmpty().filter { '%' !in it })?.let { return it }
+        attempt(around.probed[pc.port].orEmpty().filter { '%' !in it })?.let { return it }
         return if (forgotten) Reach.Forgotten else Reach.Unreachable
+    }
+
+    // One look serves every paired PC, and it is repeated at most once a minute (every 10 seconds for a person waiting).
+    private suspend fun lookAround(userAction: Boolean): Search = searchLock.withLock {
+        val last = lastSearch
+        val every = if (userAction) 10_000L else 60_000L
+        if (last != null && clock() - last.at < every) return last
+        val announced = nsd?.find(2000).orEmpty()
+        val probed = pcs.pcs.value.map { it.port }.distinct().associateWith { probeSubnets(it) }
+        Search(clock(), announced, probed).also { lastSearch = it }
     }
 
     private suspend fun race(hosts: List<String>, probe: suspend (String) -> Reach?): Reach? {
@@ -127,7 +148,7 @@ class PcConnector(
         } catch (e: IOException) {
             return null
         }
-        pcs.update(pc.id) { it.copy(lastAddress = host, addresses = (it.addresses + hello.addresses).distinct().take(8)) }
+        pcs.update(pc.id) { it.copy(lastAddress = host, addresses = (hello.addresses + it.addresses).filter { a -> '%' !in a }.distinct().take(8)) }
         return Reach.Reached(client, host, linkKindFor(host, localSubnets()))
     }
 }

@@ -10,10 +10,10 @@ import kotlinx.coroutines.withTimeoutOrNull
 class NsdFinder(context: Context) {
     private val nsd = context.getSystemService(NsdManager::class.java)
 
-    /** The addresses of announcements whose TXT `id` is [desktopId], collected until [timeoutMs] or the first one. */
+    /** The addresses of every announcement heard within [timeoutMs], by the TXT `id` of the PC that made it. */
     @Suppress("DEPRECATION")
-    suspend fun find(desktopId: String, timeoutMs: Long): List<String> {
-        val hosts = mutableListOf<String>()
+    suspend fun find(timeoutMs: Long): Map<String, List<String>> {
+        val hosts = mutableMapOf<String, MutableList<String>>()
         val waiting = ArrayDeque<NsdServiceInfo>()
         var resolving = false
         var discovery: NsdManager.DiscoveryListener? = null
@@ -36,12 +36,8 @@ class NsdFinder(context: Context) {
                             val id = serviceInfo.attributes["id"]?.toString(Charsets.UTF_8)
                             val host = serviceInfo.host?.hostAddress
                             synchronized(waiting) { resolving = false }
-                            if (id == desktopId && host != null) {
-                                synchronized(hosts) { hosts += host }
-                                if (done.isActive) done.resumeWith(Result.success(Unit))
-                            } else {
-                                resolveNext()
-                            }
+                            if (id != null && host != null) synchronized(hosts) { hosts.getOrPut(id) { mutableListOf() } += host }
+                            resolveNext()
                         }
                     })
                 }
@@ -66,6 +62,6 @@ class NsdFinder(context: Context) {
             }
         }
         discovery?.let { runCatching { nsd.stopServiceDiscovery(it) } }
-        return synchronized(hosts) { hosts.toList() }
+        return synchronized(hosts) { hosts.mapValues { it.value.toList() } }
     }
 }
