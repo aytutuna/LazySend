@@ -31,18 +31,22 @@ public enum Peers {
         return loopback || (b[0] == 0xFE && (b[1] & 0xC0) == 0x80) || (b[0] & 0xFE) == 0xFC
     }
 
-    public static func isAllowed(_ host: NWEndpoint.Host, subnets: [Subnet]) -> Bool {
+    public static func isAllowed(_ host: NWEndpoint.Host, subnets: [Subnet], subnets6: [Subnet6] = []) -> Bool {
         if isLocal(host) { return true }
-        guard let b = bytes(host), b.count == 4 else { return false }
-        let value = b.reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
-        return subnets.contains { $0.contains(value) }
+        guard let b = bytes(host) else { return false }
+        if b.count == 4 {
+            let value = b.reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
+            return subnets.contains { $0.contains(value) }
+        }
+        return subnets6.contains { $0.contains(b) }
     }
 
-    /// Every interface that is up, a USB hotspot included: IPv4 addresses with self-assigned ones last, at most
-    /// `LinkProtocol.maxAddresses`.
-    public static func pairingAddresses(_ subnets: [Subnet] = LocalNetworks.current()) -> [String] {
+    /// Every interface that is up, a USB hotspot included: IPv4 addresses with self-assigned ones last, then the
+    /// global and unique-local IPv6 ones, at most `LinkProtocol.maxAddresses`.
+    public static func pairingAddresses(_ subnets: [Subnet] = LocalNetworks.current(), _ subnets6: [Subnet6] = Subnet6.current()) -> [String] {
         let sorted = subnets.sorted { selfAssigned($0) < selfAssigned($1) }
-        return sorted.prefix(LinkProtocol.maxAddresses).map { intToIpv4($0.address) }
+        let v4 = sorted.map { intToIpv4($0.address) }
+        return Array((v4 + subnets6.map(\.text)).prefix(LinkProtocol.maxAddresses))
     }
 
     private static func selfAssigned(_ subnet: Subnet) -> Int {
@@ -50,24 +54,91 @@ public enum Peers {
     }
 }
 
+/// An IPv6 address of this computer and the length of its prefix.
+public struct Subnet6: Equatable, Sendable {
+    public var address: [UInt8]
+    public var prefix: Int
+
+    public init(address: [UInt8], prefix: Int) {
+        self.address = address
+        self.prefix = prefix
+    }
+
+    public func contains(_ other: [UInt8]) -> Bool {
+        guard other.count == 16, address.count == 16 else { return false }
+        var bits = min(max(prefix, 0), 128)
+        var i = 0
+        while bits > 0 {
+            let mask: UInt8 = bits >= 8 ? 0xFF : UInt8(truncatingIfNeeded: 0xFF << (8 - bits))
+            if other[i] & mask != address[i] & mask { return false }
+            i += 1
+            bits -= 8
+        }
+        return true
+    }
+
+    public var text: String {
+        var storage = in6_addr()
+        withUnsafeMutableBytes(of: &storage) { $0.copyBytes(from: address) }
+        var buffer = [CChar](repeating: 0, count: Int(INET6_ADDRSTRLEN))
+        inet_ntop(AF_INET6, &storage, &buffer, socklen_t(buffer.count))
+        return String(cString: buffer)
+    }
+
+    /// Global and unique-local addresses of the interfaces that are up; link-local, loopback and multicast ones are
+    /// left out.
+    public static func current() -> [Subnet6] {
+        var list: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&list) == 0, let first = list else { return [] }
+        defer { freeifaddrs(list) }
+        var result: [Subnet6] = []
+        var cursor: UnsafeMutablePointer<ifaddrs>? = first
+        while let item = cursor {
+            cursor = item.pointee.ifa_next
+            let flags = item.pointee.ifa_flags
+            guard flags & UInt32(IFF_UP) != 0, flags & UInt32(IFF_LOOPBACK) == 0,
+                  let address = item.pointee.ifa_addr, address.pointee.sa_family == sa_family_t(AF_INET6),
+                  let netmask = item.pointee.ifa_netmask else { continue }
+            let bytes = address.withMemoryRebound(to: sockaddr_in6.self, capacity: 1) { pointer in
+                withUnsafeBytes(of: pointer.pointee.sin6_addr) { Array($0) }
+            }
+            let mask = netmask.withMemoryRebound(to: sockaddr_in6.self, capacity: 1) { pointer in
+                withUnsafeBytes(of: pointer.pointee.sin6_addr) { Array($0) }
+            }
+            let isGlobal = (bytes[0] & 0xE0) == 0x20
+            let isUniqueLocal = (bytes[0] & 0xFE) == 0xFC
+            guard isGlobal || isUniqueLocal, !result.contains(where: { $0.address == bytes }) else { continue }
+            result.append(Subnet6(address: bytes, prefix: mask.reduce(0) { $0 + $1.nonzeroBitCount }))
+        }
+        return result
+    }
+}
+
 /// The subnets of this computer, read again at most every few seconds because every connection asks.
 public final class CachedSubnets: @unchecked Sendable {
     private let lock = NSLock()
     private let read: () -> [Subnet]
+    private let read6: () -> [Subnet6]
     private var cached: [Subnet] = []
+    private var cached6: [Subnet6] = []
     private var when = Date.distantPast
 
-    public init(read: @escaping () -> [Subnet] = { LocalNetworks.current() }) {
+    public init(read: @escaping () -> [Subnet] = { LocalNetworks.current() }, read6: @escaping () -> [Subnet6] = { Subnet6.current() }) {
         self.read = read
+        self.read6 = read6
     }
 
-    public var subnets: [Subnet] {
+    public var subnets: [Subnet] { snapshot().0 }
+    public var subnets6: [Subnet6] { snapshot().1 }
+
+    private func snapshot() -> ([Subnet], [Subnet6]) {
         lock.lock()
         defer { lock.unlock() }
         if Date().timeIntervalSince(when) > 5 {
             cached = read()
+            cached6 = read6()
             when = Date()
         }
-        return cached
+        return (cached, cached6)
     }
 }

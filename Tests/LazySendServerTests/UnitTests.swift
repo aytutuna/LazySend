@@ -162,9 +162,38 @@ final class PeerTests: XCTestCase {
             Subnet(name: "en0", address: ipv4ToInt("192.168.1.5")!, prefix: 24),
             Subnet(name: "bridge100", address: ipv4ToInt("172.20.10.2")!, prefix: 28),
         ]
-        XCTAssertEqual(Peers.pairingAddresses(subnets), ["192.168.1.5", "172.20.10.2", "169.254.9.9"])
+        XCTAssertEqual(Peers.pairingAddresses(subnets, []), ["192.168.1.5", "172.20.10.2", "169.254.9.9"])
         let many = (1...12).map { Subnet(name: "en\($0)", address: ipv4ToInt("10.0.\($0).1")!, prefix: 24) }
-        XCTAssertEqual(Peers.pairingAddresses(many).count, 8)
+        XCTAssertEqual(Peers.pairingAddresses(many, []).count, 8)
+    }
+}
+
+final class Ipv6PeerTests: XCTestCase {
+    private let own = Subnet6(address: [0x20, 0x01, 0x0d, 0xb8, 0xaa, 0xbb, 0xcc, 0xdd, 0, 0, 0, 0, 0, 0, 0, 5], prefix: 64)
+
+    func testAPeerInAnOwnIpv6PrefixIsAnswered() {
+        XCTAssertTrue(Peers.isAllowed(NWEndpoint.Host("2001:db8:aabb:ccdd::77"), subnets: [], subnets6: [own]))
+        XCTAssertFalse(Peers.isAllowed(NWEndpoint.Host("2001:db8:aabb:ccde::77"), subnets: [], subnets6: [own]))
+        XCTAssertFalse(Peers.isAllowed(NWEndpoint.Host("2001:db8:aabb:ccdd::77"), subnets: [], subnets6: []))
+    }
+
+    func testAnIpv4PeerIsNotMatchedAgainstIpv6Prefixes() {
+        XCTAssertFalse(Peers.isAllowed(NWEndpoint.Host("8.8.8.8"), subnets: [], subnets6: [own]))
+    }
+
+    func testTheAddressReadsBackAsText() {
+        XCTAssertEqual(own.text, "2001:db8:aabb:ccdd::5")
+    }
+
+    func testPairingAddressesListIpv4FirstThenIpv6() {
+        let v4 = [Subnet(name: "en0", address: ipv4ToInt("192.168.1.5")!, prefix: 24)]
+        XCTAssertEqual(Peers.pairingAddresses(v4, [own]), ["192.168.1.5", "2001:db8:aabb:ccdd::5"])
+    }
+
+    func testTheComputersOwnIpv6AddressesAreGlobalOrUniqueLocalOnly() {
+        for subnet in Subnet6.current() {
+            XCTAssertTrue((subnet.address[0] & 0xE0) == 0x20 || (subnet.address[0] & 0xFE) == 0xFC)
+        }
     }
 }
 

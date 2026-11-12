@@ -39,7 +39,7 @@ public final class LinkService: @unchecked Sendable {
         var serverOptions = options ?? LinkServerOptions()
         if options == nil {
             let subnets = CachedSubnets()
-            serverOptions.allowPeer = { Peers.isAllowed($0, subnets: subnets.subnets) }
+            serverOptions.allowPeer = { Peers.isAllowed($0, subnets: subnets.subnets, subnets6: subnets.subnets6) }
         }
         // What a phone had begun and what waited for it go with it; the gallery index stays, so pairing again
         // does not send a gallery twice.
