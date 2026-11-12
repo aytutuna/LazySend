@@ -1,6 +1,6 @@
 # Lazy Send contracts
 
-Lazy Send moves text, links, files and whole photo galleries between a computer and a phone, in both directions. This file is the protocol and the rules both sides keep. The Windows core is C# in `windows/LazySend.Core/Link`; the Android app (`android/`), the iPhone app (`ios/` and the Swift package at the root) and the Windows app follow this file.
+Lazy Send moves text, links, files and whole photo galleries between a computer and a phone, in both directions. This file is the protocol and the rules both sides keep. The Windows core is C# in `windows/LazySend.Core/Link`; the Android app (`android/`), the iPhone app (`ios/` and the Swift package at the root), the Windows app and the Mac app (`mac/`, with the server in `Sources/LazySendServer`) follow this file.
 
 The phone link is Lazy Print's (its CONTRACTS.md, "The phone link"), copied and changed: the same TLS server, pinning, pairing and limits, with the print package and the sync folder left out and uploads, a gallery index and a computer-to-phone outbox added. The apps do not share pairings, ports or files with any other Lazy app.
 
@@ -17,6 +17,7 @@ The phone link is Lazy Print's (its CONTRACTS.md, "The phone link"), copied and 
 | `service` in health answers | `lazysend` |
 | Settings | `%APPDATA%\Lazy Send\devices.json`, `settings.json` |
 | State | `%LOCALAPPDATA%\Lazy Send\` (see Storage) |
+| Mac | `~/Library/Application Support/Lazy Send/` (see Storage on the Mac) |
 
 Ids (a computer's, a phone's, an item's) are 8 to 64 characters from letters, digits, `-` and `_`, so they are safe as file names. The server makes item ids as 32 hex digits.
 
@@ -26,7 +27,7 @@ The computer is the server and the phone is the client, always: the phone opens 
 
 The code the computer shows as a QR is the URI above. `v` is the protocol version, `id` the computer's id, `n` its name, `fp` the fingerprint as base64url without padding (43 characters), `a` a comma-separated list of its addresses (each percent-encoded, at most 8, IPv4 first), `p` the port and `t` the pairing token, base64url of 16 random bytes. Values are percent-encoded UTF-8; unknown parameters are ignored so later versions can add some. A code with a higher `v` than the app speaks is refused with a message to update.
 
-The addresses are those of every interface that is up, whatever its type, loopback and IPv6 link-local ones left out. USB networking is not special: an iPhone's Personal Hotspot over USB gives the computer an address such as 172.20.10.x and Android USB tethering usually 192.168.42.x, and both are in the list like a Wi-Fi address. Self-assigned 169.254.x.x addresses go last. The phone tries the addresses in turn and checks the fingerprint on whichever answers. `hello` lists the same addresses as they are at that moment, so a phone paired over Wi-Fi learns the computer's USB tether address once it has reached it any way at all, and keeps the list up to date.
+The addresses are those of every interface that is up, whatever its type, loopback and IPv6 link-local ones left out. USB networking is not special: an iPhone's Personal Hotspot over USB gives the computer an address such as 172.20.10.x and Android USB tethering usually 192.168.42.x (not on a Mac, which has no driver for it), and both are in the list like a Wi-Fi address. Self-assigned 169.254.x.x addresses go last. The phone tries the addresses in turn and checks the fingerprint on whichever answers. `hello` lists the same addresses as they are at that moment, so a phone paired over Wi-Fi learns the computer's USB tether address once it has reached it any way at all, and keeps the list up to date.
 
 The server listens on every interface, IPv4 and IPv6, on one port. It answers only peers from loopback, private, link-local and unique-local addresses, or from the subnet of one of the computer's own addresses (which is how a 100.64.0.0/10 address, as Tailscale uses, gets in); anything else is closed before TLS starts.
 
@@ -135,6 +136,16 @@ JSON files are written whole through a temporary file and renamed. A file that c
 
 Received files go to the app's Documents folder, which shows in the Files app, with a name made safe and ` (2)`, ` (3)` on a clash; a download in progress is `<name>.part` until it is whole. Images and videos are also added to Photos when the user turns that on, and the assets the app added are remembered so a gallery sync does not send them back. The paired computers, the share queue and its files live in the App Group container `group.com.lazysend.lazysend`, shared with the share extension; each computer's secret and the phone's id are in the Keychain, this device only. Files the user picks to send are copied into the app's Application Support folder until they are sent, so a transfer can resume after the app is closed.
 
+## Storage on the Mac
+
+The Mac app is sandboxed (Mac App Store, bundle id `com.lazysend.lazysend`, on the iPhone app's App Store record). Settings and state are in the app's container, `~/Library/Containers/com.lazysend.lazysend/Data/Library/Application Support/Lazy Send/`, under the same names as the Windows state folder: `devices.json`, `settings.json`, `history.json`, `incoming/`, `index/` and `outbox.json`. Received files go to `~/Downloads/Lazy Send` by default (the Downloads entitlement, since the sandbox's own `~` is the container), laid out as in Storage. A receive folder the user picks is kept as a security-scoped bookmark next to its path in `settings.json`, so it opens again after a restart; a transfer's folder is fixed when it starts, as on Windows.
+
+Names are made safe for macOS: `/`, `\` and `:` and control characters become `_`, leading and trailing dots and spaces go, and the name is cut to 240 UTF-8 bytes keeping the extension. Every received file gets the `com.apple.quarantine` attribute, as a browser download does, so Gatekeeper checks what a phone sends (an app, a script). The file's modified time is set from `modified`.
+
+The certificate is a permanent P-256 key and a self-signed certificate in the login keychain (tag `com.lazysend.identity`); phones pin the key, so the certificate is renewed on the same key 60 days before it ends. The phones' secrets are never kept on the Mac, only their hashes in `devices.json`. A file queued for a phone stays where it is and is opened again after a restart through a security-scoped bookmark kept with the queue entry.
+
+The server is one `NWListener` on port 52734 (any free port when taken) for every interface, with the limits above. `_lazysend._tcp` is registered with the DNS-SD API on all interfaces. A phone with Personal Hotspot over a cable shows up as a network interface, and its address is in the pairing code and in `hello` like a Wi-Fi address. Android USB tethering needs a driver that current macOS no longer has, so an Android phone on a cable cannot reach the Mac; it pairs over Wi-Fi or a hotspot.
+
 ## Import over USB (Windows)
 
 A phone plugged in by cable is read without the phone app: Windows lists an iPhone (with Apple's driver, from Apple Devices or iTunes, unlocked and trusted) or an Android phone in File transfer mode as a portable device. The app reads `DCIM` on every storage, and `Pictures\Screenshots`, takes photo and video files by extension and skips names starting with a dot.
@@ -151,6 +162,13 @@ The core runs without a screen. The app adds the certificate (made once with `Se
 
 The Store build keeps its certificate and its pairings per package, apart from the direct build's, so moving between the two builds or reinstalling means pairing phones again.
 
-## Hand-off from other apps (Windows)
+## Hand-off from other apps (Windows and Mac)
 
 Another app sends files to the selected phone by opening `lazysend:open?file=<path>`, the `file` parameter repeated for each file and each path absolute and percent-encoded. The Windows app registers the address (the manifest in the Store build, `HKCU\Software\Classes\lazysend` in the direct build, with the argument quoted) and treats the files as it treats paths given on its command line: a running instance takes them over its single-instance pipe, and with no phone to send to the window opens to say so. Any other `lazysend:` form is ignored; pairing addresses are read by phones, never by the PC.
+
+
+The Mac app registers the `lazysend` scheme in its Info.plist and takes the addresses and the files of Open With and the Dock icon alike, through the same path as files picked in its window. A sandboxed app cannot read a bare path that another app names, so a path outside what the sandbox opens for it is reported as unreadable and not sent; an app that hands files over should open them with Lazy Send (as `NSWorkspace` does) and not rely on the address.
+
+## What the Mac app provides
+
+`Sources/LazySendServer` is the same core as the Windows one, in Swift on the Network framework, and the tests in `Tests/LazySendServerTests` run the phone client of `LazySendKit` against it over loopback. The app adds the keychain identity, the DNS-SD registration, the approval prompt, the QR code (Core Image), the notifications, the menu bar item and the windows. It starts the server while a phone is paired, a code is shown or a phone waits for an answer, and refreshes the addresses in the code while the pairing sheet is open.
