@@ -51,12 +51,6 @@
         <desktop:Extension Category="windows.startupTask" Executable="LazySend.exe" EntryPoint="Windows.FullTrustApplication">
           <desktop:StartupTask TaskId="LazySendStartup" Enabled="false" DisplayName="Lazy Send" />
         </desktop:Extension>
-        <!-- Phones reach the listener on private networks. This rule follows the package through updates; an Allow rule on the exe path does not. -->
-        <desktop2:Extension Category="windows.firewallRules">
-          <desktop2:FirewallRules Executable="LazySend.exe">
-            <desktop2:Rule Direction="in" IPProtocol="TCP" LocalPortMin="52734" LocalPortMax="52734" Profile="private" />
-          </desktop2:FirewallRules>
-        </desktop2:Extension>
       </Extensions>
     </Application>
   </Applications>
@@ -64,4 +58,13 @@
   <Capabilities>
     <rescap:Capability Name="runFullTrust" />
   </Capabilities>
+
+  <Extensions>
+    <!-- Phones reach the listener on private networks. This rule follows the package through updates; an Allow rule on the exe path does not. -->
+    <desktop2:Extension Category="windows.firewallRules">
+      <desktop2:FirewallRules Executable="LazySend.exe">
+        <desktop2:Rule Direction="in" IPProtocol="TCP" LocalPortMin="52734" LocalPortMax="52734" Profile="private" />
+      </desktop2:FirewallRules>
+    </desktop2:Extension>
+  </Extensions>
 </Package>
