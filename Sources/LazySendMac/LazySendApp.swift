@@ -31,6 +31,12 @@ final class AppHost {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        AppHost.shared.model?.resumeReceiveFolder()
+        AppHost.shared.model?.start()
+        Notifications.request()
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }
@@ -52,9 +58,6 @@ public struct LazySendApp: App {
             if let model = AppHost.shared.model {
                 MainView(model: model)
                     .onAppear {
-                        model.resumeReceiveFolder()
-                        model.start()
-                        Notifications.request()
                         NSApp.activate(ignoringOtherApps: true)
                     }
             } else {
