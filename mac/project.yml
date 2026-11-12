@@ -1,0 +1,57 @@
+# The Mac App Store build of Lazy Send, for XcodeGen (CI pins its release and SHA-256; see the mac job in
+# .github/workflows/ci.yml). `xcodegen generate --spec mac/project.yml` writes mac/LazySendMacApp.xcodeproj, which is not
+# checked in. The target holds no logic: it starts LazySendApp from the package at the repository root
+# (Sources/LazySendMac).
+name: LazySendMacApp
+
+options:
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+
+packages:
+  LazySend:
+    path: ..
+
+targets:
+  LazySendMacApp:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: LazySendMacApp
+        excludes:
+          - Info.plist
+          - LazySendMac.entitlements
+          - PrivacyInfo.xcprivacy
+      - path: LazySendMacApp/PrivacyInfo.xcprivacy
+        buildPhase: resources
+    dependencies:
+      - package: LazySend
+        product: LazySendMac
+    settings:
+      base:
+        PRODUCT_NAME: Lazy Send
+        PRODUCT_MODULE_NAME: LazySendMacApp
+        PRODUCT_BUNDLE_IDENTIFIER: com.lazysend.lazysend
+        INFOPLIST_FILE: LazySendMacApp/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: LazySendMacApp/LazySendMac.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        ENABLE_APP_SANDBOX: YES
+        SUPPORTED_PLATFORMS: macosx
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+schemes:
+  LazySendMacApp:
+    build:
+      targets:
+        LazySendMacApp: all
