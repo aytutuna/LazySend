@@ -62,7 +62,6 @@ public struct GalleryProgress: Equatable, Sendable {
 
 public enum GalleryResult: Equatable, Sendable {
     case finished(sent: Int, failed: Int)
-    /// The computer no longer knows this phone.
     case forgotten
     case diskFull(String)
 }
@@ -92,7 +91,6 @@ private final class Wire: @unchecked Sendable {
         return acked + inflight
     }
 
-    /// True at most four times a second.
     func due() -> Bool {
         lock.lock()
         defer { lock.unlock() }
@@ -136,6 +134,8 @@ public final class GallerySync: @unchecked Sendable {
             do {
                 missing = Set(try await missingIds(items.map(\.sourceId), using: link))
                 break
+            } catch let error as LinkError where error.status == 401 {
+                return .forgotten
             } catch let error as LinkError where error.isTransient {
                 progress.phase = .waiting
                 report(progress)
@@ -218,7 +218,9 @@ public final class GallerySync: @unchecked Sendable {
                 })
                 return .sent
             } catch let error as LinkError {
-                if error.isTransient {
+                if error.status == 401 {
+                    return .forgotten
+                } else if error.isTransient {
                     progress.phase = .waiting
                     report(progress)
                     guard let again = try await awaitReachable() else { return .forgotten }
