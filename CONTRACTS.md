@@ -26,7 +26,7 @@ The computer is the server and the phone is the client, always: the phone opens 
 
 The code the computer shows as a QR is the URI above. `v` is the protocol version, `id` the computer's id, `n` its name, `fp` the fingerprint as base64url without padding (43 characters), `a` a comma-separated list of its addresses (each percent-encoded, at most 8, IPv4 first), `p` the port and `t` the pairing token, base64url of 16 random bytes. Values are percent-encoded UTF-8; unknown parameters are ignored so later versions can add some. A code with a higher `v` than the app speaks is refused with a message to update.
 
-The addresses are those of every interface that is up, whatever its type, loopback and IPv6 link-local ones left out. USB networking is not special: an iPhone's Personal Hotspot over USB gives the computer an address such as 172.20.10.x and Android USB tethering usually 192.168.42.x, and both are in the list like a Wi-Fi address. Self-assigned 169.254.x.x addresses go last. The phone tries the addresses in turn and checks the fingerprint on whichever answers.
+The addresses are those of every interface that is up, whatever its type, loopback and IPv6 link-local ones left out. USB networking is not special: an iPhone's Personal Hotspot over USB gives the computer an address such as 172.20.10.x and Android USB tethering usually 192.168.42.x, and both are in the list like a Wi-Fi address. Self-assigned 169.254.x.x addresses go last. The phone tries the addresses in turn and checks the fingerprint on whichever answers. `hello` lists the same addresses as they are at that moment, so a phone paired over Wi-Fi learns the computer's USB tether address once it has reached it any way at all, and keeps the list up to date.
 
 The server listens on every interface, IPv4 and IPv6, on one port. It answers only peers from loopback, private, link-local and unique-local addresses, or from the subnet of one of the computer's own addresses (which is how a 100.64.0.0/10 address, as Tailscale uses, gets in); anything else is closed before TLS starts.
 
@@ -46,7 +46,7 @@ Requests and answers are JSON (`application/json; charset=utf-8`) unless said ot
 | --- | --- | --- |
 | `GET /v1/health` | none needed; with credentials it also says whether the phone is still paired (a wrong secret is 401) | 200 `{service, protocolVersion, paired}` |
 | `POST /v1/pair` | `{token, phoneId, phoneName, platform, appVersion}` | 200 `{protocolVersion, desktopId, desktopName, deviceSecret}`; 403 `pairingClosed`, `tokenInvalid`, `tokenExpired`, `tokenUsed`, `declined`; 409 `tooManyDevices` |
-| `GET /v1/hello` | | 200 `{protocolVersion, desktopId, desktopName, maxChunkBytes}` |
+| `GET /v1/hello` | | 200 `{protocolVersion, desktopId, desktopName, maxChunkBytes, addresses}` |
 | `DELETE /v1/devices/self` | | 204; the phone is forgotten, and so are what it had begun and not finished and what waited for it |
 | `POST /v1/items` | `{kind, ...}`, below | 201 or 200, below |
 | `GET /v1/items/{id}` | | 200 `{id, offset, done}`; 404 for an unknown item or another phone's |

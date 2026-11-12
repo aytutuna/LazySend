@@ -35,6 +35,9 @@ public sealed class LinkRouter
 
     public Func<string> DesktopName { get; set; } = () => Environment.MachineName;
 
+    /// <summary>The computer's addresses now, for hello, so a phone paired on one network finds it on another (a USB tether).</summary>
+    public Func<IReadOnlyList<string>> Addresses { get; set; } = () => LocalNetworks.PairingAddresses();
+
     /// <summary>The pairing session open now; null when pairing is not open.</summary>
     public Func<PairingSession?> CurrentPairing { get; set; } = () => null;
 
@@ -136,7 +139,7 @@ public sealed class LinkRouter
     private LinkResponse Hello(LinkRequest request, DateTimeOffset now)
     {
         if (Authenticate(request, now) is null) return Unauthorized();
-        return LinkResponse.Json(200, new HelloResponse(Protocol.Version, _devices.DesktopId, DesktopName(), Protocol.MaxChunkBytes));
+        return LinkResponse.Json(200, new HelloResponse(Protocol.Version, _devices.DesktopId, DesktopName(), Protocol.MaxChunkBytes, Addresses()));
     }
 
     private async Task<LinkResponse> PairAsync(LinkRequest request, DateTimeOffset now, CancellationToken cancellation)

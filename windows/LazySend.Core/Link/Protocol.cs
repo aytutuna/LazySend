@@ -179,7 +179,8 @@ public sealed record PairResponse(int ProtocolVersion, string DesktopId, string 
 
 public sealed record HealthResponse(string Service, int ProtocolVersion, bool Paired);
 
-public sealed record HelloResponse(int ProtocolVersion, string DesktopId, string DesktopName, long MaxChunkBytes);
+public sealed record HelloResponse(int ProtocolVersion, string DesktopId, string DesktopName, long MaxChunkBytes,
+                                  IReadOnlyList<string> Addresses);
 
 public static class ItemKind
 {

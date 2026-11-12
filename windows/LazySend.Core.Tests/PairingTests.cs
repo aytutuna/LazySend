@@ -32,6 +32,18 @@ public class PairingTests
     }
 
     [Fact]
+    public async Task HelloListsTheComputersAddressesAsTheyAreNow()
+    {
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+        h.Service.Router.Addresses = () => ["192.168.1.5", "192.168.42.10"];
+
+        using var hello = await phone.SendAsync(HttpMethod.Get, Protocol.HelloPath);
+
+        Assert.Equal(["192.168.1.5", "192.168.42.10"], (await Harness.ReadAsync<HelloResponse>(hello)).Addresses);
+    }
+
+    [Fact]
     public async Task DeclinedPairingStoresNothing()
     {
         await using var h = new Harness();
