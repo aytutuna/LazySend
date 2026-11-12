@@ -8,7 +8,6 @@ public sealed class OutboxItem
     public string Kind { get; set; } = "";
     public string? Text { get; set; }
     public string? Url { get; set; }
-    /// <summary>The path on this computer (files only).</summary>
     public string? Path { get; set; }
     public string? Name { get; set; }
     public long? Size { get; set; }
@@ -45,7 +44,6 @@ public sealed class Outbox
         _file = JsonFile.Load<OutboxFile>(path);
     }
 
-    /// <summary>Raised after an item was queued or removed (on the thread that changed it).</summary>
     public event EventHandler? Changed;
 
     public OutboxItem QueueText(string deviceId, string text)

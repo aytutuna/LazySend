@@ -1,4 +1,4 @@
-using System.Security.Cryptography.X509Certificates;
+using System.Security.Cryptography;
 using System.Windows.Threading;
 using LazySend.App.Services;
 using LazySend.Core;
@@ -15,12 +15,18 @@ public sealed partial class AppModel : IDisposable
     private readonly NetworkWatcher _network = new();
     private readonly WindowsDnsSdAdvertiser _advertiser = new();
     private readonly List<IDisposable> _advertisements = [];
+    private readonly CertificateStore _certificates;
+    private string _thumbprint;
+    private DispatcherTimer? _renewal;
 
-    public AppModel(SendPaths paths, X509Certificate2 certificate, Dispatcher ui)
+    public AppModel(SendPaths paths, CertificateStore certificates, Dispatcher ui)
     {
         _ui = ui;
         Paths = paths;
         Settings = new AppSettings(paths);
+        _certificates = certificates;
+        var certificate = certificates.Current();
+        _thumbprint = certificate.Thumbprint;
         Service = new LinkService(paths, certificate, new LinkServerOptions { AllowPeer = LocalNetworks.IsAllowedPeer });
         Service.Router.ApprovePairing = (request, cancellation) =>
         {
@@ -35,10 +41,8 @@ public sealed partial class AppModel : IDisposable
     public LinkRouter Router => Service.Router;
     public AppSettings Settings { get; }
 
-    /// <summary>The port phones connect to; 0 when the server could not start.</summary>
     public int Port { get; private set; }
 
-    /// <summary>Why the server did not start; null while it runs.</summary>
     public string? StartError { get; private set; }
 
     /// <summary>Why the computer could not be advertised by name; phones can still use the addresses in the code.</summary>
@@ -49,10 +53,8 @@ public sealed partial class AppModel : IDisposable
     /// <summary>The window that can answer a pairing request sets this while it is open; without it a request is declined.</summary>
     public Func<PairRequest, CancellationToken, Task<bool>>? Approver { get; set; }
 
-    /// <summary>The server, the advertisement or the firewall verdict changed.</summary>
     public event EventHandler? StatusChanged;
 
-    /// <summary>The computer's addresses changed: a pairing code shown now is out of date.</summary>
     public event EventHandler? AddressesChanged;
 
     /// <summary>A phone presented a valid pairing code and waits for an answer; the argument is its name.</summary>
@@ -72,16 +74,34 @@ public sealed partial class AppModel : IDisposable
         }
         Advertise();
         StartTimeline();
+        _renewal = new DispatcherTimer(DispatcherPriority.Background, _ui) { Interval = TimeSpan.FromDays(1) };
+        _renewal.Tick += (_, _) => RenewCertificate();
+        _renewal.Start();
         StatusChanged?.Invoke(this, EventArgs.Empty);
         ReadFirewall();
     }
 
-    /// <summary>Reads the firewall's rules in the background (it takes a moment) and reports the verdict.</summary>
     public void ReadFirewall() => Task.Run(() => FirewallReader.Read(Environment.ProcessPath ?? "")).ContinueWith(read =>
     {
         Firewall = read.Result;
         StatusChanged?.Invoke(this, EventArgs.Empty);
     }, CancellationToken.None, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.FromCurrentSynchronizationContext());
+
+    /// <summary>A certificate near its end is renewed with the same key; the server then presents the new one.</summary>
+    private void RenewCertificate()
+    {
+        try
+        {
+            var certificate = _certificates.Current();
+            if (certificate.Thumbprint == _thumbprint) return;
+            Service.ReplaceCertificate(certificate);
+            _thumbprint = certificate.Thumbprint;
+        }
+        catch (CryptographicException e)
+        {
+            System.Diagnostics.Trace.TraceWarning($"Could not renew the phone link certificate: {e.Message}");
+        }
+    }
 
     private void RefreshNetwork()
     {
@@ -90,7 +110,6 @@ public sealed partial class AppModel : IDisposable
         StatusChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Advertises the service on each interface that is up, in place of what was advertised before.</summary>
     private void Advertise()
     {
         foreach (var old in _advertisements) old.Dispose();
@@ -118,6 +137,7 @@ public sealed partial class AppModel : IDisposable
 
     public void Dispose()
     {
+        _renewal?.Stop();
         _network.Dispose();
         foreach (var advertisement in _advertisements) advertisement.Dispose();
         _advertisements.Clear();

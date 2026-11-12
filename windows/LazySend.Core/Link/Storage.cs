@@ -25,7 +25,6 @@ public sealed class SendSettingsFile
     public string ReceiveFolder { get; set; } = "";
 }
 
-/// <summary>The user's choices. Changes are written at once.</summary>
 public sealed class SendSettings(SendPaths paths)
 {
     private readonly object _gate = new();

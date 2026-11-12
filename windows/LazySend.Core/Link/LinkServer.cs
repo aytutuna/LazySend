@@ -8,7 +8,6 @@ namespace LazySend.Core;
 
 public sealed record LinkServerOptions
 {
-    /// <summary>Connections served at once; more are closed at once.</summary>
     public int MaxConnections { get; init; } = 16;
     /// <summary>How many of those one address may hold, so that it cannot shut the phones out.</summary>
     public int MaxConnectionsPerPeer { get; init; } = 6;
@@ -38,7 +37,7 @@ public sealed record LinkServerOptions
 /// </summary>
 public sealed class LinkServer : IAsyncDisposable
 {
-    private readonly X509Certificate2 _certificate;
+    private X509Certificate2 _certificate;
     private readonly LinkRouter _router;
     private readonly LinkRateLimiter _limiter;
     private readonly LinkServerOptions _options;
@@ -62,9 +61,16 @@ public sealed class LinkServer : IAsyncDisposable
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
     }
 
+    /// <summary>Uses <paramref name="certificate"/> for the connections that follow; those already open keep theirs.</summary>
+    public void ReplaceCertificate(X509Certificate2 certificate)
+    {
+        if (!certificate.HasPrivateKey) throw new ArgumentException("The server certificate needs its private key.", nameof(certificate));
+        _certificate = certificate;
+        _context = SslStreamCertificateContext.Create(certificate, additionalCertificates: null, offline: true);
+    }
+
     public bool IsRunning => _stop is not null;
 
-    /// <summary>The port listened on; 0 when stopped.</summary>
     public int Port { get; private set; }
 
     public int ActiveConnections

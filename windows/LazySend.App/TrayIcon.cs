@@ -3,7 +3,6 @@ using System.Windows;
 
 namespace LazySend.App;
 
-/// <summary>The icon in the notification area: the app keeps running there when its window is closed, so phones can still send.</summary>
 public sealed class TrayIcon : IDisposable
 {
     private readonly System.Windows.Forms.NotifyIcon _icon;

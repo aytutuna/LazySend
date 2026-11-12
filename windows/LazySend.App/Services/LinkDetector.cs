@@ -4,7 +4,6 @@ namespace LazySend.App.Services;
 
 public static class LinkDetector
 {
-    /// <summary>Whether <paramref name="text"/> is nothing but one http or https address, which is sent as a link.</summary>
     public static bool IsLink(string text)
     {
         string trimmed = text.Trim();

@@ -8,33 +8,20 @@ namespace LazySend.App.Services;
 /// The desktop's own certificate for the phone link: a self-signed ECDSA P-256 certificate in the
 /// user's personal certificate store (CurrentUser\My, no administrator rights), with its private key
 /// kept by Windows (CNG, persisted for this user). Phones pin its key (<see cref="SpkiFingerprint"/>),
-/// so the certificate is renewed with the same key before it expires and every pin stays valid;
-/// only <see cref="Renew"/> (Reset pairing) makes a new key. The key is never exported or written
-/// anywhere else. SChannel cannot serve TLS with an ephemeral key, so the certificate is always
-/// loaded from the store (or after a PKCS#12 round trip that persists its key).
+/// so the certificate is renewed with the same key before it expires and every pin stays valid.
+/// The key is never exported or written anywhere else. SChannel cannot serve TLS with an ephemeral key,
+/// so the certificate is always loaded from the store (or after a PKCS#12 round trip that persists its key).
 /// </summary>
 public sealed class CertificateStore
 {
-    /// <summary>The friendly name that marks the app's certificate in the store.</summary>
     public const string FriendlyName = "Lazy Send phone link";
     /// <summary>How long a certificate is valid (Apple's limit for TLS server certificates).</summary>
     public static readonly TimeSpan Validity = TimeSpan.FromDays(825);
     /// <summary>A certificate is renewed (same key) when it has less than this left.</summary>
     public static readonly TimeSpan RenewBefore = TimeSpan.FromDays(60);
 
-    private readonly string _storeName;
-    private readonly StoreLocation _location;
     private readonly object _gate = new();
     private X509Certificate2? _current;
-
-    public CertificateStore() : this("My", StoreLocation.CurrentUser) { }
-
-    /// <summary>Keeps the certificate in another of the user's stores (the tests' own).</summary>
-    internal CertificateStore(string storeName, StoreLocation location)
-    {
-        _storeName = storeName;
-        _location = location;
-    }
 
     /// <summary>The certificate with its private key: the stored one, renewed or made on first use.</summary>
     public X509Certificate2 Current()
@@ -43,7 +30,7 @@ public sealed class CertificateStore
         {
             var now = DateTimeOffset.Now;
             if (_current is { } cached && cached.NotAfter > (now + RenewBefore).LocalDateTime) return cached;
-            using var store = new X509Store(_storeName, _location);
+            using var store = new X509Store("My", StoreLocation.CurrentUser);
             store.Open(OpenFlags.ReadWrite);
             var ours = Ours(store).OrderByDescending(c => c.NotAfter).ToList();
             var usable = ours.FirstOrDefault(HasUsableKey);
@@ -67,41 +54,6 @@ public sealed class CertificateStore
             return certificate;
         }
     }
-
-    /// <summary>
-    /// Makes a new certificate with a new key, then removes the app's other certificates and their
-    /// keys (Reset pairing). When the new one cannot be made, nothing is removed and the current
-    /// certificate stays in use.
-    /// </summary>
-    public X509Certificate2 Renew()
-    {
-        lock (_gate)
-        {
-            using var store = new X509Store(_storeName, _location);
-            store.Open(OpenFlags.ReadWrite);
-            var certificate = Create(store, key: null, DateTimeOffset.Now);
-            _current = certificate;
-            // The new certificate is in the store, so the reset holds; an old one that cannot be removed
-            // now goes at the next start, when Current() keeps only the newest.
-            foreach (var old in Ours(store).Where(c => c.Thumbprint != certificate.Thumbprint).ToList())
-            {
-                try
-                {
-                    store.Remove(old);
-                }
-                catch (CryptographicException e)
-                {
-                    System.Diagnostics.Trace.TraceWarning($"Could not remove an old phone link certificate: {e.Message}");
-                    continue;
-                }
-                DeleteKey(old);
-            }
-            return certificate;
-        }
-    }
-
-    /// <summary>Makes the key for a new certificate (a stand-in in the tests).</summary>
-    internal Func<ECDsa> NewKey { get; set; } = NewPersistedKey;
 
     /// <summary>Whether the certificate's ECDSA private key can be opened (it may have been deleted).</summary>
     private static bool HasUsableKey(X509Certificate2 certificate)
@@ -127,7 +79,7 @@ public sealed class CertificateStore
     /// </summary>
     private X509Certificate2 Create(X509Store store, ECDsa? key, DateTimeOffset now)
     {
-        ECDsa signing = key ?? NewKey();
+        ECDsa signing = key ?? NewPersistedKey();
         bool added = false;
         try
         {

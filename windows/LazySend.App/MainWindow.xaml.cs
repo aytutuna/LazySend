@@ -231,7 +231,6 @@ public partial class MainWindow : Window
         base.OnClosing(e);
     }
 
-    /// <summary>Brings the window forward, from the tray or from a second start.</summary>
     public void ShowAndActivate()
     {
         if (!IsVisible) Show();

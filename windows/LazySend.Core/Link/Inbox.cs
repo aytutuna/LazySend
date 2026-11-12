@@ -11,7 +11,6 @@ public sealed class InboxException(int status, LinkError error) : Exception(erro
     public LinkError Error { get; } = error;
 }
 
-/// <summary>A file that arrived whole.</summary>
 public sealed record ReceivedFile(string DeviceId, string DeviceName, string Path, long Size, string? SourceId);
 
 /// <summary>A file being received (or finished a while ago), kept in a small JSON file next to its data so a restart can go on.</summary>
@@ -30,7 +29,6 @@ public sealed class IncomingFile
     public string Directory { get; set; } = "";
     public DateTimeOffset Started { get; set; }
     public bool Done { get; set; }
-    /// <summary>The file's path once done.</summary>
     public string? Path { get; set; }
     public DateTimeOffset? Finished { get; set; }
 }
@@ -74,10 +72,8 @@ public sealed class Inbox
         Load();
     }
 
-    /// <summary>A file arrived whole (on the request's thread).</summary>
     public event EventHandler<ReceivedFile>? FileReceived;
 
-    /// <summary>Everything a phone is sending that is not finished.</summary>
     public IReadOnlyList<IncomingFile> InProgress
     {
         get

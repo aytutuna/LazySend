@@ -56,7 +56,6 @@ public sealed class PairedDeviceStore
         }
     }
 
-    /// <summary>Raised after a phone was paired or removed (on the thread that changed it).</summary>
     public event EventHandler? Changed;
 
     /// <summary>Raised with the phone's id after it was removed, from the phone itself or from the computer.</summary>
@@ -64,7 +63,6 @@ public sealed class PairedDeviceStore
 
     public string DesktopId => _file.DesktopId;
 
-    /// <summary>The paired phones (copies), in the order they were paired.</summary>
     public IReadOnlyList<PairedDevice> Devices
     {
         get

@@ -377,3 +377,22 @@ public class PairingCodeTests
         Assert.Null(h.Service.PairingCode());
     }
 }
+
+public class CertificateReplacementTests
+{
+    [Fact]
+    public async Task ReplacedCertificateServesNewConnections()
+    {
+        await using var h = new Harness();
+        using var first = await h.PairAsync();
+        using var renewed = SelfSignedCertificate.Create("renewed");
+
+        h.Service.ReplaceCertificate(renewed);
+
+        Assert.Equal(SpkiFingerprint.Of(renewed), h.Service.Fingerprint);
+        using var pinnedToNew = new Phone(h, SpkiFingerprint.Of(renewed), first.Id) { Secret = first.Secret };
+        using var response = await pinnedToNew.SendAsync(HttpMethod.Get, Protocol.HelloPath);
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+        await Assert.ThrowsAsync<HttpRequestException>(() => first.SendAsync(HttpMethod.Get, Protocol.HelloPath));
+    }
+}

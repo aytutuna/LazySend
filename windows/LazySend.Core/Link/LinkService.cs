@@ -10,7 +10,7 @@ namespace LazySend.Core;
 /// </summary>
 public sealed class LinkService : IAsyncDisposable
 {
-    private readonly X509Certificate2 _certificate;
+    private X509Certificate2 _certificate;
     private readonly Func<DateTimeOffset> _clock;
     private PairingSession? _pairing;
 
@@ -45,7 +45,6 @@ public sealed class LinkService : IAsyncDisposable
     public LinkRouter Router { get; }
     public LinkServer Server { get; }
 
-    /// <summary>The certificate's fingerprint: the pin phones keep.</summary>
     public byte[] Fingerprint => SpkiFingerprint.Of(_certificate);
 
     /// <summary>The pairing session open now; null when none is (closed, used, or expired).</summary>
@@ -60,6 +59,13 @@ public sealed class LinkService : IAsyncDisposable
 
     /// <summary>Starts the server on <paramref name="port"/>, or another free one; returns the port.</summary>
     public int Start(int port = Protocol.DefaultPort, IPAddress? address = null) => Server.Start(port, address);
+
+    /// <summary>Takes a renewed certificate into use (same key, so phones keep trusting it).</summary>
+    public void ReplaceCertificate(X509Certificate2 certificate)
+    {
+        _certificate = certificate;
+        Server.ReplaceCertificate(certificate);
+    }
 
     public Task StopAsync() => Server.StopAsync();
 

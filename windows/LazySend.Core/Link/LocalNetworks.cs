@@ -4,7 +4,6 @@ using System.Net.Sockets;
 
 namespace LazySend.Core;
 
-/// <summary>One address of an interface and the length of its subnet's prefix.</summary>
 public sealed record LocalSubnet(IPAddress Address, int PrefixLength)
 {
     public bool Contains(IPAddress address)

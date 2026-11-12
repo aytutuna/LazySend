@@ -41,7 +41,7 @@ public partial class App : Application
 
         try
         {
-            _model = new AppModel(SendPaths.Default, new CertificateStore().Current(), Dispatcher);
+            _model = new AppModel(SendPaths.Default, new CertificateStore(), Dispatcher);
         }
         catch (CryptographicException error)
         {
@@ -63,7 +63,6 @@ public partial class App : Application
         if (files.Count > 0) SendOrShow(files);
     }
 
-    /// <summary>The files a command line names: every argument but the flags is a path.</summary>
     internal static IReadOnlyList<string> FilesOf(IEnumerable<string> args) =>
         [.. args.Where(arg => arg.Length > 0 && !arg.StartsWith("--", StringComparison.Ordinal)).Select(Path.GetFullPath)];
 
@@ -95,7 +94,6 @@ public partial class App : Application
         _tray?.Balloon("Lazy Send", text);
     }
 
-    /// <summary>Called when the window is closed to the tray.</summary>
     internal void WindowHidden()
     {
         if (_toldAboutTray) return;

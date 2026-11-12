@@ -90,7 +90,7 @@ public class QrTests
         var code = new PairingUri(Convert.ToHexStringLower(new byte[16]), "Aytu's PC", Protocol.EncodeBase64Url(new byte[32]),
                                   ["192.168.1.5", "172.20.10.2", "192.168.42.129", "fd00::1"], 52734, Protocol.EncodeBase64Url(new byte[16]));
 
-        var modules = new ZXingQrEncoder().Encode(code.Format());
+        var modules = ZXingQrEncoder.Encode(code.Format());
 
         Assert.NotNull(modules);
         Assert.InRange(modules!.Size, 21, 177);
@@ -165,5 +165,21 @@ public class ClipboardFilesTests
         {
             Directory.Delete(folder, true);
         }
+    }
+}
+
+public class SentStatusTests
+{
+    private static TimelineItem Row() => new(TimelineKind.Text, true, "device-1", "Phone", DateTimeOffset.UtcNow);
+
+    [Fact]
+    public void PickedUpIsDeliveredButWithdrawnOrOrphanedIsNot()
+    {
+        var withdrawn = Row();
+        withdrawn.Cancelling = true;
+
+        Assert.Equal("Delivered", AppModel.SentStatus(Row(), phoneStillPaired: true));
+        Assert.Equal("Cancelled", AppModel.SentStatus(withdrawn, phoneStillPaired: true));
+        Assert.Equal("Cancelled", AppModel.SentStatus(Row(), phoneStillPaired: false));
     }
 }

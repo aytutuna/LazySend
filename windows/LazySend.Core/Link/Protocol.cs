@@ -69,7 +69,6 @@ public static class Protocol
 
     public static string NewId() => Guid.NewGuid().ToString("N");
 
-    /// <summary>Base64url without padding.</summary>
     public static string EncodeBase64Url(ReadOnlySpan<byte> data) =>
         Convert.ToBase64String(data).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 

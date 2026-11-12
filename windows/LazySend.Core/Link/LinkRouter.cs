@@ -33,7 +33,6 @@ public sealed class LinkRouter
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
     }
 
-    /// <summary>The name phones show for this desktop.</summary>
     public Func<string> DesktopName { get; set; } = () => Environment.MachineName;
 
     /// <summary>The pairing session open now; null when pairing is not open.</summary>
@@ -49,9 +48,7 @@ public sealed class LinkRouter
     public TimeSpan ApprovalTimeout { get; set; } = TimeSpan.FromSeconds(120);
 
     public event EventHandler<PairedDevice>? DevicePaired;
-    /// <summary>A phone forgot this desktop (<c>DELETE /v1/devices/self</c>).</summary>
     public event EventHandler<PairedDevice>? DeviceRemoved;
-    /// <summary>A text or link arrived.</summary>
     public event EventHandler<ReceivedItem>? TextReceived;
 
     /// <summary>Phones that presented a valid token and wait for the user's answer, so the desktop keeps listening for them.</summary>

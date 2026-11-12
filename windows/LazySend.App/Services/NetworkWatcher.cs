@@ -4,7 +4,6 @@ using System.Net.Sockets;
 
 namespace LazySend.App.Services;
 
-/// <summary>An IPv4 address of an interface that is up, with the interface's index for DNS-SD.</summary>
 public sealed record InterfaceAddress(int Index, IPAddress Address);
 
 /// <summary>
@@ -24,10 +23,8 @@ public sealed class NetworkWatcher : IDisposable
         NetworkChange.NetworkAvailabilityChanged += OnChanged;
     }
 
-    /// <summary>Raised on a pool thread once addresses have stopped changing for a moment.</summary>
     public event EventHandler? Changed;
 
-    /// <summary>The IPv4 address of each interface that is up, loopback and self-assigned ones left out.</summary>
     public static IReadOnlyList<InterfaceAddress> Interfaces()
     {
         var found = new List<InterfaceAddress>();

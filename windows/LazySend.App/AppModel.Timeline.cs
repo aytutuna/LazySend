@@ -10,7 +10,6 @@ using LazySend.Core;
 
 namespace LazySend.App;
 
-/// <summary>A paired phone as the list shows it.</summary>
 public sealed class PhoneRow(string id, string name, string platform) : INotifyPropertyChanged
 {
     private string _lastSeen = "";
@@ -46,20 +45,16 @@ public sealed partial class AppModel
     private string? _selectedId;
     private int _refreshQueued;
 
-    /// <summary>What arrived and what was sent, newest first.</summary>
     public ObservableCollection<TimelineItem> Timeline { get; } = [];
 
     public ObservableCollection<PhoneRow> Phones { get; } = [];
 
-    /// <summary>The phone that Send goes to.</summary>
     public PhoneRow? SelectedPhone => Phones.FirstOrDefault(p => p.Id == _selectedId);
 
-    /// <summary>Something arrived from a phone (the window may be hidden).</summary>
     public event EventHandler<TimelineItem>? Arrived;
 
     public event EventHandler? SelectionChanged;
 
-    /// <summary>A short message for the window, such as why something could not be sent.</summary>
     public event EventHandler<string>? Notice;
 
     private void StartTimeline()
@@ -225,7 +220,6 @@ public sealed partial class AppModel
         return false;
     }
 
-    /// <summary>Queues the files for the selected phone; folders are skipped. Returns how many were queued.</summary>
     public int SendFiles(IEnumerable<string> paths)
     {
         if (!HasTarget(out var phone)) return 0;
@@ -290,13 +284,18 @@ public sealed partial class AppModel
     /// <summary>Waiting items that left the outbox were picked up by the phone, or withdrawn here.</summary>
     private void RefreshSent()
     {
-        foreach (var row in Timeline.Where(r => r.Sent && r.CanCancel))
+        var paired = Service.Devices.Devices.Select(d => d.Id).ToHashSet();
+        foreach (var row in Timeline.Where(r => r.Sent && r.CanCancel).ToList())
         {
             if (row.OutboxId is null || Service.Outbox.Find(row.DeviceId, row.OutboxId) is not null) continue;
             row.CanCancel = false;
-            DescribeSent(row, row.Cancelling ? "Cancelled" : "Delivered");
+            DescribeSent(row, SentStatus(row, paired.Contains(row.DeviceId)));
         }
     }
+
+    /// <summary>What it means that an item left the outbox: withdrawn here, or dropped with its phone, or picked up.</summary>
+    internal static string SentStatus(TimelineItem row, bool phoneStillPaired) =>
+        row.Cancelling || !phoneStillPaired ? "Cancelled" : "Delivered";
 
     public void Cancel(TimelineItem row)
     {

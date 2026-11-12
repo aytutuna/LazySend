@@ -18,13 +18,5 @@ public sealed class QrModules
 
     public int Size { get; }
 
-    /// <summary>Whether the module in column <paramref name="x"/>, row <paramref name="y"/> is dark.</summary>
     public bool this[int x, int y] => _dark[y * Size + x];
-}
-
-/// <summary>Makes the QR code of the pairing code; ZXing.Net behind it, so the window can be tried with a stand-in.</summary>
-public interface IQrEncoder
-{
-    /// <summary>The QR code holding <paramref name="text"/> (UTF-8, error correction level M); null when it can't be made.</summary>
-    QrModules? Encode(string text);
 }

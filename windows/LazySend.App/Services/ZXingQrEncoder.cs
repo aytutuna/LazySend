@@ -6,11 +6,11 @@ namespace LazySend.App.Services;
 
 /// <summary>
 /// Makes the pairing code's QR with ZXing.Net: UTF-8 (marked as such in the code), error correction level M, one bit per
-/// module and no quiet zone (the window draws its own). The Mac uses Core Image.
+/// module and no quiet zone (the window draws its own).
 /// </summary>
-public sealed class ZXingQrEncoder : IQrEncoder
+public static class ZXingQrEncoder
 {
-    public QrModules? Encode(string text)
+    public static QrModules? Encode(string text)
     {
         if (text.Length == 0) return null;
         try

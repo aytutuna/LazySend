@@ -9,13 +9,11 @@ public sealed class AppSettingsFile
     public bool CopyReceivedText { get; set; }
 }
 
-/// <summary>The choices the Settings window makes besides the receive folder, which <see cref="SendSettings"/> keeps.</summary>
 public sealed class AppSettings(SendPaths paths)
 {
     private readonly string _path = Path.Combine(paths.Settings, "app.json");
     private readonly AppSettingsFile _file = JsonFile.Load<AppSettingsFile>(Path.Combine(paths.Settings, "app.json"));
 
-    /// <summary>Text that arrives is also put on the clipboard.</summary>
     public bool CopyReceivedText
     {
         get => _file.CopyReceivedText;
@@ -27,13 +25,11 @@ public sealed class AppSettings(SendPaths paths)
     }
 }
 
-/// <summary>What the app sets up in Windows: starting at sign-in, and a Send to entry in Explorer.</summary>
 public static class ShellIntegration
 {
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string RunValue = "Lazy Send";
 
-    /// <summary>The Explorer Send to shortcut (shell:sendto).</summary>
     public static string SendToPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.SendTo), "Lazy Send.lnk");
 
     public static bool StartWithWindows

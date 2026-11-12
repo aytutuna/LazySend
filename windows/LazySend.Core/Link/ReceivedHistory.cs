@@ -2,7 +2,6 @@ using System.Text;
 
 namespace LazySend.Core;
 
-/// <summary>A text or link a phone sent.</summary>
 public sealed record ReceivedItem(string Id, string DeviceId, string DeviceName, string Kind, string? Text, string? Url, DateTimeOffset Received);
 
 public sealed class HistoryFile
@@ -30,7 +29,6 @@ public sealed class ReceivedHistory
         _file = JsonFile.Load<HistoryFile>(path);
     }
 
-    /// <summary>Raised after an entry was added or removed (on the thread that changed it).</summary>
     public event EventHandler? Changed;
 
     public IReadOnlyList<ReceivedItem> Items

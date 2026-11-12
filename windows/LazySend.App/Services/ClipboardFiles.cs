@@ -10,7 +10,6 @@ public static class ClipboardFiles
     public static string NewImagePath(string folder, DateTime now) =>
         Path.Combine(folder, $"Clipboard {now:yyyy-MM-dd HH-mm-ss} {Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(2))}.png");
 
-    /// <summary>Deletes the files in <paramref name="folder"/> that none of <paramref name="referenced"/> names.</summary>
     public static void Cleanup(string folder, IEnumerable<string> referenced)
     {
         if (!Directory.Exists(folder)) return;

@@ -9,11 +9,9 @@ public enum TimelineKind
     Text,
     Link,
     File,
-    /// <summary>The photos and videos of a gallery sync, as one row.</summary>
     Gallery,
 }
 
-/// <summary>One row of the timeline: something that arrived from a phone or was sent to one.</summary>
 public sealed class TimelineItem : INotifyPropertyChanged
 {
     private string _heading = "";
@@ -37,18 +35,14 @@ public sealed class TimelineItem : INotifyPropertyChanged
     public string DeviceName { get; }
     public DateTimeOffset Time { get; }
 
-    /// <summary>The whole text, or the link's address.</summary>
     public string? Text { get; init; }
 
-    /// <summary>The file's path on this computer, or the folder of a gallery.</summary>
     public string? Path { get; set; }
 
-    /// <summary>The outbox item of something sent, to follow its delivery.</summary>
     public string? OutboxId { get; init; }
 
     private ImageSource? _thumbnail;
 
-    /// <summary>Set when the picture has been decoded, a moment after the row appears.</summary>
     public ImageSource? Thumbnail
     {
         get => _thumbnail;
@@ -67,7 +61,6 @@ public sealed class TimelineItem : INotifyPropertyChanged
     public long Count { get; set; }
     public DateTimeOffset LastArrival { get; set; }
 
-    /// <summary>A gallery row whose sync is still going.</summary>
     public bool Active { get; set; }
 
     public string Heading
@@ -88,7 +81,6 @@ public sealed class TimelineItem : INotifyPropertyChanged
         set => Set(ref _canCancel, value);
     }
 
-    /// <summary>What a row shows under its heading: the text, shortened, or the link.</summary>
     public string? Body => Kind is TimelineKind.Text or TimelineKind.Link
         ? Text is { Length: > 1200 } whole ? whole[..1200] + "…" : Text
         : null;

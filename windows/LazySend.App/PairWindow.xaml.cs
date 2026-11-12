@@ -15,7 +15,6 @@ namespace LazySend.App;
 public partial class PairWindow : Window
 {
     private readonly AppModel _model;
-    private readonly IQrEncoder _qr = new ZXingQrEncoder();
     private readonly DispatcherTimer _tick = new() { Interval = TimeSpan.FromSeconds(1) };
     private TaskCompletionSource<bool>? _answer;
     private string? _pairedName;
@@ -57,7 +56,7 @@ public partial class PairWindow : Window
         PairingTextBox.Text = text;
         CheckCodeBox.Text = FormatCheckCode(SpkiFingerprint.CheckCode(code.FingerprintBytes ?? []));
         AddressesBox.Text = code.Addresses.Count == 0 ? "No network address found" : string.Join("  ", code.Addresses);
-        QrImage.Source = _qr.Encode(text) is { } modules ? Draw(modules) : null;
+        QrImage.Source = ZXingQrEncoder.Encode(text) is { } modules ? Draw(modules) : null;
     }
 
     private static string FormatCheckCode(string code) => code.Length == 6 ? $"{code[..3]} {code[3..]}" : code;

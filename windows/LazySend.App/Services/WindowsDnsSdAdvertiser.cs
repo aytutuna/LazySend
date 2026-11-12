@@ -148,8 +148,6 @@ public sealed class WindowsDnsSdAdvertiser
         }
     }
 
-    // MARK: - windns.h
-
     private const uint DnsQueryRequestVersion1 = 1;
     private const uint DnsRequestPending = 9506;
 
