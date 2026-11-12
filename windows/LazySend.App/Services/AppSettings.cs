@@ -34,6 +34,29 @@ public static class ShellIntegration
 
     public static string SendToPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.SendTo), "Lazy Send.lnk");
 
+    /// <summary>
+    /// Registers the lazysend: address for the current user so other apps can hand files over. A packaged app does
+    /// nothing: its manifest registers the address, and a key written from inside the package is only the package's copy.
+    /// </summary>
+    public static void RegisterAddress()
+    {
+        if (Packaging.IsPackaged) return;
+        string command = $"\"{Environment.ProcessPath}\" \"%1\"";
+        try
+        {
+            using var key = Registry.CurrentUser.CreateSubKey(@"Software\Classes\" + LazySendUrl.Scheme);
+            using var open = key.CreateSubKey(@"shell\open\command");
+            if (open.GetValue(null) as string == command) return;
+            key.SetValue(null, "URL:Lazy Send");
+            key.SetValue("URL Protocol", "");
+            open.SetValue(null, command);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            System.Diagnostics.Trace.TraceWarning($"Could not register the {LazySendUrl.Scheme}: address: {e.Message}");
+        }
+    }
+
     public static bool StartWithWindows
     {
         get

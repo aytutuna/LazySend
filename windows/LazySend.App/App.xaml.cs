@@ -36,6 +36,7 @@ public partial class App : Application
             Shutdown();
             return;
         }
+        ShellIntegration.RegisterAddress();
         DispatcherUnhandledException += OnUnhandled;
         base.OnStartup(e);
 
@@ -64,7 +65,8 @@ public partial class App : Application
     }
 
     internal static IReadOnlyList<string> FilesOf(IEnumerable<string> args) =>
-        [.. args.Where(arg => arg.Length > 0 && !arg.StartsWith("--", StringComparison.Ordinal) && !arg.StartsWith("lazysend:", StringComparison.OrdinalIgnoreCase)).Select(Path.GetFullPath)];
+        [.. args.Where(arg => arg.Length > 0 && !arg.StartsWith("--", StringComparison.Ordinal))
+                .SelectMany(arg => LazySendUrl.IsAddress(arg) ? LazySendUrl.Files(arg) : [Path.GetFullPath(arg)])];
 
     /// <summary>Files handed over by a second start (Explorer's Send to); an empty list asks for the window.</summary>
     private void Opened(IReadOnlyList<string> paths) => Dispatcher.BeginInvoke(() =>
