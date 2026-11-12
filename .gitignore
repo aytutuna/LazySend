@@ -12,3 +12,7 @@ android/app/build/
 android/local.properties
 android/.idea/
 *.iml
+
+# Swift
+.build/
+ios/*.xcodeproj/
