@@ -347,11 +347,26 @@ public sealed class Inbox
         // The phone was removed while the file was finishing: the file stays, nothing is announced or recorded.
         if (removed) return;
         BestEffort(() => Save(file));
+        BestEffort(() => MarkAsDownloaded(path));
         if (file.Modified is { } modified) BestEffort(() => File.SetLastWriteTimeUtc(path, modified.UtcDateTime));
         if (file.SourceId is { } source) BestEffort(() => _index.Add(file.DeviceId, source));
         writer?.Hash?.Dispose();
         _writers.TryRemove(file.Id, out _);
         FileReceived?.Invoke(this, new ReceivedFile(file.DeviceId, file.DeviceName, path, file.Size, file.SourceId));
+    }
+
+    /// <summary>Tags the file as coming from the internet zone, so SmartScreen and Office checks apply to what a phone sends (.exe, .lnk, .url…).</summary>
+    private static void MarkAsDownloaded(string path)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        try
+        {
+            File.WriteAllText(path + ":Zone.Identifier", "[ZoneTransfer]\r\nZoneId=3\r\n");
+        }
+        catch (NotSupportedException)
+        {
+            // A file system without alternate streams.
+        }
     }
 
     private static void BestEffort(Action step)

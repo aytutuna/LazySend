@@ -196,3 +196,22 @@ public class InboxPruneTests
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(60));
     }
 }
+
+public class ZoneTests
+{
+    [Fact]
+    public async Task ReceivedFilesAreMarkedAsDownloaded()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+        var content = new byte[100];
+        var state = await phone.BeginFileAsync("setup.exe", content);
+        using var response = await phone.PutChunkAsync(state.Id, 0, content);
+        response.EnsureSuccessStatusCode();
+
+        string mark = await File.ReadAllTextAsync(Path.Combine(h.ReceivedRoot, "Test iPhone", "setup.exe") + ":Zone.Identifier");
+
+        Assert.Contains("ZoneId=3", mark);
+    }
+}
