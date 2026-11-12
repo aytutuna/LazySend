@@ -1,4 +1,68 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Lazy Send</string>
+    <string name="channel_transfers">Transfers</string>
+    <string name="channel_received">Received from your PC</string>
+    <string name="stop">Stop</string>
+    <string name="sending">Sending</string>
+
+    <string name="back">Back</string>
+    <string name="pair_a_pc">Pair a PC</string>
+    <string name="paired_pcs">Paired PCs</string>
+    <string name="send">Send</string>
+    <string name="send_all_photos">All photos and videos</string>
+    <string name="resume">Resume</string>
+    <string name="copy">Copy</string>
+    <string name="open">Open</string>
+    <string name="remove">Remove</string>
+    <string name="clear">Clear</string>
+    <string name="cancel">Cancel</string>
+    <string name="done">Done</string>
+    <string name="try_again">Try again</string>
+    <string name="paste">Paste</string>
+
+    <string name="empty_title">Nothing paired yet</string>
+    <string name="empty_body">Open Lazy Send on your PC, choose Pair a phone and scan the code it shows.</string>
+    <string name="timeline_empty">What you send and receive shows up here.</string>
+    <string name="connected_over">Connected over %1$s</string>
+    <string name="not_reachable">%1$s is not reachable</string>
+    <string name="sent_to">To %1$s</string>
+    <string name="received_from">From %1$s</string>
+    <string name="state_paused">Paused</string>
+    <string name="state_failed">Not sent</string>
+    <string name="gallery_title">Photos and videos</string>
+    <string name="gallery_progress">%1$d of %2$d · %3$s of %4$s</string>
+    <string name="gallery_done">%1$d sent</string>
+    <string name="photo_access_partial">Only the photos you allowed are sent.</string>
+    <string name="allow_all_photos">Allow all</string>
+    <string name="photo_permission_needed">Lazy Send needs access to your photos and videos to send them.</string>
+
+    <string name="send_title">Send to %1$s</string>
+    <string name="send_text_hint">Type or paste text or a link</string>
+    <string name="send_text_button">Send text</string>
+    <string name="pick_files">Pick files</string>
+    <string name="pick_photos">Pick photos</string>
+    <string name="note_sent">Sent</string>
+
+    <string name="pair_title">Pair with your PC</string>
+    <string name="pair_scan_hint">Point the camera at the code on your PC.</string>
+    <string name="pair_camera_denied">Camera access is off. Paste the pairing text from your PC instead.</string>
+    <string name="pair_paste">Paste pairing text</string>
+    <string name="pair_paste_hint">lazysend://pair?…</string>
+    <string name="pair_connect">Connect</string>
+    <string name="pair_waiting_title">Approve on your PC</string>
+    <string name="pair_waiting_body">Check that the code on your PC says the same, then approve this phone there.</string>
+    <string name="pair_check_code">Check code</string>
+    <string name="pair_done">Paired with %1$s</string>
+    <string name="pair_unreachable">Could not reach your PC. Both need to be on the same Wi-Fi, the phone\'s hotspot or a USB tether.</string>
+    <string name="pair_debug_address">Extra address (debug)</string>
+
+    <string name="pcs_title">Paired PCs</string>
+    <string name="pcs_empty">No PCs are paired.</string>
+    <string name="remove_pc_title">Remove %1$s?</string>
+    <string name="remove_pc_body">This phone is forgotten on the PC as well when it can be reached.</string>
+
+    <string name="share_no_pc">Pair a PC in Lazy Send first.</string>
+    <string name="share_choose_pc">Send to</string>
+    <string name="share_sending">Sending to %1$s</string>
 </resources>
