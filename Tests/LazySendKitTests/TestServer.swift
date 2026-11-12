@@ -19,7 +19,11 @@ enum TestReply {
     /// Closes the connection without an answer.
     case drop
 
-    static func json(_ status: Int = 200, _ text: String) -> TestReply {
+    static func json(_ text: String) -> TestReply {
+        json(200, text)
+    }
+
+    static func json(_ status: Int, _ text: String) -> TestReply {
         .answer(status: status, headers: ["Content-Type": "application/json"], body: Data(text.utf8))
     }
 
@@ -40,7 +44,8 @@ final class TestServer: @unchecked Sendable {
     }
 
     static func identity() throws -> SecIdentity {
-        let options: [String: Any] = [kSecImportExportPassphrase as String: "test", kSecImportToMemoryOnly as String: true]
+        var options: [String: Any] = [kSecImportExportPassphrase as String: "test"]
+        if #available(macOS 15.0, iOS 15.0, *) { options[kSecImportToMemoryOnly as String] = true }
         var items: CFArray?
         let status = SecPKCS12Import(try fixture("test-server", "p12") as CFData, options as CFDictionary, &items)
         guard status == errSecSuccess, let first = (items as? [[String: Any]])?.first,
@@ -81,7 +86,7 @@ final class TestServer: @unchecked Sendable {
         listener.newConnectionHandler = { [unowned self] connection in self.serve(connection) }
         listener.start(queue: queue)
         _ = ready.wait(timeout: .now() + 10)
-        guard let bound = listener.port else { throw CocoaError(.serverCertificateUntrusted) }
+        guard let bound = listener.port else { throw CocoaError(.fileReadUnknown) }
         port = Int(bound.rawValue)
     }
 
