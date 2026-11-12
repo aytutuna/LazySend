@@ -190,6 +190,11 @@ public enum LinkError: Error, LocalizedError, Equatable {
         return nil
     }
 
+    public var offset: Int64? {
+        if case .refused(_, _, _, let offset) = self { return offset }
+        return nil
+    }
+
     /// The computer asked for a pause (rate limit) or is still finishing the last request for this file.
     public var isBusy: Bool {
         if case .refused(let status, let code, _, _) = self { return status == 429 || code == "busy" || code == "rateLimited" }
