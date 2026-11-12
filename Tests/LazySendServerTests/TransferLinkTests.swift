@@ -366,14 +366,30 @@ final class TransferLinkTests: XCTestCase {
         await expectRefused(404, "notFound") { _ = try await phone.client.itemState(state.id) }
     }
 
-    func testAFullPartIsFinishedWhenTheAppStartsAgain() async throws {
+    func testAFullPartIsFinishedByTheNextStatusRequestAfterARestart() async throws {
         let content = bytes(3000)
         let state = try await phone.beginFile("full.bin", content)
         try content.write(to: phoneFolder.appendingPathComponent(state.id + ".part"))
         try await harness.restart()
-        XCTAssertEqual(files(in: phoneFolder), ["full.bin"])
+        XCTAssertEqual(files(in: phoneFolder), [state.id + ".part"])
         let after = try await phone.client.itemState(state.id)
         XCTAssertTrue(after.done)
+        XCTAssertEqual(files(in: phoneFolder), ["full.bin"])
+    }
+
+    func testAnAssetIsNeverNeitherInProgressNorReceived() async throws {
+        let content = bytes(2000)
+        let state = try await phone.beginFile("race.jpg", content, sourceId: "race-asset")
+        let results = try await withThrowingTaskGroup(of: Bool.self) { group -> [Bool] in
+            group.addTask { try await self.phone.put(state.id, offset: 0, content).done }
+            for _ in 0..<6 {
+                group.addTask { try await self.phone.beginFile("race.jpg", content, sourceId: "race-asset").id != state.id }
+            }
+            return try await group.reduce(into: []) { $0.append($1) }
+        }
+        let all = FileManager.default.enumerator(atPath: phoneFolder.appendingPathComponent("Gallery").path)?.allObjects as? [String] ?? []
+        XCTAssertEqual(all.filter { $0.hasSuffix(".jpg") || $0.hasSuffix(".part") }.count, 1)
+        XCTAssertEqual(results.count, 7)
     }
 
     func testAnEmptyPutAtTheEndFinishesAFullPart() async throws {

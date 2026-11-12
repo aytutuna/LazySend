@@ -343,6 +343,10 @@ public final class Inbox: @unchecked Sendable {
         file.finished = clock()
         lock.lock()
         let removed = files[file.id] == nil
+        lock.unlock()
+        // The index takes the asset before it stops being tracked, so a second request for it finds one or the other.
+        if !removed, let source = file.sourceId { index.add(file.deviceId, source) }
+        lock.lock()
         untrack(file)
         lock.unlock()
         // The phone was removed while the file was finishing: the file stays, nothing is announced or recorded.
@@ -352,7 +356,6 @@ public final class Inbox: @unchecked Sendable {
         if let modified = file.modified {
             try? FileManager.default.setAttributes([.modificationDate: modified], ofItemAtPath: placed.path)
         }
-        if let source = file.sourceId { index.add(file.deviceId, source) }
         lock.lock()
         writers[file.id] = nil
         lock.unlock()
@@ -501,11 +504,7 @@ public final class Inbox: @unchecked Sendable {
             lock.lock()
             track(file)
             lock.unlock()
-            if stale {
-                discard(file)
-            } else {
-                finishIfFull(file)
-            }
+            if stale { discard(file) }
         }
     }
 
