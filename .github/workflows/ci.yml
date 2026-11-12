@@ -57,6 +57,87 @@ jobs:
           swift --version
       - name: Test LazySendKit
         run: swift test --filter LazySendKitTests
+      - name: Test LazySendServer
+        run: swift test --filter LazySendServerTests
+      # The Mac app's model tests, and its two screens written as PNGs.
+      - name: Test LazySendMac
+        run: swift test --filter LazySendMacTests
+        env:
+          LAZYSEND_SHOTS: ${{ runner.temp }}/mac-shots
+      - name: Upload the Mac screens
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mac-screens
+          path: ${{ runner.temp }}/mac-shots
+          if-no-files-found: warn
+
+  mac:
+    # The sandboxed Mac App Store target (mac/project.yml), built on the image and Xcode macappstore.yml uploads with
+    # (macos-26, Xcode 26.6), so a compiler or SDK break shows here and not at upload. Signed ad hoc, which still puts the
+    # entitlements in the binary; the upload workflow signs it for real.
+    needs: macos
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+      - name: Install XcodeGen
+        env:
+          XCODEGEN_VERSION: 2.46.0
+          XCODEGEN_SHA256: 4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806
+        run: |
+          set -euo pipefail
+          zip="$RUNNER_TEMP/xcodegen.zip"
+          curl -fsSL -o "$zip" "https://github.com/yonaskolb/XcodeGen/releases/download/$XCODEGEN_VERSION/xcodegen.zip"
+          hash=$(shasum -a 256 "$zip" | cut -d ' ' -f 1)
+          if [ "$hash" != "$XCODEGEN_SHA256" ]; then
+            echo "XcodeGen checksum mismatch: $hash"
+            exit 1
+          fi
+          unzip -q "$zip" -d "$RUNNER_TEMP/xcodegen-$XCODEGEN_VERSION"
+          echo "$RUNNER_TEMP/xcodegen-$XCODEGEN_VERSION/xcodegen/bin" >> "$GITHUB_PATH"
+      - name: Unit tests
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -scheme LazySend-Package \
+            -only-testing:LazySendMacTests \
+            -destination "platform=macOS" \
+            CODE_SIGNING_ALLOWED=NO
+      - name: Write the app's project
+        run: xcodegen generate --spec mac/project.yml
+      - name: Build the store target
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project mac/LazySendMacApp.xcodeproj \
+            -scheme LazySendMacApp \
+            -configuration Release \
+            -destination generic/platform=macOS \
+            -derivedDataPath "$RUNNER_TEMP/mac-store" \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO
+      - name: Check the bundle
+        run: |
+          app="$RUNNER_TEMP/mac-store/Build/Products/Release/Lazy Send.app"
+          plutil -lint "$app/Contents/Info.plist"
+          plutil -lint "$app/Contents/Resources/PrivacyInfo.xcprivacy"
+          codesign -d --entitlements :- "$app" > "$RUNNER_TEMP/entitlements.plist"
+          cat "$RUNNER_TEMP/entitlements.plist"
+          for key in app-sandbox network.client network.server files.user-selected.read-write files.downloads.read-write files.bookmarks.app-scope; do
+            [ "$(/usr/libexec/PlistBuddy -c "Print :com.apple.security.$key" "$RUNNER_TEMP/entitlements.plist")" = "true" ] \
+              || { echo "Missing entitlement: $key"; exit 1; }
+          done
+          if /usr/libexec/PlistBuddy -c "Print :com.apple.security.get-task-allow" "$RUNNER_TEMP/entitlements.plist" >/dev/null 2>&1; then
+            echo "get-task-allow is set"
+            exit 1
+          fi
+          codesign -dv "$app" 2>&1 | grep -q "runtime"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app/Contents/Info.plist" | grep -qx "com.lazysend.lazysend"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleName" "$app/Contents/Info.plist" | grep -qx "Lazy Send"
 
   ios:
     needs: macos
