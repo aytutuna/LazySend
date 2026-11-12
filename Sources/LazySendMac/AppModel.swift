@@ -1,0 +1,608 @@
+#if os(macOS)
+import AppKit
+import Foundation
+import LazySendKit
+import LazySendServer
+
+public struct PhoneRow: Identifiable, Equatable {
+    public var id: String
+    public var name: String
+    public var platform: String
+    public var lastSeen: String
+}
+
+public enum TimelineKind: Equatable {
+    case text
+    case link
+    case file
+    case gallery
+}
+
+public struct TimelineRow: Identifiable, Equatable {
+    public var id: String
+    public var kind: TimelineKind
+    public var sent: Bool
+    public var deviceId: String
+    public var deviceName: String
+    public var time: Date
+    public var text: String?
+    public var fileURL: URL?
+    public var outboxId: String?
+    public var heading = ""
+    public var detail = ""
+    public var canCancel = false
+    public var cancelled = false
+    public var count = 0
+    public var active = false
+    public var lastArrival = Date.distantPast
+
+    public var canCopy: Bool { kind == .text || kind == .link }
+    public var canOpen: Bool { kind == .link || fileURL != nil }
+    public var canShowInFinder: Bool { fileURL != nil }
+}
+
+public struct PairingState: Equatable {
+    public var code: PairingCode
+    public var remaining: Int
+    public var pairedName: String?
+    public var finished: Bool { pairedName != nil || remaining <= 0 }
+}
+
+public struct PairApproval: Equatable {
+    public var name: String
+    public var platform: String
+}
+
+/// What the window shows and does: the paired phones, one timeline of what arrived and what was sent, the pairing
+/// prompt, and the server that runs while it is needed.
+@MainActor
+public final class AppModel: ObservableObject {
+    static let maxRows = 500
+    static let galleryIdle: TimeInterval = 8
+
+    @Published public private(set) var phones: [PhoneRow] = []
+    @Published public private(set) var timeline: [TimelineRow] = []
+    @Published public var selectedPhoneId: String?
+    @Published public var notice: String?
+    @Published public private(set) var pairing: PairingState?
+    @Published public private(set) var approval: PairApproval?
+    @Published public private(set) var status = ""
+    @Published public private(set) var receiveFolder = ""
+    @Published public var copyReceivedText: Bool {
+        didSet { service.settings.copyTextToClipboard = copyReceivedText }
+    }
+
+    public let service: LinkService
+    private let advertiser: Advertiser?
+    private let pasteboard: NSPasteboard
+    private let notify: (String, String) -> Void
+    private let scratch: URL
+    private var approvalAnswer: CheckedContinuation<Bool, Never>?
+    private var tick: Timer?
+    private var startError: String?
+    private var reconciling = false
+    private var reconcileAgain = false
+    private let locator = FileLocator()
+
+    init(service: LinkService, advertiser: Advertiser? = nil, pasteboard: NSPasteboard = .general, scratch: URL? = nil,
+         notify: @escaping (String, String) -> Void = { _, _ in }) {
+        self.service = service
+        self.advertiser = advertiser
+        self.pasteboard = pasteboard
+        self.notify = notify
+        self.scratch = scratch ?? FileManager.default.temporaryDirectory.appendingPathComponent("lazysend-clipboard", isDirectory: true)
+        copyReceivedText = service.settings.copyTextToClipboard
+        receiveFolder = service.settings.receiveRoot.path
+        wire()
+        refreshPhones()
+        for item in service.history.items.reversed() { addText(item, arrived: false) }
+        for phone in service.devices.devices {
+            for waiting in service.outbox.pending(phone.id) { addSent(waiting, deviceName: phone.name) }
+        }
+        clearScratch()
+    }
+
+    private func wire() {
+        service.router.onTextReceived = { [weak self] item in
+            Task { @MainActor in self?.addText(item, arrived: true) }
+        }
+        service.inbox.onFileReceived = { [weak self] file in
+            Task { @MainActor in self?.addFile(file) }
+        }
+        service.outbox.onChange = { [weak self] in
+            Task { @MainActor in self?.refreshSent() }
+        }
+        let locator = self.locator
+        service.outbox.locate = { item in locator.locate(item) }
+        service.devices.onChange = { [weak self] in
+            Task { @MainActor in
+                self?.refreshPhones()
+                self?.reconcileServer()
+            }
+        }
+        service.router.onDevicePaired = { [weak self] device in
+            Task { @MainActor in self?.devicePaired(device) }
+        }
+        service.router.onApprovalSettled = { [weak self] in
+            Task { @MainActor in self?.reconcileServer() }
+        }
+        service.router.approvePairing = { [weak self] request in
+            await self?.ask(request) ?? false
+        }
+        service.server.onFailure = { [weak self] in
+            Task { @MainActor in await self?.restartServer() }
+        }
+    }
+
+    /// Starts the clock that keeps the window current and the server if a phone is paired.
+    public func start() {
+        guard tick == nil else { return }
+        tick = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.second() }
+        }
+        reconcileServer()
+    }
+
+    public func stop() async {
+        tick?.invalidate()
+        tick = nil
+        advertiser?.unregister()
+        await service.stop()
+    }
+
+    private var wantsServer: Bool {
+        !service.devices.devices.isEmpty || pairing != nil || service.router.awaitingApproval > 0
+    }
+
+    private func reconcileServer() {
+        if reconciling {
+            reconcileAgain = true
+            return
+        }
+        reconciling = true
+        Task { @MainActor in
+            repeat {
+                reconcileAgain = false
+                await applyServerState()
+            } while reconcileAgain
+            reconciling = false
+        }
+    }
+
+    private func applyServerState() async {
+        let running = service.server.isRunning
+        if wantsServer && !running {
+            do {
+                let port = try await service.start()
+                startError = nil
+                advertiser?.register(port: port, desktopId: service.devices.desktopId)
+            } catch {
+                startError = "Lazy Send could not start listening: \(error.localizedDescription)"
+            }
+        } else if !wantsServer && running {
+            advertiser?.unregister()
+            await service.stop()
+        }
+        updateStatus()
+    }
+
+    private func restartServer() async {
+        advertiser?.unregister()
+        await service.stop()
+        reconcileServer()
+    }
+
+    private func updateStatus() {
+        if let startError = startError {
+            status = startError
+        } else if service.server.isRunning {
+            status = "Listening for phones on port \(service.server.port)."
+        } else {
+            status = ""
+        }
+    }
+
+    private func refreshPhones() {
+        let devices = service.devices.devices
+        phones = devices.map { PhoneRow(id: $0.id, name: $0.name, platform: $0.platform, lastSeen: AppModel.lastSeen($0.lastSeen, now: Date())) }
+        if selectedPhoneId == nil || !devices.contains(where: { $0.id == selectedPhoneId }) { selectedPhoneId = devices.first?.id }
+        refreshSent()
+    }
+
+    static func lastSeen(_ seen: Date?, now: Date) -> String {
+        guard let seen = seen else { return "" }
+        let ago = now.timeIntervalSince(seen)
+        if ago < 120 { return "Connected just now" }
+        if ago < 3600 { return "Seen \(Int(ago / 60)) minutes ago" }
+        return "Seen " + seen.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    public func remove(phone id: String) {
+        service.devices.remove(id)
+    }
+
+    private var selectedPhone: PhoneRow? {
+        phones.first { $0.id == selectedPhoneId }
+    }
+
+    public var targetTitle: String {
+        selectedPhone.map { "Send to \($0.name)" } ?? "Lazy Send"
+    }
+
+    /// Opens a pairing session and starts the server for it.
+    public func beginPairing() async {
+        if !service.server.isRunning {
+            do {
+                let port = try await service.start()
+                startError = nil
+                advertiser?.register(port: port, desktopId: service.devices.desktopId)
+            } catch {
+                startError = "Lazy Send could not start listening: \(error.localizedDescription)"
+                notice = startError
+                updateStatus()
+                return
+            }
+        }
+        let code = service.openPairing()
+        pairing = PairingState(code: code, remaining: Int(PairingSession.lifetime))
+        updateStatus()
+    }
+
+    public func closePairing() {
+        service.closePairing()
+        pairing = nil
+        settleApproval(false)
+        reconcileServer()
+    }
+
+    public func renewPairing() async {
+        service.closePairing()
+        pairing = nil
+        await beginPairing()
+    }
+
+    private func devicePaired(_ device: PairedDevice) {
+        if pairing != nil { pairing?.pairedName = device.name }
+        notice = nil
+    }
+
+    func ask(_ request: PairRequest) async -> Bool {
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                Task { @MainActor in
+                    self.settleApproval(false)
+                    self.approvalAnswer = continuation
+                    self.approval = PairApproval(name: PairedDeviceStore.cleanName(request.phoneName), platform: request.platform)
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+            }
+        } onCancel: {
+            Task { @MainActor in self.settleApproval(false) }
+        }
+    }
+
+    public func answerApproval(_ allow: Bool) {
+        settleApproval(allow)
+    }
+
+    private func settleApproval(_ allow: Bool) {
+        let waiting = approvalAnswer
+        approvalAnswer = nil
+        approval = nil
+        waiting?.resume(returning: allow)
+    }
+
+    private func second() {
+        let now = Date()
+        let devices = service.devices.devices
+        let seen = phones.map { phone -> PhoneRow in
+            var phone = phone
+            if let device = devices.first(where: { $0.id == phone.id }) { phone.lastSeen = AppModel.lastSeen(device.lastSeen, now: now) }
+            return phone
+        }
+        if seen != phones { phones = seen }
+        finishGalleries(now: now)
+        guard var state = pairing else { return }
+        if let session = service.pairing {
+            state.remaining = Int(session.remaining(at: now).rounded(.up))
+            if let code = service.pairingCode(), code != state.code { state.code = code }
+        } else if state.pairedName == nil {
+            state.remaining = 0
+        }
+        if state != pairing { pairing = state }
+    }
+
+    func addText(_ item: ReceivedItem, arrived: Bool) {
+        let link = item.kind == "link"
+        var row = TimelineRow(id: item.id, kind: link ? .link : .text, sent: false, deviceId: item.deviceId,
+                              deviceName: item.deviceName, time: item.received, text: link ? item.url : item.text)
+        row.heading = link ? "Link from \(item.deviceName)" : "Text from \(item.deviceName)"
+        row.detail = AppModel.stamp(item.received)
+        push(row)
+        guard arrived else { return }
+        if !link, copyReceivedText, let text = item.text { copy(text) }
+        notify(row.heading, link ? (item.url ?? "") : String((item.text ?? "").prefix(120)))
+    }
+
+    func addFile(_ file: ReceivedFile) {
+        let now = Date()
+        if file.sourceId != nil {
+            addGalleryFile(file, now: now)
+            return
+        }
+        var row = TimelineRow(id: UUID().uuidString, kind: .file, sent: false, deviceId: file.deviceId, deviceName: file.deviceName,
+                              time: now, fileURL: file.url)
+        row.heading = file.url.lastPathComponent
+        row.detail = "\(AppModel.size(file.size)), from \(file.deviceName), \(AppModel.stamp(now))"
+        push(row)
+        notify("File from \(file.deviceName)", file.url.lastPathComponent)
+    }
+
+    private func addGalleryFile(_ file: ReceivedFile, now: Date) {
+        if let index = timeline.firstIndex(where: { $0.kind == .gallery && $0.deviceId == file.deviceId && $0.active }) {
+            timeline[index].count += 1
+            timeline[index].lastArrival = now
+            describeGallery(&timeline[index])
+            return
+        }
+        var row = TimelineRow(id: UUID().uuidString, kind: .gallery, sent: false, deviceId: file.deviceId, deviceName: file.deviceName,
+                              time: now, fileURL: file.url.deletingLastPathComponent().deletingLastPathComponent())
+        row.active = true
+        row.count = 1
+        row.lastArrival = now
+        describeGallery(&row)
+        push(row)
+        notify("Photos from \(file.deviceName)", "Receiving photos and videos.")
+    }
+
+    private func describeGallery(_ row: inout TimelineRow) {
+        let count = row.count.formatted()
+        row.heading = row.active ? "Receiving photos from \(row.deviceName): \(count) so far"
+            : "Received \(count) photos and videos from \(row.deviceName)"
+        row.detail = AppModel.stamp(row.time)
+    }
+
+    /// A gallery row is done once nothing has arrived for a while and the phone has nothing more in progress.
+    func finishGalleries(now: Date) {
+        let busy = Set(service.inbox.transfers.filter { $0.isGallery }.map(\.deviceId))
+        for index in timeline.indices where timeline[index].kind == .gallery && timeline[index].active {
+            guard now.timeIntervalSince(timeline[index].lastArrival) > AppModel.galleryIdle, !busy.contains(timeline[index].deviceId) else { continue }
+            timeline[index].active = false
+            describeGallery(&timeline[index])
+        }
+    }
+
+    @discardableResult
+    public func sendText(_ text: String) -> Bool {
+        guard let phone = target() else { return false }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        do {
+            let note = try ItemRequest.note(text)
+            let item: OutboxItem
+            if note.kind == "link", let url = note.url {
+                item = try service.outbox.queueLink(phone.id, url)
+            } else {
+                item = try service.outbox.queueText(phone.id, AppModel.trimmingEnd(text))
+            }
+            addSent(item, deviceName: phone.name)
+            return true
+        } catch OutboxError.tooMany {
+            notice = "Too many items are waiting for \(phone.name). Wait until it picks some up."
+        } catch {
+            notice = "That text is too long to send (the limit is 1 MiB)."
+        }
+        return false
+    }
+
+    @discardableResult
+    public func sendFiles(_ urls: [URL]) -> Int {
+        guard let phone = target() else { return 0 }
+        var files: [(url: URL, bookmark: Data?, mime: String?)] = []
+        var problem: String?
+        for url in urls {
+            var isDirectory: ObjCBool = false
+            let reachable = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+            if reachable && isDirectory.boolValue {
+                problem = "Folders cannot be sent yet. Send the files in them, or zip the folder first."
+            } else if !reachable || !FileManager.default.isReadableFile(atPath: url.path) {
+                problem = "\(url.lastPathComponent) is not there or Lazy Send may not read it."
+            } else {
+                let scoped = url.startAccessingSecurityScopedResource()
+                let bookmark = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+                if scoped { url.stopAccessingSecurityScopedResource() }
+                files.append((url, bookmark, AppModel.mime(of: url)))
+            }
+        }
+        // One save for the whole drop, however many files it holds.
+        let queued = files.isEmpty ? [] : service.outbox.queueFiles(phone.id, files)
+        for item in queued { addSent(item, deviceName: phone.name) }
+        if queued.count < files.count { problem = "Too many items are waiting for \(phone.name). Wait until it picks some up." }
+        if let problem = problem { notice = problem }
+        return queued.count
+    }
+
+    /// What is on the pasteboard goes to the selected phone: files as they are, a picture as a PNG, text as a note.
+    @discardableResult
+    public func sendPasteboard() -> Bool {
+        if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], !urls.isEmpty {
+            return sendFiles(urls) > 0
+        }
+        if let image = NSImage(pasteboard: pasteboard), let png = AppModel.png(image) {
+            let name = "Pasted image \(Int(Date().timeIntervalSince1970)).png"
+            do {
+                try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+                let url = scratch.appendingPathComponent(name)
+                try png.write(to: url)
+                return sendFiles([url]) > 0
+            } catch {
+                notice = "The picture could not be prepared for sending."
+                return false
+            }
+        }
+        if let text = pasteboard.string(forType: .string) { return sendText(text) }
+        return false
+    }
+
+    /// Files from Open With, the Dock icon or a `lazysend:open?file=` address.
+    public func open(_ urls: [URL]) {
+        var files: [URL] = []
+        for url in urls {
+            if url.isFileURL {
+                files.append(url)
+            } else {
+                files += HandOff.files(in: url)
+            }
+        }
+        guard !files.isEmpty else { return }
+        if target() != nil { sendFiles(files) }
+    }
+
+    private func target() -> PhoneRow? {
+        if let phone = selectedPhone { return phone }
+        notice = "Pair a phone first."
+        return nil
+    }
+
+    private func addSent(_ item: OutboxItem, deviceName: String) {
+        let kind: TimelineKind = item.kind == "link" ? .link : item.kind == "file" ? .file : .text
+        var row = TimelineRow(id: item.id, kind: kind, sent: true, deviceId: item.deviceId, deviceName: deviceName, time: item.queued,
+                              text: item.kind == "link" ? item.url : item.text,
+                              fileURL: item.path.map { URL(fileURLWithPath: $0) }, outboxId: item.id)
+        switch item.kind {
+        case "file": row.heading = item.name ?? "File"
+        case "link": row.heading = "Link to \(deviceName)"
+        default: row.heading = "Text to \(deviceName)"
+        }
+        row.canCancel = true
+        describeSent(&row, "Waiting for \(deviceName)")
+        push(row)
+    }
+
+    private func describeSent(_ row: inout TimelineRow, _ status: String) {
+        var size = ""
+        if row.kind == .file, let path = row.fileURL?.path,
+           let bytes = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? NSNumber)?.int64Value {
+            size = AppModel.size(bytes) + ", "
+        }
+        row.detail = "\(size)\(status), \(AppModel.stamp(row.time))"
+    }
+
+    /// Waiting items that left the outbox were picked up by the phone, or withdrawn here.
+    private func refreshSent() {
+        let paired = Set(service.devices.devices.map(\.id))
+        for index in timeline.indices where timeline[index].sent && timeline[index].canCancel {
+            guard let outboxId = timeline[index].outboxId, service.outbox.find(timeline[index].deviceId, outboxId) == nil else { continue }
+            timeline[index].canCancel = false
+            let gone = timeline[index].cancelled || !paired.contains(timeline[index].deviceId)
+            describeSent(&timeline[index], gone ? "Cancelled" : "Delivered")
+        }
+    }
+
+    public func cancel(_ row: TimelineRow) {
+        guard row.canCancel, let outboxId = row.outboxId, let index = timeline.firstIndex(where: { $0.id == row.id }) else { return }
+        timeline[index].cancelled = true
+        if !service.outbox.acknowledge(row.deviceId, outboxId) { refreshSent() }
+    }
+
+    /// Adds a row at the top; past `maxRows` the oldest rows go, except those still waiting for a phone.
+    private func push(_ row: TimelineRow) {
+        timeline.insert(row, at: 0)
+        var index = timeline.count - 1
+        while index >= 0 && timeline.count > AppModel.maxRows {
+            if !timeline[index].canCancel { timeline.remove(at: index) }
+            index -= 1
+        }
+    }
+
+    /// Takes a folder the user chose as the receive folder, kept across launches by a bookmark.
+    public func chooseReceiveFolder(_ url: URL) {
+        let bookmark = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+        _ = url.startAccessingSecurityScopedResource()
+        service.settings.setReceiveRoot(url, bookmark: bookmark)
+        receiveFolder = url.path
+    }
+
+    public func useDefaultReceiveFolder() {
+        service.settings.setReceiveRoot(nil)
+        receiveFolder = service.settings.receiveRoot.path
+    }
+
+    /// Opens the chosen receive folder again after a launch.
+    public func resumeReceiveFolder() {
+        guard let bookmark = service.settings.receiveBookmark else { return }
+        var stale = false
+        guard let url = try? URL(resolvingBookmarkData: bookmark, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &stale),
+              url.startAccessingSecurityScopedResource() else { return }
+        if url.path != service.settings.receiveRoot.path || stale {
+            service.settings.setReceiveRoot(url, bookmark: try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil))
+        }
+        receiveFolder = url.path
+    }
+
+    private func clearScratch() {
+        let waiting = Set(service.devices.devices.flatMap { service.outbox.pending($0.id) }.compactMap(\.path))
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: scratch.path)) ?? []
+        for name in names where !waiting.contains(scratch.appendingPathComponent(name).path) {
+            try? FileManager.default.removeItem(at: scratch.appendingPathComponent(name))
+        }
+    }
+
+    func copy(_ text: String) {
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+    }
+
+    static func trimmingEnd(_ text: String) -> String {
+        var end = text.endIndex
+        while end > text.startIndex, text[text.index(before: end)].isWhitespace { end = text.index(before: end) }
+        return String(text[text.startIndex..<end])
+    }
+
+    static func stamp(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    static func size(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+
+    static func mime(of url: URL) -> String? {
+        (try? url.resourceValues(forKeys: [.contentTypeKey]))?.contentType?.preferredMIMEType
+    }
+
+    static func png(_ image: NSImage) -> Data? {
+        guard let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) else { return nil }
+        return rep.representation(using: .png, properties: [:])
+    }
+}
+
+/// Opens the files of a queued item again after the sandbox forgot their paths, by the bookmark kept with the item.
+final class FileLocator: @unchecked Sendable {
+    private let lock = NSLock()
+    private var scopes: [URL] = []
+
+    func locate(_ item: OutboxItem) -> URL? {
+        if let path = item.path, FileManager.default.isReadableFile(atPath: path) { return URL(fileURLWithPath: path) }
+        guard let bookmark = item.bookmark else { return item.path.map { URL(fileURLWithPath: $0) } }
+        var stale = false
+        guard let url = try? URL(resolvingBookmarkData: bookmark, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &stale),
+              url.startAccessingSecurityScopedResource() else { return nil }
+        lock.lock()
+        scopes.append(url)
+        lock.unlock()
+        return url
+    }
+}
+
+/// `lazysend:open?file=<path>`, the `file` parameter repeated for each absolute path (CONTRACTS.md).
+enum HandOff {
+    static func files(in url: URL) -> [URL] {
+        guard url.scheme?.lowercased() == "lazysend",
+              let parts = URLComponents(url: url, resolvingAgainstBaseURL: false), parts.path.lowercased() == "open" || parts.host?.lowercased() == "open"
+        else { return [] }
+        return (parts.queryItems ?? []).filter { $0.name == "file" }.compactMap(\.value).filter { $0.hasPrefix("/") }
+            .map { URL(fileURLWithPath: $0) }
+    }
+}
+#endif

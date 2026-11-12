@@ -303,8 +303,6 @@ public final class Inbox: @unchecked Sendable {
         }
     }
 
-    // MARK: Completing
-
     /// Finishes a file whose part is already full but never got through `complete` (it threw, or the process ended
     /// first). Skipped while a chunk is being written.
     private func finishIfFull(_ file: IncomingFile) {
@@ -383,8 +381,6 @@ public final class Inbox: @unchecked Sendable {
             }
         }
     }
-
-    // MARK: Records
 
     private func discard(_ file: IncomingFile) {
         // A part that cannot be deleted keeps its record, so a later cleanup finds it again.

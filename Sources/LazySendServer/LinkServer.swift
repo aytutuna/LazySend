@@ -123,8 +123,6 @@ public final class LinkServer: @unchecked Sendable {
         finishStart(nil, port: 0)
     }
 
-    // MARK: Listening
-
     private func parameters(_ identity: sec_identity_t) -> NWParameters {
         let tls = NWProtocolTLS.Options()
         let security = tls.securityProtocolOptions
@@ -210,8 +208,6 @@ public final class LinkServer: @unchecked Sendable {
         served[nextNumber] = Served(link: link, peer: peer, task: nil)
         return (link, nextNumber)
     }
-
-    // MARK: Serving
 
     private func serve(_ link: Link, remote: NWEndpoint.Host) async {
         defer { link.cancel() }
@@ -299,8 +295,6 @@ public final class LinkServer: @unchecked Sendable {
             }
         }
     }
-
-    // MARK: Bookkeeping (with the lock)
 
     private func begin() -> Bool {
         lock.lock()
