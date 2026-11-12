@@ -63,6 +63,9 @@ targets:
         excludes:
           - Info.plist
           - LazySendShare.entitlements
+          - PrivacyInfo.xcprivacy
+      - path: LazySendShare/PrivacyInfo.xcprivacy
+        buildPhase: resources
     dependencies:
       - package: LazySend
         product: LazySendKit

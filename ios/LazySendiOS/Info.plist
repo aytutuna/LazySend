@@ -47,7 +47,7 @@
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Lazy Send saves the photos and videos your computer sends to your photo library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Lazy Send sends the photos and videos you choose to your computer.</string>
+	<string>Lazy Send sends the photos and videos you choose to your computer. Choosing All photos and videos sends the whole library.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
