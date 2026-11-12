@@ -113,7 +113,6 @@ public actor PcConnector {
         }
     }
 
-    /// The first of `addresses` that answers with the computer's key, for pairing; its client has no credentials yet.
     public func reachForPairing(addresses: [String], port: Int, pin: Data) async -> Reached? {
         let session = PinnedSession(pin: pin)
         let subnets = discovery.subnets()

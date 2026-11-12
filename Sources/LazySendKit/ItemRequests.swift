@@ -24,7 +24,6 @@ extension ItemRequest {
         return ItemRequest(kind: "text", text: text)
     }
 
-    /// A file's request: its size and SHA-256 are read from `url`.
     public static func file(at url: URL, name: String, mime: String?, modified: Date?) throws -> ItemRequest {
         let size = (try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.int64Value ?? 0
         return ItemRequest(kind: "file", name: name, size: size, mime: mime,

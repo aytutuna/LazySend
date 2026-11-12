@@ -15,7 +15,6 @@ public enum LinkKind: String, Codable, Equatable, Sendable {
     }
 }
 
-/// An IPv4 address of this phone on the interface `name`.
 public struct Subnet: Equatable, Sendable {
     public var name: String
     public var address: UInt32
@@ -62,7 +61,6 @@ public func intToIpv4(_ value: UInt32) -> String {
 }
 
 public enum LocalNetworks {
-    /// The IPv4 addresses of the interfaces that are up, loopback left out.
     public static func current() -> [Subnet] {
         var list: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&list) == 0, let first = list else { return [] }
@@ -106,7 +104,6 @@ public enum LocalNetworks {
         return Array(hosts.prefix(limit))
     }
 
-    /// The candidates that accept a connection on `port`, found with at most `limit` attempts at a time.
     public static func probe(_ hosts: [String], port: Int, limit: Int = 64,
                              connect: @escaping @Sendable (String, Int) async -> Bool = { await TcpProbe.canConnect($0, port: $1) }) async -> [String] {
         await withTaskGroup(of: String?.self) { group in

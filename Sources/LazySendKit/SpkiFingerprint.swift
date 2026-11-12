@@ -7,7 +7,6 @@ import CryptoKit
 /// `SecCertificateCopyData` returns), so the phone hashes the same bytes as .NET's
 /// `PublicKey.ExportSubjectPublicKeyInfo` does on the computer.
 public enum SpkiFingerprint {
-    /// The fingerprint's length in bytes (SHA-256).
     public static let byteCount = 32
 
     /// The SubjectPublicKeyInfo (its whole DER element) of the X.509 certificate `certificateDER`;
@@ -39,12 +38,10 @@ public enum SpkiFingerprint {
         return Data(der[position..<spki.end])
     }
 
-    /// The fingerprint of `certificateDER`; nil when it is not a certificate.
     public static func of(_ certificateDER: Data) -> Data? {
         subjectPublicKeyInfo(certificateDER).map(ofSubjectPublicKeyInfo)
     }
 
-    /// The fingerprint of a SubjectPublicKeyInfo's DER.
     public static func ofSubjectPublicKeyInfo(_ spki: Data) -> Data {
         Data(SHA256.hash(data: spki))
     }

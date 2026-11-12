@@ -52,7 +52,6 @@ public final class LinkClient: UploadAPI, GalleryCheckAPI, OutboxAPI, @unchecked
         self.credentials = credentials
     }
 
-    /// A client with a session of its own, for pairing, before there is a computer to keep a session for.
     public convenience init(endpoint: Endpoint, pin: Data, credentials: Credentials? = nil) {
         self.init(endpoint: endpoint, session: PinnedSession(pin: pin), credentials: credentials)
     }

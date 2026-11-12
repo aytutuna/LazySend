@@ -20,6 +20,7 @@ public enum Pairing {
     /// Pairs with the computer in `code`: the first address that answers with its key gets the request, and
     /// the computer's user is asked to approve it. The pairing is kept only once its secret is saved.
     public static func pair(_ code: PairingCode, phoneName: String, appVersion: String, connector: PcConnector, store: PcStore) async throws -> PairedPc {
+        guard store.secretsAvailable else { throw PairingError.notKept }
         guard let reached = await connector.reachForPairing(addresses: code.addresses, port: code.port, pin: code.pin) else {
             throw PairingError.unreachable
         }
