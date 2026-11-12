@@ -2,6 +2,7 @@
 windows/**/bin/
 windows/**/obj/
 windows/.vs/
+windows/**/*_wpftmp.csproj
 .DS_Store
 
 # Android
