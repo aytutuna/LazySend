@@ -144,3 +144,9 @@ An item is added to the index once its file is in place, so Stop, a failed item 
 ## What the Windows app provides
 
 The core runs without a screen. The app adds the certificate (made once with `SelfSignedCertificate.Create` and kept under the user's account), the DNS-SD advertisement for `_lazysend._tcp` with the TXT keys above, the approval prompt (`LinkRouter.ApprovePairing`), the QR code, the firewall rule check and the windows. It starts the server while a phone is paired or a code is shown, and refreshes the addresses in the code when the network changes.
+
+The Store build keeps its certificate and its pairings per package, apart from the direct build's, so moving between the two builds or reinstalling means pairing phones again.
+
+## Hand-off from other apps (Windows)
+
+Another app sends files to the selected phone by opening `lazysend:open?file=<path>`, the `file` parameter repeated for each file and each path absolute and percent-encoded. The Windows app registers the address (the manifest in the Store build, `HKCU\Software\Classes\lazysend` in the direct build, with the argument quoted) and treats the files as it treats paths given on its command line: a running instance takes them over its single-instance pipe, and with no phone to send to the window opens to say so. Any other `lazysend:` form is ignored; pairing addresses are read by phones, never by the PC.

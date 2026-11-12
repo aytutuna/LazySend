@@ -26,7 +26,7 @@ public sealed record FirewallState(bool Read, FirewallProfiles CurrentProfiles, 
 public static class FirewallReader
 {
     /// <summary>The firewall's state for <paramref name="applicationPath"/>; <see cref="FirewallState.Unknown"/> when it cannot be read. Never throws.</summary>
-    public static FirewallState Read(string applicationPath)
+    public static FirewallState Read(string applicationPath, IReadOnlyList<string>? packageTokens = null)
     {
         object? policy = null;
         try
@@ -50,10 +50,14 @@ public static class FirewallReader
                     try
                     {
                         string path = Get(rule, "ApplicationName") as string ?? "";
-                        if (!string.Equals(Environment.ExpandEnvironmentVariables(path), applicationPath, StringComparison.OrdinalIgnoreCase)) continue;
+                        string name = Get(rule, "Name") as string ?? "";
+                        bool own = string.Equals(Environment.ExpandEnvironmentVariables(path), applicationPath, StringComparison.OrdinalIgnoreCase);
+                        // The rule a Store package declares names the package, not an exe path, which changes with every update.
+                        bool package = !own && IsPackageRule($"{name} {Get(rule, "Grouping")}", packageTokens);
+                        if (!own && !package) continue;
                         rules.Add(new FirewallRule(
-                            Get(rule, "Name") as string ?? "",
-                            path,
+                            name,
+                            package ? applicationPath : path,
                             Convert.ToInt32(Get(rule, "Direction"), CultureInfo.InvariantCulture) == 1,
                             Convert.ToInt32(Get(rule, "Action"), CultureInfo.InvariantCulture) == 1,
                             Convert.ToBoolean(Get(rule, "Enabled"), CultureInfo.InvariantCulture),
@@ -79,6 +83,9 @@ public static class FirewallReader
             if (policy is not null) System.Runtime.InteropServices.Marshal.ReleaseComObject(policy);
         }
     }
+
+    internal static bool IsPackageRule(string text, IReadOnlyList<string>? packageTokens) =>
+        packageTokens is { Count: > 0 } && packageTokens.All(token => text.Contains(token, StringComparison.OrdinalIgnoreCase));
 
     private static object? Get(object target, string name, params object[] index) =>
         target.GetType().InvokeMember(name, BindingFlags.GetProperty, binder: null, target, index.Length == 0 ? null : index,

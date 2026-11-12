@@ -119,6 +119,8 @@ public partial class PairWindow : Window
         var lines = new List<string>();
         if (_model.StartError is { } error) lines.Add(error);
         else lines.Add($"Listening on port {_model.Port}.");
+        if (Packaging.IsPackaged && _model.Port != 0 && _model.Port != Protocol.DefaultPort)
+            lines.Add($"Port {Protocol.DefaultPort} was taken, so Lazy Send listens on {_model.Port}. The firewall rule the Store package adds covers only port {Protocol.DefaultPort}, so Windows may ask before phones can connect.");
         switch (_model.FirewallVerdict)
         {
             case FirewallVerdict.WillAsk:

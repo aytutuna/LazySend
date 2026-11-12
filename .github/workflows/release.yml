@@ -1,0 +1,53 @@
+name: Release
+
+# Checks that the Windows app packs for the Microsoft Store: an .msixupload with an x64 and an arm64 package in a
+# bundle, built self-contained so nobody has to install .NET. It is not signed: the Store signs what it
+# publishes. Run it by hand from the Actions tab. Nothing is uploaded: run artifacts of a public repository can
+# be downloaded by any signed-in GitHub user, so the upload is built on the PC with scripts/make_msix.ps1.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  store:
+    runs-on: windows-latest
+    env:
+      IDENTITY_NAME: ${{ vars.STORE_IDENTITY_NAME }}
+      PUBLISHER: ${{ vars.STORE_PUBLISHER }}
+      PUBLISHER_DISPLAY_NAME: ${{ vars.STORE_PUBLISHER_DISPLAY_NAME }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Store identity
+        shell: pwsh
+        run: |
+          foreach ($name in 'IDENTITY_NAME', 'PUBLISHER', 'PUBLISHER_DISPLAY_NAME') {
+            if (-not (Get-Item "env:$name").Value) { throw "Set the repository variable STORE_$name from Partner Center, Product identity." }
+          }
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Publish
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($arch in 'x64', 'arm64') {
+            dotnet publish windows/LazySend.App/LazySend.App.csproj -c Release -r "win-$arch" --self-contained -o (Join-Path $env:RUNNER_TEMP "publish-$arch")
+            if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed for $arch" }
+          }
+      - name: Pack
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./scripts/make_msix.ps1 `
+            -X64 (Join-Path $env:RUNNER_TEMP 'publish-x64') `
+            -Arm64 (Join-Path $env:RUNNER_TEMP 'publish-arm64') `
+            -Out (Join-Path $env:RUNNER_TEMP 'store') `
+            -IdentityName $env:IDENTITY_NAME `
+            -Publisher $env:PUBLISHER `
+            -PublisherDisplayName $env:PUBLISHER_DISPLAY_NAME

@@ -16,7 +16,13 @@ public partial class SettingsWindow : Window
         FolderBox.Text = model.Service.Settings.ReceiveRoot;
         CopyBox.IsChecked = model.Settings.CopyReceivedText;
         StartBox.IsChecked = ShellIntegration.StartWithWindows;
+        if (ShellIntegration.StartWithWindowsLocked is { } locked)
+        {
+            StartBox.IsEnabled = false;
+            FooterStatus.Text = locked;
+        }
         SendToBox.IsChecked = ShellIntegration.SendToShortcut;
+        if (!ShellIntegration.SendToAvailable) SendToBox.Visibility = Visibility.Collapsed;
         _loading = false;
     }
 
