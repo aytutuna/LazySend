@@ -1,0 +1,24 @@
+<Window x:Class="LazySend.App.PickPhoneWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="clr-namespace:LazySend.App"
+        Title="Which phone is this?" Width="460" SizeToContent="Height" ResizeMode="NoResize"
+        FontFamily="{StaticResource TextFontFamily}"
+        Icon="{x:Static ui:AppIcon.Image}"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <DockPanel>
+        <Border DockPanel.Dock="Bottom" Style="{StaticResource DialogFooterStyle}" Padding="24,14,24,18">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Cancel" IsCancel="True" MinWidth="96" Margin="0,0,8,0" />
+                <Button Content="Import" IsDefault="True" MinWidth="96" Style="{StaticResource AccentButtonStyle}" Click="Import_Click" />
+            </StackPanel>
+        </Border>
+        <StackPanel Margin="24,20,24,16">
+            <TextBlock x:Name="Question" Style="{StaticResource BodyStrongText}" TextWrapping="Wrap" />
+            <TextBlock Style="{StaticResource CaptionText}" TextWrapping="Wrap" Margin="0,4,0,8"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="Photos go into that phone's folder, next to the ones it sent over Wi-Fi. This is asked once." />
+            <ListBox x:Name="Choices" DisplayMemberPath="Label" AutomationProperties.Name="Phones" />
+        </StackPanel>
+    </DockPanel>
+</Window>

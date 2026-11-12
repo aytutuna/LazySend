@@ -27,6 +27,11 @@ public partial class MainWindow : Window
         model.SelectionChanged += (_, _) => ShowSelection();
         model.Notice += (_, text) => ShowNotice(text);
         model.UsbChanged += (_, _) => ShowUsbHint();
+        model.PhonePicker = (name, candidates) =>
+        {
+            var window = new PickPhoneWindow(name, candidates) { Owner = this };
+            return window.ShowDialog() == true ? window.Choice : null;
+        };
         model.Timeline.CollectionChanged += (_, _) => EmptyText.Visibility = model.Timeline.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         model.Phones.CollectionChanged += (_, _) => NoPhonesText.Visibility = model.Phones.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         _noticeTimer.Tick += (_, _) =>

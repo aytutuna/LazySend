@@ -12,7 +12,7 @@ internal sealed class FakeUsbPhone : IPhoneSource
     public string Id => Info.Id;
     public string Name => Info.Name;
 
-    public IReadOnlyList<PhoneMedia> List(CancellationToken cancel) =>
+    public IReadOnlyList<PhoneMedia> List(CancellationToken cancel, IProgress<int> found) =>
         [.. Enumerable.Range(1, 60).Select(i => new PhoneMedia($"o{i}", $"p{i}", $"IMG_{i:0000}.JPG", 6_000_000 + i * 1000, DateTimeOffset.Now.AddDays(-i * 9)))];
 
     public Stream Open(PhoneMedia item) => new SlowStream(item.Size);

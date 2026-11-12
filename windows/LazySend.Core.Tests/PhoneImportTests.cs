@@ -40,7 +40,12 @@ public sealed class PhoneImportTests : IDisposable
 
         public Exception? ListFails { get; set; }
 
-        public IReadOnlyList<PhoneMedia> List(CancellationToken cancel) => ListFails is { } e ? throw e : Items;
+        public IReadOnlyList<PhoneMedia> List(CancellationToken cancel, IProgress<int> found)
+        {
+            if (ListFails is { } e) throw e;
+            for (int i = 1; i <= Items.Count; i++) found.Report(i);
+            return Items;
+        }
 
         public void Dispose()
         {
@@ -85,7 +90,7 @@ public sealed class PhoneImportTests : IDisposable
     {
         var phone = new FakePhone().Add("IMG_0001.JPG", 3000, May).Add("IMG_0002.MOV", 5000, June);
 
-        var result = _importer.Run(phone, null, default);
+        var result = _importer.Run(phone, "Test iPhone", null, default);
 
         Assert.Equal(ImportOutcome.Finished, result.Outcome);
         Assert.Equal(2, result.Imported);
@@ -103,11 +108,11 @@ public sealed class PhoneImportTests : IDisposable
     public void SecondRunSkipsWhatWasImported()
     {
         var phone = new FakePhone().Add("IMG_0001.JPG", 3000, May);
-        _importer.Run(phone, null, default);
+        _importer.Run(phone, "Test iPhone", null, default);
         File.Delete(Path.Combine(Gallery, May.ToLocalTime().ToString("yyyy-MM"), "IMG_0001.JPG"));
         phone.Add("IMG_0002.JPG", 100, May);
 
-        var result = _importer.Run(phone, null, default);
+        var result = _importer.Run(phone, "Test iPhone", null, default);
 
         Assert.Equal(1, result.Imported);
         Assert.Equal(1, result.Skipped);
@@ -122,7 +127,7 @@ public sealed class PhoneImportTests : IDisposable
         File.WriteAllBytes(Path.Combine(month, "IMG_0001.JPG"), new byte[3000]);
         var phone = new FakePhone().Add("IMG_0001.JPG", 3000, May).Add("IMG_0002.JPG", 4000, May);
 
-        var result = _importer.Run(phone, null, default);
+        var result = _importer.Run(phone, "Test iPhone", null, default);
 
         Assert.Equal(1, result.Imported);
         Assert.Equal(1, result.Skipped);
@@ -137,7 +142,7 @@ public sealed class PhoneImportTests : IDisposable
         File.WriteAllBytes(Path.Combine(month, "IMG_0001.JPG"), new byte[10]);
         var phone = new FakePhone().Add("IMG_0001.JPG", 3000, May);
 
-        _importer.Run(phone, null, default);
+        _importer.Run(phone, "Test iPhone", null, default);
 
         Assert.Equal(3000, new FileInfo(Path.Combine(month, "IMG_0001 (2).JPG")).Length);
         Assert.Equal(10, new FileInfo(Path.Combine(month, "IMG_0001.JPG")).Length);
@@ -150,7 +155,7 @@ public sealed class PhoneImportTests : IDisposable
         using var cancel = new CancellationTokenSource();
         phone.Wrap = (item, stream) => item.Name == "b.jpg" ? new Breaking(stream, 3000, cancel.Cancel) : stream;
 
-        var stopped = _importer.Run(phone, null, cancel.Token);
+        var stopped = _importer.Run(phone, "Test iPhone", null, cancel.Token);
 
         Assert.Equal(ImportOutcome.Stopped, stopped.Outcome);
         Assert.Equal(1, stopped.Imported);
@@ -158,7 +163,7 @@ public sealed class PhoneImportTests : IDisposable
         Assert.Equal(["a.jpg"], Directory.EnumerateFiles(month).Select(Path.GetFileName));
 
         phone.Wrap = null;
-        var again = _importer.Run(phone, null, default);
+        var again = _importer.Run(phone, "Test iPhone", null, default);
 
         Assert.Equal(ImportOutcome.Finished, again.Outcome);
         Assert.Equal(2, again.Imported);
@@ -172,7 +177,7 @@ public sealed class PhoneImportTests : IDisposable
         var phone = new FakePhone().Add("a.jpg", 2000, May).Add("b.jpg", 9000, May);
         phone.Wrap = (item, stream) => item.Name == "b.jpg" ? new Breaking(stream, 3000, () => throw new PhoneGoneException("The phone was unplugged.")) : stream;
 
-        var result = _importer.Run(phone, null, default);
+        var result = _importer.Run(phone, "Test iPhone", null, default);
 
         Assert.Equal(ImportOutcome.Disconnected, result.Outcome);
         Assert.Equal("The phone was unplugged.", result.Message);
@@ -180,7 +185,7 @@ public sealed class PhoneImportTests : IDisposable
         Assert.Empty(Directory.EnumerateFiles(Gallery, "*.part", SearchOption.AllDirectories));
 
         phone.Wrap = null;
-        var again = _importer.Run(phone, null, default);
+        var again = _importer.Run(phone, "Test iPhone", null, default);
 
         Assert.Equal(ImportOutcome.Finished, again.Outcome);
         Assert.Equal(1, again.Imported);
@@ -192,7 +197,7 @@ public sealed class PhoneImportTests : IDisposable
         var phone = new FakePhone().Add("a.jpg", 100, May).Add("b.jpg", 100, May).Add("c.jpg", 100, May);
         phone.Unreadable.Add("o1");
 
-        var result = _importer.Run(phone, null, default);
+        var result = _importer.Run(phone, "Test iPhone", null, default);
 
         Assert.Equal(ImportOutcome.Finished, result.Outcome);
         Assert.Equal(2, result.Imported);
@@ -208,7 +213,7 @@ public sealed class PhoneImportTests : IDisposable
         var phone = new FakePhone().Add("a.jpg", 100, May);
         phone.ListFails = (Exception)Activator.CreateInstance(fault, "no")!;
 
-        var result = _importer.Run(phone, null, default);
+        var result = _importer.Run(phone, "Test iPhone", null, default);
 
         Assert.Equal(ImportOutcome.Failed, result.Outcome);
         Assert.Equal("no", result.Message);
@@ -223,14 +228,14 @@ public sealed class PhoneImportTests : IDisposable
         phone.Data["o2"] = new byte[2000];
         phone.Data["o3"] = [];
 
-        var result = _importer.Run(phone, null, default);
+        var result = _importer.Run(phone, "Test iPhone", null, default);
 
         Assert.Equal(3, result.Unreadable);
         Assert.Equal(1, result.Imported);
         Assert.Equal(["c.heic"], Directory.EnumerateFiles(Gallery, "*", SearchOption.AllDirectories).Select(Path.GetFileName));
 
         phone.Data["o0"] = new byte[3000];
-        var again = _importer.Run(phone, null, default);
+        var again = _importer.Run(phone, "Test iPhone", null, default);
 
         Assert.Equal(1, again.Imported);
         Assert.Equal(1, again.Skipped);
@@ -242,9 +247,10 @@ public sealed class PhoneImportTests : IDisposable
         var phone = new FakePhone().Add("a.jpg", 2500000, May).Add("b.jpg", 100, June);
         var seen = new List<ImportProgress>();
 
-        _importer.Run(phone, new Inline(seen.Add), default);
+        _importer.Run(phone, "Test iPhone", new Inline(seen.Add), default);
 
-        Assert.Equal(new ImportProgress(0, 2, 0, 2500100), seen[0]);
+        Assert.Equal(new ImportProgress(0, 0, 0, 0, 1), seen[0]);
+        Assert.Contains(new ImportProgress(0, 2, 0, 2500100), seen);
         Assert.Equal(new ImportProgress(2, 2, 2500100, 2500100), seen[^1]);
     }
 

@@ -17,6 +17,7 @@ public sealed record SendPaths(string Settings, string State, string DefaultRece
     public string IncomingDirectory => Path.Combine(State, "incoming");
     public string IndexDirectory => Path.Combine(State, "index");
     public string OutboxFile => Path.Combine(State, "outbox.json");
+    public string UsbFoldersFile => Path.Combine(State, "usb-folders.json");
 }
 
 public sealed class SendSettingsFile

@@ -27,6 +27,8 @@ internal sealed class WpdPhone : IPhoneSource, IDisposable
     private readonly IPortableDeviceContent _content;
     private readonly IPortableDeviceProperties _properties;
     private readonly IPortableDeviceResources _resources;
+    private IPortableDeviceKeyCollection? _keys;
+    private IProgress<int>? _found;
 
     public WpdPhone(UsbPhoneInfo info)
     {
@@ -72,9 +74,10 @@ internal sealed class WpdPhone : IPhoneSource, IDisposable
     public string Id { get; }
     public string Name { get; }
 
-    public IReadOnlyList<PhoneMedia> List(CancellationToken cancel)
+    public IReadOnlyList<PhoneMedia> List(CancellationToken cancel, IProgress<int> found)
     {
         var media = new List<PhoneMedia>();
+        _found = found;
         try
         {
             foreach (string storage in Wpd.Children(_content, Wpd.RootId))
@@ -112,7 +115,7 @@ internal sealed class WpdPhone : IPhoneSource, IDisposable
 
     public void Dispose()
     {
-        Release(_device, _resources, _properties, _content);
+        Release(_device, _keys, _resources, _properties, _content);
     }
 
     private void WalkScreenshots(string pictures, List<PhoneMedia> media, CancellationToken cancel)
@@ -130,7 +133,11 @@ internal sealed class WpdPhone : IPhoneSource, IDisposable
             cancel.ThrowIfCancellationRequested();
             if (ReadOrSkip(id) is not { } entry || entry.Name.StartsWith('.')) continue;
             if (entry.IsFolder) Walk(id, media, cancel);
-            else if (entry.Media is { } item) media.Add(item with { ObjectId = id });
+            else if (entry.Media is { } item)
+            {
+                media.Add(item with { ObjectId = id });
+                _found?.Report(media.Count);
+            }
         }
     }
 
@@ -155,13 +162,16 @@ internal sealed class WpdPhone : IPhoneSource, IDisposable
 
     private Entry? Read(string objectId)
     {
-        var keys = Wpd.NewKeys();
-        foreach (var key in new[] { Wpd.ObjectName, Wpd.OriginalFileName, Wpd.PersistentId, Wpd.ContentType, Wpd.Size, Wpd.DateCreated, Wpd.DateModified })
+        if (_keys is null)
         {
-            var copy = key;
-            keys.Add(ref copy);
+            _keys = Wpd.NewKeys();
+            foreach (var key in new[] { Wpd.ObjectName, Wpd.OriginalFileName, Wpd.PersistentId, Wpd.ContentType, Wpd.Size, Wpd.DateCreated, Wpd.DateModified })
+            {
+                var copy = key;
+                _keys.Add(ref copy);
+            }
         }
-        _properties.GetValues(objectId, keys, out var values);
+        _properties.GetValues(objectId, _keys, out var values);
         try
         {
             string name = Wpd.GetString(values, Wpd.OriginalFileName) ?? Wpd.GetString(values, Wpd.ObjectName) ?? "";
@@ -177,7 +187,6 @@ internal sealed class WpdPhone : IPhoneSource, IDisposable
         finally
         {
             Marshal.ReleaseComObject(values);
-            Marshal.ReleaseComObject(keys);
         }
     }
 
@@ -244,10 +253,17 @@ internal static class WpdDevices
     // Not connected, no such device, device removed, RPC server unavailable or disconnected.
     private static readonly int[] GoneCodes = [unchecked((int)0x8007048F), unchecked((int)0x80070037), unchecked((int)0x80070651), unchecked((int)0x800706BA), unchecked((int)0x80010108)];
 
+    // Phones show up as usb#vid_...; a drive goes through the bus enumerator or usbstor.
+    private static bool IsDrive(string id) =>
+        id.Contains("wpdbusenum", StringComparison.OrdinalIgnoreCase) || id.Contains("usbstor", StringComparison.OrdinalIgnoreCase);
+
     public static bool IsGone(int hresult) => GoneCodes.Contains(hresult);
 
-    /// <summary>Every portable device Windows lists, each opened once to see whether the phone lets the PC in.</summary>
-    public static List<UsbPhoneInfo> Scan()
+    /// <summary>
+    /// Every portable device Windows lists that can be a phone, opened to see whether it lets the PC in.
+    /// Those in <paramref name="ready"/> are not opened again, and drives (USB sticks and card readers) are left out.
+    /// </summary>
+    public static List<UsbPhoneInfo> Scan(IReadOnlyDictionary<string, UsbPhoneInfo> ready)
     {
         var manager = Wpd.NewManager();
         var phones = new List<UsbPhoneInfo>();
@@ -255,6 +271,12 @@ internal static class WpdDevices
         {
             foreach (string id in Wpd.DeviceIds(manager))
             {
+                if (IsDrive(id)) continue;
+                if (ready.TryGetValue(id, out var known))
+                {
+                    phones.Add(known);
+                    continue;
+                }
                 try
                 {
                     string name = Wpd.Text((System.Text.StringBuilder? text, ref uint length) => manager.GetDeviceFriendlyName(id, text, ref length));

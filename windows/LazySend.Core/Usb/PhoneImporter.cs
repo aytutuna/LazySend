@@ -15,7 +15,8 @@ public interface IPhoneSource : IDisposable
 
     string Name { get; }
 
-    IReadOnlyList<PhoneMedia> List(CancellationToken cancel);
+    /// <summary>Lists the photos and videos; <paramref name="found"/> gets the running count while it works.</summary>
+    IReadOnlyList<PhoneMedia> List(CancellationToken cancel, IProgress<int> found);
 
     /// <summary>Throws <see cref="PhoneGoneException"/> when the phone is gone and <see cref="IOException"/> when only this item cannot be read.</summary>
     Stream Open(PhoneMedia item);
@@ -31,7 +32,8 @@ public enum ImportOutcome
     Failed,
 }
 
-public sealed record ImportProgress(int Done, int Total, long Bytes, long TotalBytes);
+/// <summary>While the phone is still being listed, Total is 0 and Found counts what has turned up.</summary>
+public sealed record ImportProgress(int Done, int Total, long Bytes, long TotalBytes, int Found = 0);
 
 public sealed record ImportResult(ImportOutcome Outcome, int Imported, int Skipped, int Unreadable, long Bytes, string Folder, string? Message = null);
 
@@ -40,22 +42,34 @@ public sealed class PhoneImporter(GalleryIndex index, Func<string> receiveRoot)
     private const int ChunkBytes = 1 << 20;
     private static readonly TimeSpan ProgressEvery = TimeSpan.FromMilliseconds(250);
 
+    private sealed class Counter(Action<int> report) : IProgress<int>
+    {
+        public void Report(int value) => report(value);
+    }
+
     private sealed class Unreadable(Exception inner) : Exception(inner.Message, inner);
 
-    public ImportResult Run(IPhoneSource phone, IProgress<ImportProgress>? progress, CancellationToken cancel)
+    /// <summary>Imports what is new on the phone into <paramref name="folder"/>, a name under the receive folder (see <see cref="UsbFolders"/>).</summary>
+    public ImportResult Run(IPhoneSource phone, string folder, IProgress<ImportProgress>? progress, CancellationToken cancel)
     {
-        string gallery = Path.Combine(receiveRoot(), FileNames.Clean(phone.Name, "Phone"), "Gallery");
-        string indexKey = "usb-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(phone.Id)))[..32].ToLowerInvariant();
+        string gallery = Path.Combine(receiveRoot(), FileNames.Clean(folder, "Phone"), "Gallery");
+        string indexKey = UsbFolders.Key(phone.Id);
         int imported = 0, skipped = 0, unreadable = 0;
         long bytes = 0, current = 0;
         ImportResult Result(ImportOutcome outcome, string? message = null) => new(outcome, imported, skipped, unreadable, bytes, gallery, message);
 
+        var clock = Stopwatch.StartNew();
+        var lastReport = -ProgressEvery;
         try
         {
-            var todo = Plan(phone.List(cancel), gallery, indexKey, ref skipped);
+            var listing = new Counter(found =>
+            {
+                if (clock.Elapsed - lastReport < ProgressEvery) return;
+                lastReport = clock.Elapsed;
+                progress?.Report(new ImportProgress(0, 0, 0, 0, found));
+            });
+            var todo = Plan(phone.List(cancel, listing), gallery, indexKey, ref skipped);
             long totalBytes = todo.Sum(t => t.Item.Size);
-            var clock = Stopwatch.StartNew();
-            var lastReport = TimeSpan.Zero;
             void Report(bool force)
             {
                 if (!force && clock.Elapsed - lastReport < ProgressEvery) return;

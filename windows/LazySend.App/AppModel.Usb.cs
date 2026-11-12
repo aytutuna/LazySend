@@ -44,7 +44,9 @@ public sealed partial class AppModel
     private static readonly TimeSpan UsbPoll = TimeSpan.FromSeconds(3);
 
     private readonly CancellationTokenSource _usbStop = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, UsbPhoneInfo> _usbReady = new();
     private PhoneImporter? _importer;
+    private UsbFolders? _folders;
     private int _imports;
 
     public ObservableCollection<UsbPhoneRow> UsbPhones { get; } = [];
@@ -52,11 +54,15 @@ public sealed partial class AppModel
     /// <summary>An Apple phone is on a USB port but Windows does not list it as a portable device.</summary>
     public bool AppleDriverMissing { get; private set; }
 
+    /// <summary>Asks which of several paired phones a phone on USB is; null cancels the import.</summary>
+    public Func<string, IReadOnlyList<PairedDevice>, PhoneChoice?>? PhonePicker { get; set; }
+
     public event EventHandler? UsbChanged;
 
     private void StartUsb()
     {
         _importer = new PhoneImporter(Service.Gallery, ReceiveRoot);
+        _folders = new UsbFolders(Paths.UsbFoldersFile, () => Service.Devices.Devices);
         _ = Task.Run(WatchUsb);
     }
 
@@ -103,9 +109,11 @@ public sealed partial class AppModel
         return Service.Settings.ReceiveRoot;
     }
 
-    private static List<UsbPhoneInfo> ScanUsb()
+    private List<UsbPhoneInfo> ScanUsb()
     {
-        var phones = WpdDevices.Scan();
+        var phones = WpdDevices.Scan(_usbReady);
+        _usbReady.Clear();
+        foreach (var phone in phones.Where(p => p.State == UsbState.Ready)) _usbReady[phone.Id] = phone;
 #if DEBUG
         if (Environment.GetEnvironmentVariable("LAZYSEND_FAKE_USB") == "1") phones.Add(FakeUsbPhone.Info);
 #endif
@@ -144,8 +152,28 @@ public sealed partial class AppModel
 
     public void ImportFromUsb(UsbPhoneRow phone)
     {
-        if (!phone.CanImport || _importer is not { } importer) return;
+        if (!phone.CanImport || _importer is not { } importer || _folders is not { } folders) return;
         var info = phone.Info;
+        string folder;
+        try
+        {
+            var found = folders.Resolve(info.Id, info.Name, info.Apple);
+            if (found.Name is { } name)
+            {
+                folder = name;
+            }
+            else
+            {
+                var choice = PhonePicker?.Invoke(info.Name, found.Choose) ?? (PhonePicker is null ? new PhoneChoice(null) : null);
+                if (choice is null) return;
+                folder = folders.Choose(info.Id, info.Name, choice.Phone);
+            }
+        }
+        catch (IOException e)
+        {
+            Notice?.Invoke(this, $"Could not save which phone {info.Name} is: {e.Message}");
+            return;
+        }
         var stop = CancellationTokenSource.CreateLinkedTokenSource(_usbStop.Token);
         var row = new TimelineItem(TimelineKind.Gallery, false, info.Id, info.Name, DateTimeOffset.UtcNow)
         {
@@ -160,7 +188,9 @@ public sealed partial class AppModel
         var progress = new Progress<ImportProgress>(p =>
         {
             if (!row.Importing) return;
-            row.Heading = $"Importing from {info.Name}: {p.Done:N0} of {p.Total:N0}, {LinkDetector.FormatSize(p.Bytes)} of {LinkDetector.FormatSize(p.TotalBytes)}";
+            row.Heading = p.Total == 0
+                ? $"Looking for photos and videos on {info.Name}: {p.Found:N0} found"
+                : $"Importing from {info.Name}: {p.Done:N0} of {p.Total:N0}, {LinkDetector.FormatSize(p.Bytes)} of {LinkDetector.FormatSize(p.TotalBytes)}";
             row.Detail = Stamp(row.Time);
         });
         _ = Task.Run(() =>
@@ -168,7 +198,7 @@ public sealed partial class AppModel
             try
             {
                 using var source = OpenUsbPhone(info);
-                return importer.Run(source, progress, stop.Token);
+                return importer.Run(source, folder, progress, stop.Token);
             }
             catch (PhoneGoneException e)
             {
@@ -184,6 +214,8 @@ public sealed partial class AppModel
             stop.Dispose();
             row.ImportStop = null;
             phone.Busy = false;
+            // A phone that failed is opened again by the next poll.
+            if (done.Result.Outcome is ImportOutcome.Failed or ImportOutcome.Disconnected) _usbReady.TryRemove(info.Id, out _);
             FinishImport(row, info.Name, done.Result);
             Arrived?.Invoke(this, row);
         }));
