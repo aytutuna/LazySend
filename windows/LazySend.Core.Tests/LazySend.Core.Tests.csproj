@@ -19,4 +19,10 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!-- `dotnet test` on the solution runs this project's tests while the WPF app is still being built for App.Tests, and the
+       app's two-pass markup compile then sometimes loses its generated files. The app is built before these tests start. -->
+  <Target Name="BuildAppFirst" BeforeTargets="VSTest">
+    <MSBuild Projects="..\LazySend.App.Tests\LazySend.App.Tests.csproj" Targets="Build" />
+  </Target>
+
 </Project>
