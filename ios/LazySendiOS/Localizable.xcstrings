@@ -131,6 +131,36 @@
         }
       }
     },
+    "Resume" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resume"
+          }
+        }
+      }
+    },
+    "The file is no longer available." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The file is no longer available."
+          }
+        }
+      }
+    },
+    "%@ was removed." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ was removed."
+          }
+        }
+      }
+    },
     "Not sent" : {
       "localizations" : {
         "en" : {

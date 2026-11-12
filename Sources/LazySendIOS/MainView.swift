@@ -180,6 +180,14 @@ private struct EntryRow: View {
             if entry.kind == .file, sent, entry.state == .active {
                 Button("Stop") { model.stopSending() }
             }
+            if entry.kind == .file, sent, entry.localFile != nil, entry.state == .paused || entry.state == .failed {
+                Button("Resume") { model.resumeSend(entry.id) }
+                    .accessibilityIdentifier("entry.file.resume")
+            }
+            if entry.kind == .gallery, entry.state == .paused {
+                Button("Resume") { model.resumeGallerySync(entry) }
+                    .accessibilityIdentifier("entry.gallery.resume")
+            }
             if entry.kind == .gallery, entry.state == .active {
                 Button("Stop") { model.stopGallery() }
                     .accessibilityIdentifier("entry.gallery.stop")

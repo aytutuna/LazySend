@@ -13,8 +13,9 @@ enum BackgroundGallery {
 
     static var isRunning: Bool { running != nil }
 
-    /// Call before the app finishes launching. `onExpire` is called when the system ends the task.
-    nonisolated static func register(onExpire: @escaping @MainActor () -> Void) {
+    /// Call before the app finishes launching. `onExpire` is called when the system ends the task; `isActive` says
+    /// whether a gallery run is going, since a task that starts without one has nothing to report on.
+    nonisolated static func register(onExpire: @escaping @MainActor () -> Void, isActive: @escaping @MainActor () -> Bool) {
         guard #available(iOS 26.0, *) else { return }
         BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: nil) { task in
             guard let task = task as? BGContinuedProcessingTask else { return }
@@ -24,7 +25,13 @@ enum BackgroundGallery {
                     onExpire()
                 }
             }
-            Task { @MainActor in running = task }
+            Task { @MainActor in
+                if isActive() {
+                    running = task
+                } else {
+                    task.setTaskCompleted(success: true)
+                }
+            }
         }
     }
 

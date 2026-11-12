@@ -36,7 +36,6 @@ struct Notifier: Sendable {
 
 /// Everything the app reads from outside itself, so a test can build a model on temp folders and memory.
 struct AppEnvironment {
-    /// The App Group folder: pcs.json and the share queue.
     var folder: URL
     var support: URL
     var documents: URL

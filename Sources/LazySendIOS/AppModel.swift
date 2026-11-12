@@ -77,8 +77,12 @@ final class AppModel: ObservableObject {
     private var collectors: [String: OutboxCollector] = [:]
     private var jobs: [Job] = []
     private var pump: Task<Void, Never>?
+    private var current: String?
     private var queued: Set<String> = []
+    private var resuming: Set<String> = []
+    private var held: Set<String> = []
     private var grace = UIBackgroundTaskIdentifier.invalid
+    private let saved: SavedAssets
 
     init(env: AppEnvironment) {
         self.env = env
@@ -86,9 +90,25 @@ final class AppModel: ObservableObject {
         connector = PcConnector(store: store, discovery: env.discovery)
         timeline = Timeline(file: env.support.appendingPathComponent("timeline.json"))
         queue = ShareQueue(root: env.folder)
+        saved = SavedAssets(file: env.support.appendingPathComponent("saved-assets.json"))
         savesToPhotos = env.defaults.bool(forKey: Keys.photos)
         if env.demo { seedDemo() }
+        removeStrayCopies()
         refreshPcs()
+    }
+
+    // Where a file being sent is kept until it is delivered. Application Support, not tmp, which the system may empty.
+    private var outgoing: URL {
+        env.support.appendingPathComponent("Outgoing", isDirectory: true)
+    }
+
+    private func removeStrayCopies() {
+        let fm = FileManager.default
+        let wanted = Set(timeline.entries.filter { $0.state != .done }.compactMap(\.localFile).map { ($0 as NSString).deletingLastPathComponent })
+        let folders = (try? fm.contentsOfDirectory(at: outgoing, includingPropertiesForKeys: nil)) ?? []
+        for folder in folders where !wanted.contains(folder.lastPathComponent) {
+            try? fm.removeItem(at: folder)
+        }
     }
 
     var selected: PairedPc? {
@@ -129,6 +149,7 @@ final class AppModel: ObservableObject {
             watchers[id] = Task { await self.watch(id) }
         }
         drainShareQueue()
+        resumeSends()
         resumeGallery()
     }
 
@@ -171,7 +192,7 @@ final class AppModel: ObservableObject {
     private func outboxCollector(for id: String) -> OutboxCollector? {
         if let existing = collectors[id] { return existing }
         guard let pc = store.get(id) else { return nil }
-        let handler = ReceiveHandler(pcName: pc.name, timeline: timeline, folder: env.documents, notifier: env.notifier, defaults: env.defaults)
+        let handler = ReceiveHandler(pcName: pc.name, timeline: timeline, folder: env.documents, notifier: env.notifier, defaults: env.defaults, saved: saved)
         let made = OutboxCollector(handler: handler)
         collectors[id] = made
         return made
@@ -226,6 +247,7 @@ final class AppModel: ObservableObject {
 
     func sendNote(_ text: String, to pc: PairedPc) throws {
         let request = try ItemRequest.note(text)
+        drainShareQueue()
         let id = "out-" + UUID().uuidString
         timeline.add(TimelineEntry(id: id, direction: .sent, kind: request.kind == "link" ? .link : .text, pcName: pc.name,
                                    title: request.url ?? request.text ?? ""))
@@ -234,11 +256,51 @@ final class AppModel: ObservableObject {
 
     /// `scoped` is for URLs from the document picker, which are copied first; picked photos are temp files already.
     func sendFiles(_ urls: [URL], to pc: PairedPc, scoped: Bool = false) {
+        drainShareQueue()
         for url in urls {
             let id = "out-" + UUID().uuidString
-            timeline.add(TimelineEntry(id: id, direction: .sent, kind: .file, pcName: pc.name, title: url.lastPathComponent))
+            timeline.add(TimelineEntry(id: id, direction: .sent, kind: .file, pcName: pc.name, title: url.lastPathComponent, pcId: pc.id))
             enqueue(id) { await self.deliverFile(url, scoped: scoped, to: pc, entryId: id) }
         }
+    }
+
+    func resumeSend(_ entryId: String) {
+        held.remove(entryId)
+        guard let entry = timeline.get(entryId), entry.direction == .sent, entry.kind == .file, !resuming.contains(entryId),
+              entry.state == .paused || entry.state == .failed, let local = entry.localFile else { return }
+        let file = outgoing.appendingPathComponent(local)
+        guard FileManager.default.fileExists(atPath: file.path) else {
+            discardStaged(entryId)
+            finish(entryId, .failed, String(localized: "The file is no longer available."))
+            return
+        }
+        guard let pc = entry.pcId.flatMap({ store.get($0) }) else {
+            discardStaged(entryId)
+            finish(entryId, .failed, String(localized: "\(entry.pcName) was removed."))
+            return
+        }
+        resuming.insert(entryId)
+        timeline.update(entryId) {
+            $0.state = .active
+            $0.detail = ""
+        }
+        let itemId = entry.itemId
+        enqueue(entryId) {
+            await self.sendStaged(file, to: pc, entryId: entryId, resumeItemId: itemId)
+            self.resuming.remove(entryId)
+        }
+    }
+
+    private func resumeSends() {
+        for entry in timeline.entries where entry.direction == .sent && entry.kind == .file && entry.state == .paused
+            && entry.localFile != nil && !held.contains(entry.id) {
+            resumeSend(entry.id)
+        }
+    }
+
+    func resumeGallerySync(_ entry: TimelineEntry) {
+        guard entry.kind == .gallery, let pc = store.get(String(entry.id.dropFirst(TimelineEntry.galleryPrefix.count))) else { return }
+        startGallerySync(for: pc)
     }
 
     func startGallerySync(for pc: PairedPc) {
@@ -300,7 +362,7 @@ final class AppModel: ObservableObject {
                                    detail: String(localized: "Looking for what is new"), state: .active,
                                    count: previous?.count ?? 0, totalCount: previous?.totalCount ?? 0))
         BackgroundGallery.request(title: String(localized: "Sending photos and videos"), subtitle: pc.name)
-        let items = await env.photos.items()
+        let items = await env.photos.items(saved.all)
         let connector = self.connector
         let sync = GallerySync(
             items: items,
@@ -359,6 +421,8 @@ final class AppModel: ObservableObject {
     }
 
     func stopSending() {
+        held.formUnion(jobs.map(\.entryId))
+        if let current = current { held.insert(current) }
         pump?.cancel()
     }
 
@@ -375,8 +439,13 @@ final class AppModel: ObservableObject {
                 let job = self.jobs.removeFirst()
                 if Task.isCancelled {
                     self.finish(job.entryId, .paused)
+                    self.resuming.remove(job.entryId)
+                    // A share left unsent is picked up again by the next drain, not only after a relaunch.
+                    if job.entryId.hasPrefix("share-") { self.queued.remove(String(job.entryId.dropFirst("share-".count))) }
                 } else {
+                    self.current = job.entryId
                     await job.work()
+                    self.current = nil
                 }
             }
             self.pump = nil
@@ -385,7 +454,7 @@ final class AppModel: ObservableObject {
     }
 
     // The grace period after leaving the app is a few seconds, enough to finish a small item; a big one pauses
-    // when it runs out and carries on from its offset next time.
+    // when it runs out, keeps its copy and the computer's id for it, and carries on from the computer's offset.
     private func beginGrace() {
         guard env.background, grace == .invalid else { return }
         grace = UIApplication.shared.beginBackgroundTask(withName: "send") { [weak self] in
@@ -460,34 +529,63 @@ final class AppModel: ObservableObject {
     }
 
     private func deliverFile(_ url: URL, scoped: Bool, to pc: PairedPc, entryId: String) async {
+        let folder = outgoing.appendingPathComponent(entryId, isDirectory: true)
         let file: URL
-        if scoped {
-            do {
-                file = try await Task.detached { try AppModel.copyToTemp(url) }.value
-            } catch {
-                finish(entryId, .failed, error.localizedDescription)
-                return
-            }
-        } else {
-            file = url
+        do {
+            file = try await Task.detached { try AppModel.stage(url, scoped: scoped, into: folder) }.value
+        } catch {
+            finish(entryId, .failed, error.localizedDescription)
+            return
         }
-        defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+        timeline.update(entryId) { $0.localFile = entryId + "/" + file.lastPathComponent }
+        timeline.save()
+        await sendStaged(file, to: pc, entryId: entryId, resumeItemId: nil)
+    }
+
+    // A picked file is ours already and is moved; one from the document picker is copied while access to it lasts.
+    nonisolated private static func stage(_ url: URL, scoped: Bool, into folder: URL) throws -> URL {
+        let fm = FileManager.default
+        let target = folder.appendingPathComponent(url.lastPathComponent)
+        do {
+            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+            if scoped {
+                let access = url.startAccessingSecurityScopedResource()
+                defer { if access { url.stopAccessingSecurityScopedResource() } }
+                try fm.copyItem(at: url, to: target)
+            } else {
+                try fm.moveItem(at: url, to: target)
+                try? fm.removeItem(at: url.deletingLastPathComponent())
+            }
+        } catch {
+            try? fm.removeItem(at: folder)
+            throw error
+        }
+        return target
+    }
+
+    private func sendStaged(_ file: URL, to pc: PairedPc, entryId: String, resumeItemId: String?) async {
         let mime = UTType(filenameExtension: file.pathExtension)?.preferredMIMEType
         let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-        _ = await upload(file, name: url.lastPathComponent, mime: mime, modified: modified, to: pc, entryId: entryId)
+        let outcome = await upload(file, name: file.lastPathComponent, mime: mime, modified: modified, to: pc, entryId: entryId,
+                                   resumeItemId: resumeItemId) { [weak self] id in
+            self?.timeline.update(entryId) { $0.itemId = id }
+            self?.timeline.save()
+        }
+        if outcome != .waiting { discardStaged(entryId) }
     }
 
-    nonisolated private static func copyToTemp(_ url: URL) throws -> URL {
-        let access = url.startAccessingSecurityScopedResource()
-        defer { if access { url.stopAccessingSecurityScopedResource() } }
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("lazysend-send-" + UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let copy = folder.appendingPathComponent(url.lastPathComponent)
-        try FileManager.default.copyItem(at: url, to: copy)
-        return copy
+    private func discardStaged(_ entryId: String) {
+        try? FileManager.default.removeItem(at: outgoing.appendingPathComponent(entryId, isDirectory: true))
+        timeline.update(entryId) {
+            $0.localFile = nil
+            $0.itemId = nil
+        }
+        timeline.save()
     }
 
-    private func upload(_ file: URL, name: String, mime: String?, modified: Date?, to pc: PairedPc, entryId: String) async -> Sent {
+    // `remember` gets the computer's id for the file as soon as it is known, so a later run can carry on with it.
+    private func upload(_ file: URL, name: String, mime: String?, modified: Date?, to pc: PairedPc, entryId: String,
+                        resumeItemId: String? = nil, remember: @escaping @MainActor (String) -> Void) async -> Sent {
         let request: ItemRequest
         do {
             request = try await Task.detached { try ItemRequest.file(at: file, name: name, mime: mime, modified: modified) }.value
@@ -499,7 +597,7 @@ final class AppModel: ObservableObject {
         guard let first = await reach(pc, entryId: entryId) else { return missed(pc) }
         let connector = self.connector
         var used = false
-        let uploader = Uploader { () async throws -> UploadAPI in
+        let uploader = Uploader(resumeItemId: resumeItemId) { () async throws -> UploadAPI in
             if !used {
                 used = true
                 return first.client
@@ -514,7 +612,9 @@ final class AppModel: ObservableObject {
             Task { @MainActor in self?.setBytes(entryId, bytes) }
         }
         do {
-            let result = try await uploader.send(request, source: FileDataSource(url: file), onProgress: { offset in
+            let result = try await uploader.send(request, source: FileDataSource(url: file), onItem: { id in
+                Task { @MainActor in remember(id) }
+            }, onProgress: { offset in
                 if let total = wire.acknowledged(offset) { show(total) }
             }, onBytes: { sent in
                 if let total = wire.sent(sent) { show(total) }
@@ -524,6 +624,7 @@ final class AppModel: ObservableObject {
                 $0.bytes = $0.totalBytes
                 $0.state = .done
                 $0.detail = detail
+                $0.itemId = nil
             }
             timeline.save()
             return .done
@@ -534,7 +635,6 @@ final class AppModel: ObservableObject {
             return failed(error, pc: pc, entryId: entryId)
         }
     }
-
 
     func drainShareQueue() {
         for item in queue.items() where !queued.contains(item.id) {
@@ -553,7 +653,11 @@ final class AppModel: ObservableObject {
     private func deliver(_ item: QueuedItem, to pc: PairedPc, entryId: String) async {
         let outcome: Sent
         if item.kind == "file" {
-            outcome = await upload(queue.dataURL(item.id), name: item.name ?? "file", mime: item.mime, modified: item.modified, to: pc, entryId: entryId)
+            let queue = self.queue
+            outcome = await upload(queue.dataURL(item.id), name: item.name ?? "file", mime: item.mime, modified: item.modified, to: pc,
+                                   entryId: entryId, resumeItemId: item.itemId) { id in
+                queue.update(item.id) { $0.itemId = id }
+            }
         } else {
             outcome = await post(ItemRequest(kind: item.kind, text: item.text, url: item.url), to: pc, entryId: entryId)
         }
