@@ -335,17 +335,15 @@ public sealed class Inbox
         file.Path = path;
         file.Finished = _clock();
         bool removed;
-        lock (_gate)
-        {
-            removed = !_files.ContainsKey(file.Id);
-            Untrack(file);
-        }
+        lock (_gate) removed = !_files.ContainsKey(file.Id);
+        // The index takes the asset before it stops being tracked, so a second request for it finds one or the other.
+        if (!removed && file.SourceId is { } source) BestEffort(() => _index.Add(file.DeviceId, source));
+        lock (_gate) Untrack(file);
         // The phone was removed while the file was finishing: the file stays, nothing is announced or recorded.
         if (removed) return;
         BestEffort(() => Save(file));
         BestEffort(() => MarkAsDownloaded(path));
         if (file.Modified is { } modified) BestEffort(() => File.SetLastWriteTimeUtc(path, modified.UtcDateTime));
-        if (file.SourceId is { } source) BestEffort(() => _index.Add(file.DeviceId, source));
         writer?.Hash?.Dispose();
         _writers.TryRemove(file.Id, out _);
         FileReceived?.Invoke(this, new ReceivedFile(file.DeviceId, file.DeviceName, path, file.Size, file.SourceId));
