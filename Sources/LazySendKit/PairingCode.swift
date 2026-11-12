@@ -33,6 +33,22 @@ public struct PairingCode: Equatable {
     static let prefix = "lazysend://pair?"
     static let maxLength = 2048
 
+    public init(desktopId: String, name: String, fingerprint: String, addresses: [String], port: Int, token: String) {
+        self.desktopId = desktopId
+        self.name = name
+        self.fingerprint = fingerprint
+        self.addresses = addresses
+        self.port = port
+        self.token = token
+    }
+
+    /// The text of the QR code.
+    public var uri: String {
+        let list = addresses.prefix(LinkProtocol.maxAddresses).map(percentEncode).joined(separator: ",")
+        return "\(PairingCode.prefix)v=\(LinkProtocol.version)&id=\(percentEncode(desktopId))&n=\(percentEncode(name))"
+            + "&fp=\(fingerprint)&a=\(list)&p=\(port)&t=\(token)"
+    }
+
     public var pin: Data { Base64Url.decode(fingerprint) ?? Data() }
 
     public var checkCode: String { SpkiFingerprint.checkCode(pin) }
@@ -73,6 +89,20 @@ public struct PairingCode: Equatable {
               Base64Url.decode(token)?.count == 16 else { throw PairingCodeError.damaged }
         return PairingCode(desktopId: id, name: name, fingerprint: fp, addresses: addresses, port: port, token: token)
     }
+}
+
+func percentEncode(_ text: String) -> String {
+    var out = ""
+    for byte in text.utf8 {
+        switch byte {
+        case UInt8(ascii: "a")...UInt8(ascii: "z"), UInt8(ascii: "A")...UInt8(ascii: "Z"), UInt8(ascii: "0")...UInt8(ascii: "9"),
+             UInt8(ascii: "-"), UInt8(ascii: "."), UInt8(ascii: "_"), UInt8(ascii: "~"):
+            out.append(Character(Unicode.Scalar(byte)))
+        default:
+            out += String(format: "%%%02X", byte)
+        }
+    }
+    return out
 }
 
 func percentDecode(_ text: String) -> String? {

@@ -8,6 +8,13 @@ import CryptoKit
 /// `PublicKey.ExportSubjectPublicKeyInfo` does on the computer.
 public enum SpkiFingerprint {
     public static let byteCount = 32
+    public static let p256PointByteCount = 65
+
+    // SEQUENCE { SEQUENCE { id-ecPublicKey, prime256v1 }, BIT STRING }, up to the point.
+    public static let p256Prefix: [UInt8] = [
+        0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x02, 0x01,
+        0x06, 0x08, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00,
+    ]
 
     /// The SubjectPublicKeyInfo (its whole DER element) of the X.509 certificate `certificateDER`;
     /// nil when the bytes are not one well-formed certificate. Walks Certificate, tbsCertificate,
@@ -36,6 +43,13 @@ public enum SpkiFingerprint {
               key.end == spki.end
         else { return nil }
         return Data(der[position..<spki.end])
+    }
+
+    /// The SubjectPublicKeyInfo of a P-256 key given as its uncompressed point; nil for anything else.
+    public static func p256SubjectPublicKeyInfo(_ uncompressedPoint: Data) -> Data? {
+        let point = [UInt8](uncompressedPoint)
+        guard point.count == p256PointByteCount, point[0] == 0x04 else { return nil }
+        return Data(p256Prefix + point)
     }
 
     public static func of(_ certificateDER: Data) -> Data? {
@@ -69,15 +83,15 @@ public enum SpkiFingerprint {
     }
 
     /// One DER element: its tag, where its content starts and where it ends (exclusive).
-    struct Element {
-        let tag: UInt8
-        let contentStart: Int
-        let end: Int
+    public struct Element {
+        public let tag: UInt8
+        public let contentStart: Int
+        public let end: Int
     }
 
     /// The DER element at `offset`, which must end by `limit`. Low tag numbers only; definite lengths
     /// in short form or long form of up to four bytes.
-    static func readElement(_ der: [UInt8], offset: Int, limit: Int) -> Element? {
+    public static func readElement(_ der: [UInt8], offset: Int, limit: Int) -> Element? {
         guard offset >= 0, limit <= der.count, offset + 2 <= limit else { return nil }
         let tag = der[offset]
         guard tag & 0x1F != 0x1F else { return nil }

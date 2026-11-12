@@ -10,6 +10,7 @@ public enum LinkProtocol {
     public static let maxOutboxWait = 25
     public static let maxTextBytes = 1024 * 1024
     public static let maxAddresses = 8
+    public static let serviceName = "lazysend"
 }
 
 public struct PairRequest: Codable, Equatable {
@@ -33,15 +34,28 @@ public struct PairResponse: Codable, Equatable {
     public var desktopId: String
     public var desktopName: String
     public var deviceSecret: String
+
+    public init(protocolVersion: Int, desktopId: String, desktopName: String, deviceSecret: String) {
+        self.protocolVersion = protocolVersion
+        self.desktopId = desktopId
+        self.desktopName = desktopName
+        self.deviceSecret = deviceSecret
+    }
 }
 
 public struct Health: Codable, Equatable {
     public var service: String
     public var protocolVersion: Int
     public var paired: Bool?
+
+    public init(service: String, protocolVersion: Int, paired: Bool? = nil) {
+        self.service = service
+        self.protocolVersion = protocolVersion
+        self.paired = paired
+    }
 }
 
-public struct Hello: Decodable, Equatable {
+public struct Hello: Codable, Equatable {
     public var protocolVersion: Int
     public var desktopId: String
     public var desktopName: String
@@ -109,12 +123,20 @@ public struct ItemState: Codable, Equatable {
     }
 }
 
-struct GalleryCheckRequest: Encodable {
-    var ids: [String]
+public struct GalleryCheckRequest: Codable {
+    public var ids: [String]
+
+    public init(ids: [String]) {
+        self.ids = ids
+    }
 }
 
-struct GalleryCheckReply: Decodable {
-    var missing: [String]
+public struct GalleryCheckReply: Codable {
+    public var missing: [String]
+
+    public init(missing: [String]) {
+        self.missing = missing
+    }
 }
 
 public struct OutboxEntry: Codable, Equatable {
@@ -137,7 +159,7 @@ public struct OutboxEntry: Codable, Equatable {
     }
 }
 
-public struct OutboxReply: Decodable, Equatable {
+public struct OutboxReply: Codable, Equatable {
     public var items: [OutboxEntry]
     public var more: Bool
 
@@ -152,12 +174,18 @@ public struct OutboxReply: Decodable, Equatable {
         more = try c.decodeIfPresent(Bool.self, forKey: .more) ?? false
     }
 
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(items, forKey: .items)
+        if more { try c.encode(true, forKey: .more) }
+    }
+
     private enum CodingKeys: String, CodingKey {
         case items, more
     }
 }
 
-struct ApiError: Decodable {
+struct ApiError: Codable {
     var error: String
     var message: String?
     var offset: Int64?
