@@ -125,9 +125,20 @@ Names come from the phone and are made safe: path separators, characters Windows
 | `%LOCALAPPDATA%\Lazy Send\history.json` | Received texts and links, newest first, at most 500 entries and 16 MiB of text |
 | `%LOCALAPPDATA%\Lazy Send\incoming\<id>.json` | One record per file being received, or finished within the last day |
 | `%LOCALAPPDATA%\Lazy Send\index\<phone id>.txt` | The source ids received from a phone, one per line, appended to as files arrive and read whole once per run |
+| `%LOCALAPPDATA%\Lazy Send\index\usb-<hash>.txt` | The `<persistent id>:<size>` entries imported from a phone over USB (see Import over USB) |
 | `%LOCALAPPDATA%\Lazy Send\outbox.json` | What waits for the phones |
 
 JSON files are written whole through a temporary file and renamed. A file that cannot be read is kept as `.bad` and replaced by an empty one.
+
+## Import over USB (Windows)
+
+A phone plugged in by cable is read without the phone app: Windows lists an iPhone (with Apple's driver, from Apple Devices or iTunes, unlocked and trusted) or an Android phone in File transfer mode as a portable device. The app reads `DCIM` on every storage, and `Pictures\Screenshots`, takes photo and video files by extension and skips names starting with a dot.
+
+Files go where the phone app's gallery files go: `<root>\<device friendly name>\Gallery\YYYY-MM\`, the month from the file's modified date (created date when absent) in local time, so a phone that is also paired shares its folder. Each file is written as a `.part` file and renamed, gets the `Zone.Identifier` stream and its modified time, and takes ` (2)`, ` (3)` on a name clash.
+
+An item is skipped when the phone's index already holds `<persistent id>:<size>`, or when the month folder already holds a file of the same cleaned name and the same size (a photo the phone app sent over Wi-Fi; it is added to the index then). The index is `index\usb-<hash>.txt`, one entry per line, where the hash is the first 32 hex digits of the SHA-256 of the portable device's id, which carries the phone's serial. The persistent id is the portable device object's `WPD_OBJECT_PERSISTENT_UNIQUE_ID` and the size is the one listed, even when the phone sends another (Apple converts HEIC on the fly unless Settings > Photos > Transfer to Mac or PC is set to Keep Originals).
+
+An item is added to the index once its file is in place, so Stop, a failed item or an unplugged phone leaves the finished files and a later run copies the rest. A file cut off in the middle starts again from its first byte. A file the phone cannot read is counted and passed over; a phone that is gone ends the run as disconnected; a full disk or a refused folder ends it as failed.
 
 ## What the Windows app provides
 
