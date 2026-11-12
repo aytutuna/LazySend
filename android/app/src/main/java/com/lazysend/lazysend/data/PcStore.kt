@@ -41,11 +41,16 @@ class PcStore(private val file: File, private val seal: (String) -> String, priv
 
     init {
         val saved = runCatching { LinkJson.decodeFromString<PcFile>(file.readText()) }.getOrNull()
-        phone = saved?.phoneId ?: UUID.randomUUID().toString().replace("-", "")
-        state = MutableStateFlow(saved?.pcs.orEmpty().mapNotNull { r ->
-            open(r.sealedSecret)?.let { Pc(r.id, r.name, r.fingerprint, r.addresses, r.port, it, r.lastAddress) }
-        })
-        if (saved == null) save()
+        val opened = saved?.pcs.orEmpty().map { it to open(it.sealedSecret) }
+        // Secrets that cannot be opened mean the file came from another phone or the key is gone. Starting over with a new
+        // id keeps this phone from sharing a gallery index on the PC with the one the file came from.
+        val unreadable = opened.any { it.second == null }
+        phone = if (saved == null || unreadable) UUID.randomUUID().toString().replace("-", "") else saved.phoneId
+        state = MutableStateFlow(
+            if (unreadable) emptyList()
+            else opened.map { (r, secret) -> Pc(r.id, r.name, r.fingerprint, r.addresses, r.port, secret!!, r.lastAddress) },
+        )
+        if (saved == null || unreadable) save()
     }
 
     val phoneId: String get() = phone

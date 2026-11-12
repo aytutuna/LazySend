@@ -25,13 +25,15 @@ open class MediaAssets(private val context: Context) {
             MediaStore.MediaColumns.SIZE,
             MediaStore.MediaColumns.MIME_TYPE,
             MediaStore.MediaColumns.DATE_MODIFIED,
+            MediaStore.MediaColumns.DATE_TAKEN,
         )
         val found = mutableListOf<Asset>()
         // What came from the PC is saved in a Lazy Send folder and must not go back.
+        // Before Android 10 there is no relative path, only the file's own.
         val (where, args) = if (Build.VERSION.SDK_INT >= 29) {
-            "${MediaStore.MediaColumns.RELATIVE_PATH} NOT LIKE ?" to arrayOf("%/${RECEIVED_FOLDER}/%")
+            "${MediaStore.MediaColumns.RELATIVE_PATH} NOT LIKE ?" to arrayOf("%/$RECEIVED_FOLDER/%")
         } else {
-            null to null
+            "${MediaStore.MediaColumns.DATA} NOT LIKE ?" to arrayOf("%/$RECEIVED_FOLDER/%")
         }
         context.contentResolver.query(collection, columns, where, args, null)?.use { cursor ->
             while (cursor.moveToNext()) {
@@ -42,7 +44,7 @@ open class MediaAssets(private val context: Context) {
                     name = cursor.getString(1) ?: "$kind-$id",
                     size = cursor.getLong(2),
                     mime = cursor.getString(3) ?: if (kind == "image") "image/jpeg" else "video/mp4",
-                    modifiedMs = cursor.getLong(4) * 1000,
+                    modifiedMs = cursor.getLong(5).takeIf { it > 0 } ?: (cursor.getLong(4) * 1000),
                 )
             }
         }

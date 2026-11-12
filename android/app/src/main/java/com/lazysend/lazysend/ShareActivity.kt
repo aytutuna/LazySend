@@ -6,15 +6,18 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
-import androidx.lifecycle.lifecycleScope
 import com.lazysend.lazysend.data.Pc
 import com.lazysend.lazysend.transfer.SendService
-import kotlinx.coroutines.launch
 
 /** The Android share sheet entry: sends what was shared to a paired PC and closes. */
 class ShareActivity : androidx.activity.ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // A rotation recreates this activity with the same intent; what was shared has been handled already.
+        if (savedInstanceState != null) {
+            finish()
+            return
+        }
         val graph = (application as LazySendApp).graph
         val pcs = graph.pcs.pcs.value
         when {
@@ -36,18 +39,10 @@ class ShareActivity : androidx.activity.ComponentActivity() {
     }
 
     private fun deliver(pc: Pc) {
-        val graph = (application as LazySendApp).graph
         val uris = sharedUris()
-        val text = if (uris.isEmpty()) intent.getStringExtra(Intent.EXTRA_TEXT) else null
-        if (text != null) {
-            lifecycleScope.launch {
-                graph.sender.sendText(pc, text)
-                finish()
-            }
-            Toast.makeText(this, getString(R.string.share_sending, pc.name), Toast.LENGTH_SHORT).show()
-            return
-        }
-        SendService.sendFiles(this, pc.id, uris)
+        val text = if (uris.isEmpty()) intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString() else null
+        // The service keeps going after this activity is gone, which a coroutine of this activity would not.
+        if (text != null) SendService.sendText(this, pc.id, text) else SendService.sendFiles(this, pc.id, uris)
         Toast.makeText(this, getString(R.string.share_sending, pc.name), Toast.LENGTH_SHORT).show()
         finish()
     }

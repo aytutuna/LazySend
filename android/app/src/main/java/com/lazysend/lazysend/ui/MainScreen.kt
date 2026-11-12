@@ -106,8 +106,8 @@ private fun Empty(modifier: Modifier, onPair: () -> Unit) {
 @Composable
 private fun Connection(state: MainState, actions: MainActions) {
     val pc = state.pcs.firstOrNull { it.id == state.selected } ?: state.pcs.first()
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (state.pcs.size > 1) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     state.pcs.forEach { FilterChip(selected = it.id == pc.id, onClick = { actions.onSelect(it.id) }, label = { Text(it.name) }) }

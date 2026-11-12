@@ -52,6 +52,7 @@ class SendService : Service() {
         when (intent?.action) {
             ACTION_FILES -> if (pc != null) launch { graph.sender.sendFiles(pc, uris(intent)) }
             ACTION_GALLERY -> if (pc != null) launch { graph.sender.syncGallery(pc) }
+            ACTION_TEXT -> if (pc != null) intent.getStringExtra(EXTRA_TEXT)?.let { text -> launch { graph.sender.sendText(pc, text) } }
             ACTION_STOP -> scope.coroutineContext.cancelChildren()
         }
         if (running.get() == 0) finish()
@@ -66,6 +67,7 @@ class SendService : Service() {
 
     override fun onDestroy() {
         scope.cancel()
+        getSystemService(android.app.NotificationManager::class.java).cancel(NOTIFICATION_ID)
         super.onDestroy()
     }
 
@@ -101,8 +103,10 @@ class SendService : Service() {
     companion object {
         private const val ACTION_FILES = "com.lazysend.lazysend.SEND_FILES"
         private const val ACTION_GALLERY = "com.lazysend.lazysend.SEND_GALLERY"
+        private const val ACTION_TEXT = "com.lazysend.lazysend.SEND_TEXT"
         private const val ACTION_STOP = "com.lazysend.lazysend.STOP"
         private const val EXTRA_PC = "pc"
+        private const val EXTRA_TEXT = "text"
         private const val NOTIFICATION_ID = 1
 
         fun sendFiles(context: Context, pcId: String, uris: List<Uri>) {
@@ -111,6 +115,12 @@ class SendService : Service() {
             intent.clipData = ClipData.newRawUri(null, uris.first()).also { clip -> uris.drop(1).forEach { clip.addItem(ClipData.Item(it)) } }
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             ContextCompat.startForegroundService(context, intent)
+        }
+
+        fun sendText(context: Context, pcId: String, text: String) {
+            ContextCompat.startForegroundService(
+                context, Intent(context, SendService::class.java).setAction(ACTION_TEXT).putExtra(EXTRA_PC, pcId).putExtra(EXTRA_TEXT, text),
+            )
         }
 
         fun syncGallery(context: Context, pcId: String) {
