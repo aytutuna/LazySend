@@ -213,3 +213,65 @@ public class OutboxTests
         Assert.Throws<ArgumentException>(() => h.Service.Outbox.QueueText(phone.Id, ""));
     }
 }
+
+public class OutboxLimitTests
+{
+    private static async Task<OutboxResponse> PollAsync(Phone phone)
+    {
+        using var response = await phone.SendAsync(HttpMethod.Get, $"{Protocol.OutboxPath}?wait=0");
+        return await Harness.ReadAsync<OutboxResponse>(response);
+    }
+
+    [Fact]
+    public async Task ReplyHoldsAtMostAHundredItems()
+    {
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+        for (int i = 0; i < 150; i++) h.Service.Outbox.QueueText(phone.Id, $"note {i}");
+
+        var reply = await PollAsync(phone);
+
+        Assert.Equal(100, reply.Items.Count);
+        Assert.True(reply.More);
+        foreach (var item in reply.Items) h.Service.Outbox.Acknowledge(phone.Id, item.Id);
+        var rest = await PollAsync(phone);
+        Assert.Equal(50, rest.Items.Count);
+        Assert.Null(rest.More);
+    }
+
+    [Fact]
+    public async Task ReplyHoldsAtMostFourMebibytesOfText()
+    {
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+        for (int i = 0; i < 5; i++) h.Service.Outbox.QueueText(phone.Id, new string('x', Protocol.MaxTextBytes));
+
+        var reply = await PollAsync(phone);
+
+        Assert.Equal(4, reply.Items.Count);
+        Assert.True(reply.More);
+    }
+
+    [Fact]
+    public async Task RemovingAPhoneOnTheComputerClearsWhatWaitsForIt()
+    {
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+        h.Service.Outbox.QueueText(phone.Id, "waiting");
+        var state = await phone.BeginFileAsync("a.bin", new byte[100]);
+
+        h.Service.Devices.Remove(phone.Id);
+
+        Assert.Empty(h.Service.Outbox.Pending(phone.Id));
+        Assert.Empty(h.Service.Inbox.InProgress);
+        Assert.Null(h.Service.Inbox.State(phone.Id, state.Id));
+    }
+
+    [Fact]
+    public void ClearingAnIndexThatWasNeverWrittenIsFine()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "lazysend-none-" + Guid.NewGuid().ToString("N"));
+
+        new GalleryIndex(folder).Clear("device-one");
+    }
+}

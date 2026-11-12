@@ -59,6 +59,9 @@ public sealed class PairedDeviceStore
     /// <summary>Raised after a phone was paired or removed (on the thread that changed it).</summary>
     public event EventHandler? Changed;
 
+    /// <summary>Raised with the phone's id after it was removed, from the phone itself or from the computer.</summary>
+    public event EventHandler<string>? Removed;
+
     public string DesktopId => _file.DesktopId;
 
     /// <summary>The paired phones (copies), in the order they were paired.</summary>
@@ -157,7 +160,11 @@ public sealed class PairedDeviceStore
             removed = _file.Devices.RemoveAll(d => d.Id == id) > 0;
             if (removed) JsonFile.Save(_path, _file);
         }
-        if (removed) Changed?.Invoke(this, EventArgs.Empty);
+        if (removed)
+        {
+            Removed?.Invoke(this, id);
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
         return removed;
     }
 

@@ -238,8 +238,6 @@ public sealed class LinkRouter
     private LinkResponse RemoveSelf(LinkRequest request, DateTimeOffset now)
     {
         if (Authenticate(request, now) is not { } device) return Unauthorized();
-        _inbox.RemoveDevice(device.Id);
-        _outbox.Clear(device.Id);
         _devices.Remove(device.Id);
         DeviceRemoved?.Invoke(this, device);
         return LinkResponse.Empty(204);
@@ -340,7 +338,17 @@ public sealed class LinkRouter
         }
         wait = Math.Min(wait, Protocol.MaxOutboxWaitSeconds);
         var items = await _outbox.WaitAsync(device.Id, TimeSpan.FromSeconds(wait), cancellation).ConfigureAwait(false);
-        return LinkResponse.Json(200, new OutboxResponse([.. items.Select(i => i.ToEntry())]));
+        // TODO: a phone that hangs up during the wait is only noticed when the wait ends.
+        var entries = new List<OutboxEntry>();
+        long inline = 0;
+        foreach (var item in items)
+        {
+            long bytes = Encoding.UTF8.GetByteCount(item.Text ?? "") + Encoding.UTF8.GetByteCount(item.Url ?? "");
+            if (entries.Count > 0 && (entries.Count >= Protocol.MaxOutboxItemsPerReply || inline + bytes > Protocol.MaxOutboxInlineBytes)) break;
+            entries.Add(item.ToEntry());
+            inline += bytes;
+        }
+        return LinkResponse.Json(200, new OutboxResponse(entries, entries.Count < items.Count ? true : null));
     }
 
     private LinkResponse OutboxData(LinkRequest request, string id, DateTimeOffset now)

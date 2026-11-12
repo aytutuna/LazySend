@@ -46,7 +46,14 @@ public sealed class GalleryIndex(string directory)
         lock (_gate)
         {
             _byDevice.Remove(deviceId);
-            File.Delete(PathOf(deviceId));
+            try
+            {
+                File.Delete(PathOf(deviceId));
+            }
+            catch (DirectoryNotFoundException)
+            {
+                // Nothing was ever received.
+            }
         }
     }
 

@@ -45,6 +45,9 @@ public static class Protocol
     public const long MaxChunkBytes = 64L * 1024 * 1024;
     public const long MinFreeBytes = 1024L * 1024 * 1024;
     public const int MaxOutboxWaitSeconds = 25;
+    public const int MaxOutboxItemsPerReply = 100;
+    /// <summary>Text and links sent inline in one outbox reply; a reply holds at least one item whatever its size.</summary>
+    public const int MaxOutboxInlineBytes = 4 * 1024 * 1024;
 
     public static readonly JsonSerializerOptions Json = new()
     {
@@ -201,4 +204,5 @@ public sealed record GalleryCheckResponse(List<string> Missing);
 public sealed record OutboxEntry(string Id, string Kind, string? Text = null, string? Url = null, string? Name = null,
                                  long? Size = null, string? Mime = null);
 
-public sealed record OutboxResponse(List<OutboxEntry> Items);
+/// <param name="More">True when more is pending than this answer holds; the phone acknowledges these and asks again.</param>
+public sealed record OutboxResponse(List<OutboxEntry> Items, bool? More = null);

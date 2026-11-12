@@ -27,6 +27,11 @@ public sealed class LinkService : IAsyncDisposable
         Inbox = new Inbox(paths.IncomingDirectory, () => Settings.ReceiveRoot, Gallery, freeSpace, _clock);
         Limiter = new LinkRateLimiter();
         Router = new LinkRouter(Devices, Inbox, History, Outbox, Gallery, Limiter, _clock) { CurrentPairing = () => Pairing };
+        Devices.Removed += (_, id) =>
+        {
+            Outbox.Clear(id);
+            Inbox.RemoveDevice(id);
+        };
         Server = new LinkServer(certificate, Router, Limiter, serverOptions ?? new LinkServerOptions { AllowPeer = LocalNetworks.IsAllowedPeer }, _clock);
     }
 
