@@ -64,10 +64,22 @@ final class ShareModel: ObservableObject {
         self.providers = providers
         self.finish = finish
         self.cancel = cancel
+        ShareModel.removeStaleCopies()
         if pcs.isEmpty {
             state = .notPaired
         } else {
             Task { await load() }
+        }
+    }
+
+    // A share the system ended early leaves its copy behind; an hour is longer than any send from here takes.
+    private static func removeStaleCopies() {
+        let fm = FileManager.default
+        let keys: [URLResourceKey] = [.contentModificationDateKey]
+        let folders = (try? fm.contentsOfDirectory(at: fm.temporaryDirectory, includingPropertiesForKeys: keys)) ?? []
+        for folder in folders where folder.lastPathComponent.hasPrefix("lazysend-share-") {
+            let changed = (try? folder.resourceValues(forKeys: Set(keys)))?.contentModificationDate ?? Date.distantPast
+            if Date().timeIntervalSince(changed) > 3600 { try? fm.removeItem(at: folder) }
         }
     }
 
@@ -255,7 +267,8 @@ final class ShareModel: ObservableObject {
                 if let request = piece.request {
                     try queue.add(QueuedItem(id: id, pcId: pc.id, kind: request.kind, text: request.text, url: request.url))
                 } else if let file = piece.file {
-                    try queue.add(QueuedItem(id: id, pcId: pc.id, kind: "file", name: piece.name, mime: piece.mime, modified: piece.modified), file: file)
+                    try queue.add(QueuedItem(id: id, pcId: pc.id, kind: "file", name: piece.name, mime: piece.mime, modified: piece.modified),
+                                  file: file, move: true)
                     try? FileManager.default.removeItem(at: file.deletingLastPathComponent())
                 }
                 pieces.removeFirst()
