@@ -62,9 +62,9 @@ struct PairSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Button("Allow") { model.answerApproval(true) }
-                    .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.bordered)
                 Button("Don't allow") { model.answerApproval(false) }
+                    .keyboardShortcut(.defaultAction)
             }
         }
         .padding(16)
