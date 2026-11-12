@@ -1,6 +1,6 @@
 # Lazy Send contracts
 
-Lazy Send moves text, links, files and whole photo galleries between a computer and a phone, in both directions. This file is the protocol and the rules both sides keep. The Windows core is C# in `windows/LazySend.Core/Link`; the phone apps, the Mac app and the Windows app are not written yet and will follow this file.
+Lazy Send moves text, links, files and whole photo galleries between a computer and a phone, in both directions. This file is the protocol and the rules both sides keep. The Windows core is C# in `windows/LazySend.Core/Link`; the Android app (`android/`), the iPhone app (`ios/` and the Swift package at the root) and the Windows app follow this file.
 
 The phone link is Lazy Print's (its CONTRACTS.md, "The phone link"), copied and changed: the same TLS server, pinning, pairing and limits, with the print package and the sync folder left out and uploads, a gallery index and a computer-to-phone outbox added. The apps do not share pairings, ports or files with any other Lazy app.
 
@@ -130,6 +130,10 @@ Names come from the phone and are made safe: path separators, characters Windows
 | `%LOCALAPPDATA%\Lazy Send\outbox.json` | What waits for the phones |
 
 JSON files are written whole through a temporary file and renamed. A file that cannot be read is kept as `.bad` and replaced by an empty one.
+
+## Storage on the iPhone
+
+Received files go to the app's Documents folder, which shows in the Files app, with a name made safe and ` (2)`, ` (3)` on a clash; a download in progress is `<name>.part` until it is whole. Images and videos are also added to Photos when the user turns that on, and the assets the app added are remembered so a gallery sync does not send them back. The paired computers, the share queue and its files live in the App Group container `group.com.lazysend.lazysend`, shared with the share extension; each computer's secret and the phone's id are in the Keychain, this device only. Files the user picks to send are copied into the app's Application Support folder until they are sent, so a transfer can resume after the app is closed.
 
 ## Import over USB (Windows)
 
