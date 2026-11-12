@@ -8,7 +8,8 @@ final class ReceiveHandlerTests: XCTestCase {
     private func fixture() -> (handler: ReceiveHandler, timeline: Timeline, folder: URL, env: AppEnvironment) {
         let env = AppEnvironment.temporary()
         let timeline = Timeline(file: env.support.appendingPathComponent("timeline.json"))
-        let handler = ReceiveHandler(pcName: "Office PC", timeline: timeline, folder: env.documents, notifier: .silent, defaults: env.defaults)
+        let handler = ReceiveHandler(pcName: "Office PC", timeline: timeline, folder: env.documents, notifier: .silent, defaults: env.defaults,
+                                     saved: SavedAssets(file: env.support.appendingPathComponent("saved-assets.json")))
         return (handler, timeline, env.documents, env)
     }
 
@@ -83,7 +84,8 @@ final class ReceiveHandlerTests: XCTestCase {
         await first.pause(item)
         XCTAssertEqual(timeline.get("in-item-0001")?.state, .paused)
 
-        let second = ReceiveHandler(pcName: "Office PC", timeline: timeline, folder: folder, notifier: .silent, defaults: env.defaults)
+        let second = ReceiveHandler(pcName: "Office PC", timeline: timeline, folder: folder, notifier: .silent, defaults: env.defaults,
+                                      saved: SavedAssets(file: env.support.appendingPathComponent("saved-assets.json")))
         let have = try await second.prepareFile(item)
         XCTAssertEqual(have, 5)
         XCTAssertEqual(timeline.get("in-item-0001")?.bytes, 5)

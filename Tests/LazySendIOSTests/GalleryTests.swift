@@ -37,6 +37,20 @@ final class GalleryTests: XCTestCase {
         XCTAssertEqual(entries[0].mime, "image/jpeg")
     }
 
+    func testAssetsSavedByTheAppAreNotSentBack() {
+        let saved = ResourceInfo(localIdentifier: "SAVED/L0/001", kind: "photo", filename: "IMG_0009.JPG", uti: "public.jpeg", creationDate: taken, size: 10)
+        let entries = galleryEntries([resource("photo", "IMG_0005.JPG", "public.jpeg"), saved], skipping: ["SAVED/L0/001"])
+        XCTAssertEqual(entries.map(\.name), ["IMG_0005.JPG"])
+    }
+
+    func testSavedAssetsSurviveARelaunch() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("lazysend-\(UUID().uuidString)/saved.json")
+        let first = SavedAssets(file: file)
+        first.insert("A/L0/001")
+        first.insert("B/L0/001")
+        XCTAssertEqual(SavedAssets(file: file).all, ["A/L0/001", "B/L0/001"])
+    }
+
     func testAVideoKeepsItsName() {
         let entries = galleryEntries([resource("video", "IMG_0004.MOV", "com.apple.quicktime-movie")])
         XCTAssertEqual(entries.map(\.sourceId), ["A1B2/L0/001#video"])

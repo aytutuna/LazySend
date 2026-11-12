@@ -12,17 +12,19 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
     private let folder: URL
     private let notifier: Notifier
     private let defaults: UserDefaults
+    private let saved: SavedAssets
     private let lock = NSLock()
     private var handles: [String: FileHandle] = [:]
     private var parts: [String: URL] = [:]
     private var lastReport: [String: Date] = [:]
 
-    init(pcName: String, timeline: Timeline, folder: URL, notifier: Notifier, defaults: UserDefaults) {
+    init(pcName: String, timeline: Timeline, folder: URL, notifier: Notifier, defaults: UserDefaults, saved: SavedAssets) {
         self.pcName = pcName
         self.timeline = timeline
         self.folder = folder
         self.notifier = notifier
         self.defaults = defaults
+        self.saved = saved
     }
 
     private func entryId(_ item: OutboxEntry) -> String {
@@ -183,12 +185,11 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
         let isVideo = mime?.hasPrefix("video/") == true || type?.conforms(to: .movie) == true
         let isImage = mime?.hasPrefix("image/") == true || type?.conforms(to: .image) == true
         guard isVideo || isImage else { return }
+        let saved = self.saved
         PHPhotoLibrary.shared().performChanges({
-            if isVideo {
-                _ = PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
-            } else {
-                _ = PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: url)
-            }
+            let request = isVideo ? PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
+                                  : PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: url)
+            if let id = request?.placeholderForCreatedAsset?.localIdentifier { saved.insert(id) }
         }, completionHandler: nil)
     }
 
