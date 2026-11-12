@@ -27,7 +27,13 @@ class MediaAssets(private val context: Context) {
             MediaStore.MediaColumns.DATE_MODIFIED,
         )
         val found = mutableListOf<Asset>()
-        context.contentResolver.query(collection, columns, null, null, null)?.use { cursor ->
+        // What came from the PC is saved in a Lazy Send folder and must not go back.
+        val (where, args) = if (Build.VERSION.SDK_INT >= 29) {
+            "${MediaStore.MediaColumns.RELATIVE_PATH} NOT LIKE ?" to arrayOf("%/${ReceivedFiles.FOLDER}/%")
+        } else {
+            null to null
+        }
+        context.contentResolver.query(collection, columns, where, args, null)?.use { cursor ->
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(0)
                 found += Asset(

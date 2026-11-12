@@ -12,7 +12,9 @@ import com.lazysend.lazysend.link.LinkException
 import com.lazysend.lazysend.link.PairingCode
 import com.lazysend.lazysend.link.PairingCodeException
 import java.io.IOException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -53,7 +55,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun selectedPc(): Pc? = state.value.selected?.let(graph.pcs::get)
 
     /** Asks every paired PC for what it has queued, for as long as the caller stays active. */
-    suspend fun watch() {
+    suspend fun watch() = withContext(Dispatchers.IO) {
         graph.pcs.pcs.map { list -> list.map { it.id } }.distinctUntilChanged().collectLatest { ids ->
             coroutineScope {
                 ids.forEach { id -> graph.pcs.get(id)?.let { launch { graph.receiver.watch(it) } } }
@@ -63,7 +65,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun sendText(text: String) {
         val pc = selectedPc() ?: return
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             notice.value = graph.sender.sendText(pc, text) ?: getApplication<Application>().getString(R.string.note_sent)
         }
     }
@@ -81,7 +83,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun pair(text: String, extraAddress: String?) {
         if (pairJob?.isActive == true || pair.value is PairUi.Paired) return
         val context = getApplication<Application>()
-        pairJob = viewModelScope.launch {
+        pairJob = viewModelScope.launch(Dispatchers.IO) {
             val code = try {
                 PairingCode.parse(text)
             } catch (e: PairingCodeException) {
@@ -112,7 +114,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun remove(id: String) {
         val pc = graph.pcs.get(id) ?: return
         graph.pcs.remove(id)
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val reached = graph.connector.connect(pc, search = false) as? com.lazysend.lazysend.transfer.Reach.Reached
             try {
                 reached?.client?.forgetSelf()

@@ -9,6 +9,8 @@ import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLContext
 import javax.net.ssl.X509TrustManager
 import kotlinx.serialization.encodeToString
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.ConnectionSpec
 import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -82,10 +84,13 @@ class LinkClient(val endpoint: Endpoint, pin: ByteArray, private val credentials
 
     private fun json(value: String) = value.toRequestBody(JSON_TYPE)
 
+    // Reading the answer is blocking I/O and may be reached from the main thread.
     private suspend fun <T> send(request: Request.Builder, client: OkHttpClient = http, read: (Response) -> T): T =
-        client.newCall(request.build()).executeAsync().use { response ->
-            if (!response.isSuccessful) throw errorOf(response)
-            read(response)
+        withContext(Dispatchers.IO) {
+            client.newCall(request.build()).executeAsync().use { response ->
+                if (!response.isSuccessful) throw errorOf(response)
+                read(response)
+            }
         }
 
     private inline fun <reified T> parse(response: Response): T = LinkJson.decodeFromString(response.body.string())
