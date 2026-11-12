@@ -27,6 +27,7 @@ public sealed partial class AppModel : IDisposable
 
     public SendPaths Paths { get; }
     public LinkService Service { get; }
+    public LinkRouter Router => Service.Router;
 
     /// <summary>The port phones connect to; 0 when the server could not start.</summary>
     public int Port { get; private set; }

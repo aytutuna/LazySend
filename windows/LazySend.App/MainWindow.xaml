@@ -6,7 +6,9 @@
         FontFamily="{StaticResource TextFontFamily}"
         Icon="{x:Static ui:AppIcon.Image}">
     <Grid Margin="24">
-        <TextBlock x:Name="StatusText" Style="{StaticResource BodyText}" TextWrapping="Wrap"
-                   VerticalAlignment="Center" HorizontalAlignment="Center" />
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+            <TextBlock x:Name="StatusText" Style="{StaticResource BodyText}" TextWrapping="Wrap" />
+            <Button Content="Pair a phone" Margin="0,12,0,0" Style="{StaticResource AccentButtonStyle}" Click="Pair_Click" />
+        </StackPanel>
     </Grid>
 </Window>

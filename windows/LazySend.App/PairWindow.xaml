@@ -1,0 +1,88 @@
+<Window x:Class="LazySend.App.PairWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="clr-namespace:LazySend.App"
+        Title="Pair a phone"
+        Width="640" Height="780" MinWidth="480" MinHeight="460"
+        FontFamily="{StaticResource TextFontFamily}"
+        Icon="{x:Static ui:AppIcon.Image}"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <Window.Resources>
+        <Style x:Key="DetailLabelText" TargetType="TextBlock" BasedOn="{StaticResource CaptionText}">
+            <Setter Property="Margin" Value="0,0,16,4" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        </Style>
+        <!-- Read-only and selectable, so the pairing text can be copied. -->
+        <Style x:Key="DetailBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="IsReadOnly" Value="True" />
+            <Setter Property="FontFamily" Value="Cascadia Mono, Consolas" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <Border DockPanel.Dock="Bottom" Style="{StaticResource DialogFooterStyle}" Padding="24,14,24,18">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Close" IsCancel="True" MinWidth="96" Style="{StaticResource AccentButtonStyle}" />
+                <TextBlock x:Name="FooterStatus" Style="{StaticResource CaptionText}" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" AutomationProperties.LiveSetting="Polite" />
+            </DockPanel>
+        </Border>
+
+        <StackPanel DockPanel.Dock="Top" Margin="24,20,24,12">
+            <TextBlock Text="Pair a phone" Style="{StaticResource SubtitleText}" />
+            <TextBlock Style="{StaticResource SecondaryBodyText}" TextWrapping="Wrap" Margin="0,6,0,0"
+                       Text="Open Lazy Send on your phone, choose Pair with a computer and scan this code. The code works once, for 5 minutes. Nothing goes through the internet: the phone and this PC talk directly, encrypted." />
+        </StackPanel>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False" Padding="24,0,24,16">
+            <StackPanel>
+                <Border x:Name="ApprovalCard" Style="{StaticResource CardStyle}" Visibility="Collapsed" Margin="0,0,0,12"
+                        Padding="16,12" BorderThickness="2" BorderBrush="{DynamicResource AccentFillColorDefaultBrush}">
+                    <StackPanel>
+                        <TextBlock x:Name="ApprovalText" Style="{StaticResource BodyStrongText}" TextWrapping="Wrap"
+                                   AutomationProperties.LiveSetting="Assertive" />
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <Button x:Name="AllowButton" Content="Allow" MinWidth="96" Style="{StaticResource AccentButtonStyle}" Click="Allow_Click" />
+                            <Button x:Name="DenyButton" Content="Don't allow" MinWidth="96" Margin="8,0,0,0" Click="Deny_Click" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource CardStyle}" Padding="16,12">
+                    <DockPanel>
+                        <Border DockPanel.Dock="Left" Background="White" Margin="0,0,16,0" CornerRadius="4" VerticalAlignment="Top">
+                            <Image x:Name="QrImage" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"
+                                   AutomationProperties.Name="Pairing code to scan with your phone" />
+                        </Border>
+                        <StackPanel>
+                            <TextBlock x:Name="ExpiryText" Style="{StaticResource BodyStrongText}" TextWrapping="Wrap"
+                                       AutomationProperties.LiveSetting="Polite" />
+                            <Button x:Name="NewCodeButton" Content="New code" Margin="0,6,0,0" HorizontalAlignment="Left"
+                                    Style="{StaticResource SubtleButtonStyle}" Visibility="Collapsed" Click="NewCode_Click" />
+                            <TextBlock x:Name="CheckLabel" Text="Check code" Style="{StaticResource DetailLabelText}" Margin="0,10,0,4" />
+                            <TextBox x:Name="CheckCodeBox" Style="{StaticResource DetailBox}"
+                                     AutomationProperties.LabeledBy="{Binding ElementName=CheckLabel}" />
+                            <TextBlock x:Name="AddressesLabel" Text="This PC is reachable at" Style="{StaticResource DetailLabelText}" Margin="0,4,0,4" />
+                            <TextBox x:Name="AddressesBox" Style="{StaticResource DetailBox}"
+                                     AutomationProperties.LabeledBy="{Binding ElementName=AddressesLabel}" />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <TextBlock Text="Cannot scan the code?" Style="{StaticResource SectionHeaderText}" Margin="0,16,0,4" />
+                <TextBlock Style="{StaticResource SecondaryBodyText}" TextWrapping="Wrap"
+                           Text="Get this pairing text onto the phone (a message to yourself, say) and paste it in Lazy Send there, then compare the check code." />
+                <TextBox x:Name="PairingTextBox" Style="{StaticResource DetailBox}" Margin="0,8,0,6" AutomationProperties.Name="Pairing text" />
+                <Button Content="Copy" ui:Icon.Glyph="&#xE8C8;" HorizontalAlignment="Left" Style="{StaticResource SubtleButtonStyle}"
+                        AutomationProperties.Name="Copy the pairing text" Click="CopyPairingText_Click" />
+
+                <TextBlock Text="Connection" Style="{StaticResource SectionHeaderText}" Margin="0,16,0,4" />
+                <TextBlock x:Name="ConnectionText" Style="{StaticResource SecondaryBodyText}" TextWrapping="Wrap"
+                           AutomationProperties.LiveSetting="Polite" />
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

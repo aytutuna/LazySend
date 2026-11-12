@@ -16,6 +16,8 @@ public partial class MainWindow : Window
 
     private void ShowStatus() => StatusText.Text = _model.StartError ?? $"Listening for phones on port {_model.Port}.";
 
+    private void Pair_Click(object sender, RoutedEventArgs e) => new PairWindow(_model) { Owner = this }.ShowDialog();
+
     /// <summary>Brings the window forward, from the tray or from a second start.</summary>
     public void ShowAndActivate()
     {
