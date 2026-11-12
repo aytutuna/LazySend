@@ -91,7 +91,7 @@ public sealed class PhoneImporter(GalleryIndex index, Func<string> receiveRoot)
         {
             return Result(ImportOutcome.Disconnected, e.Message);
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        catch (Exception e)
         {
             return Result(ImportOutcome.Failed, e.Message);
         }

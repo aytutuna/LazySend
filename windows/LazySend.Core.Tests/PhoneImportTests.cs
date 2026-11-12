@@ -14,7 +14,10 @@ public sealed class PhoneImportTests : IDisposable
         _importer = new PhoneImporter(_index, () => Path.Combine(_dir, "received"));
     }
 
-    public void Dispose() => Directory.Delete(_dir, true);
+    public void Dispose()
+    {
+        if (Directory.Exists(_dir)) Directory.Delete(_dir, true);
+    }
 
     private string Gallery => Path.Combine(_dir, "received", "Test iPhone", "Gallery");
 
@@ -35,7 +38,9 @@ public sealed class PhoneImportTests : IDisposable
             return this;
         }
 
-        public IReadOnlyList<PhoneMedia> List(CancellationToken cancel) => Items;
+        public Exception? ListFails { get; set; }
+
+        public IReadOnlyList<PhoneMedia> List(CancellationToken cancel) => ListFails is { } e ? throw e : Items;
 
         public void Dispose()
         {
@@ -192,6 +197,21 @@ public sealed class PhoneImportTests : IDisposable
         Assert.Equal(ImportOutcome.Finished, result.Outcome);
         Assert.Equal(2, result.Imported);
         Assert.Equal(1, result.Unreadable);
+    }
+
+    [Theory]
+    [InlineData(typeof(UnauthorizedAccessException))]
+    [InlineData(typeof(ArgumentException))]
+    [InlineData(typeof(InvalidOperationException))]
+    public void AnyOtherFaultEndsTheRunAsFailed(Type fault)
+    {
+        var phone = new FakePhone().Add("a.jpg", 100, May);
+        phone.ListFails = (Exception)Activator.CreateInstance(fault, "no")!;
+
+        var result = _importer.Run(phone, null, default);
+
+        Assert.Equal(ImportOutcome.Failed, result.Outcome);
+        Assert.Equal("no", result.Message);
     }
 
     [Fact]

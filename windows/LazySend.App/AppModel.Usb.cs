@@ -78,7 +78,7 @@ public sealed partial class AppModel
                     phones = ScanUsb();
                     missing = !phones.Any(p => p.Apple) && UsbDevices.AppleMobileDevicePresent();
                 }
-                catch (Exception e) when (e is COMException or InvalidCastException)
+                catch (Exception)
                 {
                     phones = [];
                     missing = false;
@@ -174,7 +174,7 @@ public sealed partial class AppModel
             {
                 return new ImportResult(ImportOutcome.Disconnected, 0, 0, 0, 0, "", e.Message);
             }
-            catch (IOException e)
+            catch (Exception e)
             {
                 return new ImportResult(ImportOutcome.Failed, 0, 0, 0, 0, "", e.Message);
             }
@@ -186,7 +186,7 @@ public sealed partial class AppModel
             phone.Busy = false;
             FinishImport(row, info.Name, done.Result);
             Arrived?.Invoke(this, row);
-        }), TaskContinuationOptions.OnlyOnRanToCompletion);
+        }));
     }
 
     public void StopImport(TimelineItem row)

@@ -152,9 +152,20 @@ internal static class Wpd
         info.SetUnsignedIntegerValue(ref revision, 0);
         info.SetUnsignedIntegerValue(ref access, GenericRead);
         var device = NewDevice();
-        device.Open(deviceId, info);
-        Marshal.ReleaseComObject(info);
-        return device;
+        try
+        {
+            device.Open(deviceId, info);
+            return device;
+        }
+        catch
+        {
+            Marshal.ReleaseComObject(device);
+            throw;
+        }
+        finally
+        {
+            Marshal.ReleaseComObject(info);
+        }
     }
 
     public static List<string> DeviceIds(IPortableDeviceManager manager)

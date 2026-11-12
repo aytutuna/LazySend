@@ -32,17 +32,41 @@ internal sealed class WpdPhone : IPhoneSource, IDisposable
     {
         Id = info.Id;
         Name = info.Name;
+        IPortableDevice? device = null;
+        IPortableDeviceContent? content = null;
+        IPortableDeviceProperties? properties = null;
+        IPortableDeviceResources? resources = null;
         try
         {
-            _device = Wpd.Open(info.Id);
-            _device.Content(out _content);
-            _content.Properties(out _properties);
-            _content.Transfer(out _resources);
+            device = Wpd.Open(info.Id);
+            device.Content(out content);
+            content.Properties(out properties);
+            content.Transfer(out resources);
         }
-        catch (COMException e)
+        catch (Exception e)
         {
-            throw Translate(e);
+            Release(device, content, properties, resources);
+            throw e is COMException com ? Translate(com) : e;
         }
+        (_device, _content, _properties, _resources) = (device, content, properties, resources);
+    }
+
+    private static void Release(IPortableDevice? device, params object?[] parts)
+    {
+        foreach (var part in parts)
+        {
+            if (part is not null) Marshal.ReleaseComObject(part);
+        }
+        if (device is null) return;
+        try
+        {
+            device.Close();
+        }
+        catch (COMException)
+        {
+            // Unplugged already.
+        }
+        Marshal.ReleaseComObject(device);
     }
 
     public string Id { get; }
@@ -88,18 +112,7 @@ internal sealed class WpdPhone : IPhoneSource, IDisposable
 
     public void Dispose()
     {
-        try
-        {
-            _device.Close();
-        }
-        catch (COMException)
-        {
-            // Unplugged already.
-        }
-        Marshal.ReleaseComObject(_resources);
-        Marshal.ReleaseComObject(_properties);
-        Marshal.ReleaseComObject(_content);
-        Marshal.ReleaseComObject(_device);
+        Release(_device, _resources, _properties, _content);
     }
 
     private void WalkScreenshots(string pictures, List<PhoneMedia> media, CancellationToken cancel)
@@ -115,9 +128,26 @@ internal sealed class WpdPhone : IPhoneSource, IDisposable
         foreach (string id in Wpd.Children(_content, folder))
         {
             cancel.ThrowIfCancellationRequested();
-            if (Read(id) is not { } entry || entry.Name.StartsWith('.')) continue;
+            if (ReadOrSkip(id) is not { } entry || entry.Name.StartsWith('.')) continue;
             if (entry.IsFolder) Walk(id, media, cancel);
             else if (entry.Media is { } item) media.Add(item with { ObjectId = id });
+        }
+    }
+
+    // One object that cannot be read is passed over; a phone that has gone ends the walk.
+    private Entry? ReadOrSkip(string objectId)
+    {
+        try
+        {
+            return Read(objectId);
+        }
+        catch (COMException e) when (Translate(e) is PhoneGoneException gone)
+        {
+            throw gone;
+        }
+        catch (Exception e) when (e is COMException or UnauthorizedAccessException or IOException)
+        {
+            return null;
         }
     }
 
@@ -225,10 +255,17 @@ internal static class WpdDevices
         {
             foreach (string id in Wpd.DeviceIds(manager))
             {
-                string name = Wpd.Text((System.Text.StringBuilder? text, ref uint length) => manager.GetDeviceFriendlyName(id, text, ref length));
-                string maker = Wpd.Text((System.Text.StringBuilder? text, ref uint length) => manager.GetDeviceManufacturer(id, text, ref length));
-                bool apple = maker.Contains("Apple", StringComparison.OrdinalIgnoreCase) || name.Contains("iPhone", StringComparison.OrdinalIgnoreCase);
-                phones.Add(new UsbPhoneInfo(id, name.Length > 0 ? name : "Phone", apple, Probe(id, apple)));
+                try
+                {
+                    string name = Wpd.Text((System.Text.StringBuilder? text, ref uint length) => manager.GetDeviceFriendlyName(id, text, ref length));
+                    string maker = Wpd.Text((System.Text.StringBuilder? text, ref uint length) => manager.GetDeviceManufacturer(id, text, ref length));
+                    bool apple = maker.Contains("Apple", StringComparison.OrdinalIgnoreCase) || name.Contains("iPhone", StringComparison.OrdinalIgnoreCase);
+                    phones.Add(new UsbPhoneInfo(id, name.Length > 0 ? name : "Phone", apple, Probe(id, apple)));
+                }
+                catch (Exception e) when (e is COMException or UnauthorizedAccessException or IOException)
+                {
+                    phones.Add(new UsbPhoneInfo(id, "Phone", false, UsbState.NoFileAccess));
+                }
             }
         }
         finally
@@ -256,7 +293,7 @@ internal static class WpdDevices
                 Marshal.ReleaseComObject(device);
             }
         }
-        catch (COMException)
+        catch (Exception e) when (e is COMException or UnauthorizedAccessException or IOException)
         {
             return apple ? UsbState.LockedApple : UsbState.NoFileAccess;
         }
