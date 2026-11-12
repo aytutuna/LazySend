@@ -88,3 +88,24 @@ public class InboxTests
         Assert.True(again.Done);
     }
 }
+
+public class ModifiedDateTests
+{
+    [Fact]
+    public async Task ImplausibleModifiedDateStillReceivesTheFile()
+    {
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+        var content = new byte[100];
+
+        var state = await phone.BeginFileAsync("a.jpg", content, sourceId: "asset-1", modified: DateTimeOffset.MinValue);
+        using var response = await phone.PutChunkAsync(state.Id, 0, content);
+
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+        Assert.True((await Harness.ReadAsync<ItemState>(response)).Done);
+        string month = h.Now.ToLocalTime().ToString("yyyy-MM");
+        Assert.True(File.Exists(Path.Combine(h.ReceivedRoot, "Test iPhone", "Gallery", month, "a.jpg")));
+        using var check = await phone.PostAsync(Protocol.GalleryCheckPath, new GalleryCheckRequest(["asset-1"]));
+        Assert.Empty((await Harness.ReadAsync<GalleryCheckResponse>(check)).Missing);
+    }
+}

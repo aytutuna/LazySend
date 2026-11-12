@@ -112,8 +112,10 @@ public sealed class Inbox
         }
 
         var now = _clock();
+        // A phone can send any date; only plausible ones are kept (a file time outside this range cannot be set).
+        DateTimeOffset? modified = request.Modified is { Year: >= 1980 and <= 2100 } m ? m : null;
         string folder = Path.Combine(_receiveRoot(), FileNames.Clean(device.Name, "Phone"));
-        if (request.SourceId is not null) folder = Path.Combine(folder, "Gallery", (request.Modified ?? now).ToLocalTime().ToString("yyyy-MM", CultureInfo.InvariantCulture));
+        if (request.SourceId is not null) folder = Path.Combine(folder, "Gallery", (modified ?? now).ToLocalTime().ToString("yyyy-MM", CultureInfo.InvariantCulture));
         if (_freeSpace(folder) - size < Protocol.MinFreeBytes) throw new InboxException(507, LinkError.DiskFull);
         var file = new IncomingFile
         {
@@ -123,7 +125,7 @@ public sealed class Inbox
             Name = FileNames.Clean(request.Name),
             Size = size,
             Mime = request.Mime,
-            Modified = request.Modified,
+            Modified = modified,
             SourceId = request.SourceId,
             Sha256 = sha256,
             Directory = folder,
@@ -297,20 +299,33 @@ public sealed class Inbox
                 }
             }
             path = MoveIntoPlace(file, part);
-            if (file.Modified is { } modified) File.SetLastWriteTimeUtc(path, modified.UtcDateTime);
-            if (file.SourceId is { } source) _index.Add(file.DeviceId, source);
-            file.Done = true;
-            file.Path = path;
-            file.Finished = _clock();
-            Save(file);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             throw Failed(e);
         }
+        // The file is in place: record that first, so nothing below can make the phone send it again.
+        file.Done = true;
+        file.Path = path;
+        file.Finished = _clock();
+        BestEffort(() => Save(file));
+        if (file.Modified is { } modified) BestEffort(() => File.SetLastWriteTimeUtc(path, modified.UtcDateTime));
+        if (file.SourceId is { } source) BestEffort(() => _index.Add(file.DeviceId, source));
         writer?.Hash?.Dispose();
         _writers.TryRemove(file.Id, out _);
         FileReceived?.Invoke(this, new ReceivedFile(file.DeviceId, file.DeviceName, path, file.Size, file.SourceId));
+    }
+
+    private static void BestEffort(Action step)
+    {
+        try
+        {
+            step();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            System.Diagnostics.Trace.TraceWarning($"A step after receiving a file failed: {e.Message}");
+        }
     }
 
     private static string MoveIntoPlace(IncomingFile file, string part)
