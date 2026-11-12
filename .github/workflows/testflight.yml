@@ -78,8 +78,13 @@ jobs:
       # theirs before the export, which then signs them for real and keeps the app group.
       - name: Keep the entitlements
         run: |
-          codesign --force --sign - --entitlements ios/LazySendShare/LazySendShare.entitlements "$RUNNER_TEMP/LazySend.xcarchive/Products/Applications/LazySend.app/PlugIns/LazySendShare.appex"
-          codesign --force --sign - --entitlements ios/LazySendiOS/LazySend.entitlements "$RUNNER_TEMP/LazySend.xcarchive/Products/Applications/LazySend.app"
+          # codesign does not expand $(AppIdentifierPrefix), so the team id goes in by hand.
+          for name in LazySendShare/LazySendShare LazySendiOS/LazySend; do
+            sed "s/\$(AppIdentifierPrefix)/$APPLE_TEAM_ID./" "ios/$name.entitlements" > "$RUNNER_TEMP/$(basename "$name").entitlements"
+          done
+          app="$RUNNER_TEMP/LazySend.xcarchive/Products/Applications/LazySend.app"
+          codesign --force --sign - --entitlements "$RUNNER_TEMP/LazySendShare.entitlements" "$app/PlugIns/LazySendShare.appex"
+          codesign --force --sign - --entitlements "$RUNNER_TEMP/LazySend.entitlements" "$app"
       - name: Sign and upload
         run: |
           set -o pipefail
