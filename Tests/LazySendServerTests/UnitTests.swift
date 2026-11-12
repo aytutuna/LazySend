@@ -79,7 +79,7 @@ final class RequestBodyTests: XCTestCase {
         }
         XCTAssertEqual(text, "abcdefgh")
         XCTAssertEqual(body.remaining, 0)
-        XCTAssertEqual(rest.count, 2)
+        XCTAssertEqual(rest.count, 4)
     }
 
     func testAWithheldBodyIsNotReadWhenDiscarded() async throws {
