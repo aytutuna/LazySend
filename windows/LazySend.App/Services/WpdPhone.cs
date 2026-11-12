@@ -12,7 +12,7 @@ public enum UsbState
     NoFileAccess,
 }
 
-public sealed record UsbPhoneInfo(string Id, string Name, UsbState State);
+public sealed record UsbPhoneInfo(string Id, string Name, bool Apple, UsbState State);
 
 /// <summary>A phone's camera roll read through Windows Portable Devices. Use it from one import thread, never the UI thread.</summary>
 internal sealed class WpdPhone : IPhoneSource, IDisposable
@@ -228,7 +228,7 @@ internal static class WpdDevices
                 string name = Wpd.Text((System.Text.StringBuilder? text, ref uint length) => manager.GetDeviceFriendlyName(id, text, ref length));
                 string maker = Wpd.Text((System.Text.StringBuilder? text, ref uint length) => manager.GetDeviceManufacturer(id, text, ref length));
                 bool apple = maker.Contains("Apple", StringComparison.OrdinalIgnoreCase) || name.Contains("iPhone", StringComparison.OrdinalIgnoreCase);
-                phones.Add(new UsbPhoneInfo(id, name.Length > 0 ? name : "Phone", Probe(id, apple)));
+                phones.Add(new UsbPhoneInfo(id, name.Length > 0 ? name : "Phone", apple, Probe(id, apple)));
             }
         }
         finally

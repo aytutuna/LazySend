@@ -24,6 +24,27 @@
                 <TextBlock DockPanel.Dock="Top" Text="Phones" Style="{StaticResource SectionHeaderText}" Margin="0,20,0,8" />
                 <Button DockPanel.Dock="Bottom" x:Name="PairButton" Content="Pair a phone" ui:Icon.Glyph="&#xE8EA;" Margin="0,8,0,16"
                         Style="{StaticResource AccentIconTextButtonStyle}" HorizontalAlignment="Stretch" Click="Pair_Click" />
+                <StackPanel DockPanel.Dock="Bottom">
+                    <TextBlock Text="Phones on USB" Style="{StaticResource SectionHeaderText}" Margin="0,0,0,8" />
+                    <TextBlock x:Name="UsbHintText" Style="{StaticResource CaptionText}" TextWrapping="Wrap" Margin="0,0,0,8"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    <ItemsControl ItemsSource="{Binding UsbPhones}" AutomationProperties.Name="Phones on USB">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="0,0,0,8">
+                                    <TextBlock Text="{Binding Name}" Style="{StaticResource BodyStrongText}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Status}" Style="{StaticResource CaptionText}" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    <Button Content="Import photos and videos" ui:Icon.Glyph="&#xE896;" Margin="0,6,0,0" HorizontalAlignment="Stretch"
+                                            Style="{StaticResource IconTextButtonStyle}" IsEnabled="{Binding CanImport}" Click="ImportUsb_Click" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Style="{StaticResource CaptionText}" TextWrapping="Wrap" Margin="0,0,0,8"
+                               Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                               Text="Copies new photos and videos to the receive folder, skipping what is already there. On an iPhone, choose Settings > Photos > Transfer to Mac or PC > Keep Originals first; Automatic converts HEIC photos on the fly and is slower." />
+                </StackPanel>
                 <TextBlock x:Name="NoPhonesText" DockPanel.Dock="Top" Style="{StaticResource SecondaryBodyText}" TextWrapping="Wrap"
                            Text="No phone is paired yet. Pair one to send things between it and this PC." />
                 <ListBox x:Name="PhonesList" ItemsSource="{Binding Phones}" SelectionChanged="PhonesList_SelectionChanged"
@@ -120,6 +141,8 @@
                                                 Visibility="{Binding CanOpen, Converter={StaticResource BoolToVisibility}}" />
                                         <Button Content="Show in folder" ui:Icon.Glyph="&#xE838;" Style="{StaticResource SubtleButtonStyle}" Click="ShowInFolder_Click"
                                                 Visibility="{Binding CanShowFolder, Converter={StaticResource BoolToVisibility}}" />
+                                        <Button Content="Stop" ui:Icon.Glyph="&#xE71A;" Style="{StaticResource SubtleButtonStyle}" Click="StopImport_Click"
+                                                Visibility="{Binding CanStop, Converter={StaticResource BoolToVisibility}}" />
                                         <Button Content="Cancel" ui:Icon.Glyph="&#xE711;" Style="{StaticResource SubtleButtonStyle}" Click="CancelItem_Click"
                                                 Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisibility}}" />
                                     </StackPanel>

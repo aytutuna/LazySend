@@ -8,7 +8,7 @@ namespace LazySend.Core;
 public sealed record PhoneMedia(string ObjectId, string PersistentId, string Name, long Size, DateTimeOffset Date);
 
 /// <summary>A phone's camera roll as the importer sees it. Reads block; the caller runs them off the UI thread.</summary>
-public interface IPhoneSource
+public interface IPhoneSource : IDisposable
 {
     /// <summary>Stable for one phone across plugs; the import index is keyed by it.</summary>
     string Id { get; }

@@ -37,6 +37,10 @@ public sealed class PhoneImportTests : IDisposable
 
         public IReadOnlyList<PhoneMedia> List(CancellationToken cancel) => Items;
 
+        public void Dispose()
+        {
+        }
+
         public Stream Open(PhoneMedia item)
         {
             if (Unreadable.Contains(item.ObjectId)) throw new IOException("The phone could not read it.");

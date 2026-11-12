@@ -26,6 +26,7 @@ public partial class MainWindow : Window
         model.StatusChanged += (_, _) => ShowStatus();
         model.SelectionChanged += (_, _) => ShowSelection();
         model.Notice += (_, text) => ShowNotice(text);
+        model.UsbChanged += (_, _) => ShowUsbHint();
         model.Timeline.CollectionChanged += (_, _) => EmptyText.Visibility = model.Timeline.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         model.Phones.CollectionChanged += (_, _) => NoPhonesText.Visibility = model.Phones.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         _noticeTimer.Tick += (_, _) =>
@@ -37,6 +38,17 @@ public partial class MainWindow : Window
         NoPhonesText.Visibility = model.Phones.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         ShowStatus();
         ShowSelection();
+        ShowUsbHint();
+    }
+
+    private void ShowUsbHint()
+    {
+        UsbHintText.Text = _model.AppleDriverMissing
+            ? "An iPhone is plugged in but Windows cannot see its photos. Install Apple Devices from the Microsoft Store, then unlock the iPhone and tap Trust."
+            : _model.UsbPhones.Count == 0
+                ? "Plug in an iPhone or Android phone with a cable. On Android, tap the USB notification and choose File transfer."
+                : "";
+        UsbHintText.Visibility = UsbHintText.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void ShowStatus()
@@ -212,6 +224,16 @@ public partial class MainWindow : Window
         if (ItemOf(sender)?.Path is not { } path) return;
         if (File.Exists(path)) Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
         else ShowNotice("The file is not there any more.");
+    }
+
+    private void ImportUsb_Click(object sender, RoutedEventArgs e)
+    {
+        if (((FrameworkElement)sender).DataContext is UsbPhoneRow phone) _model.ImportFromUsb(phone);
+    }
+
+    private void StopImport_Click(object sender, RoutedEventArgs e)
+    {
+        if (ItemOf(sender) is { } item) _model.StopImport(item);
     }
 
     private void CancelItem_Click(object sender, RoutedEventArgs e)

@@ -74,6 +74,7 @@ public sealed partial class AppModel : IDisposable
         }
         Advertise();
         StartTimeline();
+        StartUsb();
         _renewal = new DispatcherTimer(DispatcherPriority.Background, _ui) { Interval = TimeSpan.FromDays(1) };
         _renewal.Tick += (_, _) => RenewCertificate();
         _renewal.Start();
@@ -138,6 +139,7 @@ public sealed partial class AppModel : IDisposable
     public void Dispose()
     {
         _renewal?.Stop();
+        _usbStop.Cancel();
         _network.Dispose();
         foreach (var advertisement in _advertisements) advertisement.Dispose();
         _advertisements.Clear();

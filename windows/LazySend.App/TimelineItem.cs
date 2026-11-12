@@ -63,6 +63,23 @@ public sealed class TimelineItem : INotifyPropertyChanged
 
     public bool Active { get; set; }
 
+    public CancellationTokenSource? ImportStop { get; set; }
+
+    private bool _importing;
+
+    public bool Importing
+    {
+        get => _importing;
+        set
+        {
+            if (_importing == value) return;
+            _importing = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Importing)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanStop)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanOpen)));
+        }
+    }
+
     public string Heading
     {
         get => _heading;
@@ -87,7 +104,8 @@ public sealed class TimelineItem : INotifyPropertyChanged
 
     public bool HasBody => Body is not null;
     public bool CanCopy => Kind is TimelineKind.Text or TimelineKind.Link;
-    public bool CanOpen => Kind is TimelineKind.Link or TimelineKind.File or TimelineKind.Gallery;
+    public bool CanStop => Importing;
+    public bool CanOpen => Kind is TimelineKind.Link or TimelineKind.File || (Kind == TimelineKind.Gallery && !Importing);
     public bool CanShowFolder => Kind == TimelineKind.File && Path is not null;
     public bool HasThumbnail => Thumbnail is not null;
     public bool ShowGlyph => Thumbnail is null;
