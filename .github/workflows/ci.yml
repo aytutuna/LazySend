@@ -102,7 +102,12 @@ jobs:
       - name: Unit tests on the Simulator
         run: |
           set -o pipefail
-          xcodebuild test             -scheme LazySend-Package             -only-testing:LazySendIOSTests             -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}"             -resultBundlePath "$RUNNER_TEMP/ios-tests.xcresult"             CODE_SIGNING_ALLOWED=NO
+          xcodebuild test \
+            -scheme LazySend-Package \
+            -only-testing:LazySendIOSTests \
+            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}" \
+            -resultBundlePath "$RUNNER_TEMP/ios-tests.xcresult" \
+            CODE_SIGNING_ALLOWED=NO
       - name: Install XcodeGen
         env:
           XCODEGEN_VERSION: 2.46.0
@@ -123,12 +128,23 @@ jobs:
       - name: Build the app for testing
         run: |
           set -o pipefail
-          xcodebuild build-for-testing             -project ios/LazySendiOS.xcodeproj             -scheme LazySendiOS             -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}"             -derivedDataPath "$RUNNER_TEMP/app-build"             CODE_SIGNING_ALLOWED=NO
+          xcodebuild build-for-testing \
+            -project ios/LazySendiOS.xcodeproj \
+            -scheme LazySendiOS \
+            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}" \
+            -derivedDataPath "$RUNNER_TEMP/app-build" \
+            CODE_SIGNING_ALLOWED=NO
       - name: Run the UI tests
         timeout-minutes: 30
         run: |
           set -o pipefail
-          xcodebuild test-without-building             -project ios/LazySendiOS.xcodeproj             -scheme LazySendiOS             -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}"             -derivedDataPath "$RUNNER_TEMP/app-build"             -resultBundlePath "$RUNNER_TEMP/ios-app-tests.xcresult"             CODE_SIGNING_ALLOWED=NO
+          xcodebuild test-without-building \
+            -project ios/LazySendiOS.xcodeproj \
+            -scheme LazySendiOS \
+            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}" \
+            -derivedDataPath "$RUNNER_TEMP/app-build" \
+            -resultBundlePath "$RUNNER_TEMP/ios-app-tests.xcresult" \
+            CODE_SIGNING_ALLOWED=NO
       - name: Export the screenshots
         if: always()
         run: |
