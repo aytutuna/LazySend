@@ -29,7 +29,7 @@ open class MediaAssets(private val context: Context) {
         val found = mutableListOf<Asset>()
         // What came from the PC is saved in a Lazy Send folder and must not go back.
         val (where, args) = if (Build.VERSION.SDK_INT >= 29) {
-            "${MediaStore.MediaColumns.RELATIVE_PATH} NOT LIKE ?" to arrayOf("%/${ReceivedFiles.FOLDER}/%")
+            "${MediaStore.MediaColumns.RELATIVE_PATH} NOT LIKE ?" to arrayOf("%/${RECEIVED_FOLDER}/%")
         } else {
             null to null
         }

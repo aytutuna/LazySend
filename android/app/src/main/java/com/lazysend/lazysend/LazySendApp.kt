@@ -9,7 +9,7 @@ import com.lazysend.lazysend.transfer.NsdFinder
 import com.lazysend.lazysend.transfer.Notifications
 import com.lazysend.lazysend.transfer.PcCheckWorker
 import com.lazysend.lazysend.transfer.PcConnector
-import com.lazysend.lazysend.transfer.ReceivedFiles
+import com.lazysend.lazysend.transfer.MediaFiles
 import com.lazysend.lazysend.transfer.Receiver
 import com.lazysend.lazysend.transfer.Sender
 import java.io.File
@@ -22,7 +22,7 @@ class AppGraph(app: Application) {
     val notifications = Notifications(app)
     val connector = PcConnector(pcs, NsdFinder(app), OkHttpClient())
     val sender = Sender(app, connector, timeline, MediaAssets(app))
-    val receiver = Receiver(connector, timeline, ReceivedFiles(app), notifications)
+    val receiver = Receiver(connector, timeline, MediaFiles(app), notifications::received)
 }
 
 class LazySendApp : Application() {

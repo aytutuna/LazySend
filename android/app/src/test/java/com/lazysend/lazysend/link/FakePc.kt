@@ -135,6 +135,7 @@ class FakePc : AutoCloseable {
     private fun outboxData(request: RecordedRequest): MockResponse {
         val range = request.headers["Range"]
         val from = range?.removePrefix("bytes=")?.removeSuffix("-")?.toInt() ?: 0
+        if (range != null && outboxFile.isNotEmpty() && from >= outboxFile.size) return error(416, "rangeNotSatisfiable")
         val part = outboxFile.copyOfRange(from, outboxFile.size)
         val builder = MockResponse.Builder().code(if (range == null) 200 else 206)
             .headers(Headers.headersOf("Accept-Ranges", "bytes", "Content-Type", "application/octet-stream"))
