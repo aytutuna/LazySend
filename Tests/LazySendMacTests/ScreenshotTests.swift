@@ -107,7 +107,7 @@ final class ScreenshotTests: XCTestCase {
         await model.beginPairing()
         let request = PairRequest(token: "x", phoneId: newId(), phoneName: "Aytu's iPhone", platform: "ios", appVersion: "1.0")
         let asking = Task { await model.ask(request) }
-        XCTAssertTrue(await waitUntil { model.approval != nil })
+        await assertEventually { model.approval != nil }
         try await capture(PairSheet(model: model), name: "pair", in: folder, size: nil)
         model.answerApproval(false)
         _ = await asking.value

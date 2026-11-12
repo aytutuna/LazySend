@@ -53,6 +53,8 @@ public struct PairApproval: Equatable {
     public var platform: String
 }
 
+// TODO: import the camera roll of a phone on a cable (ImageCaptureCore), as the Windows app does through WPD.
+
 /// What the window shows and does: the paired phones, one timeline of what arrived and what was sent, the pairing
 /// prompt, and the server that runs while it is needed.
 @MainActor

@@ -297,7 +297,7 @@ final class ModelTests: XCTestCase {
     func testTheApprovalPromptWaitsForTheUsersAnswer() async throws {
         let request = PairRequest(token: "x", phoneId: newId(), phoneName: "Pixel", platform: "android", appVersion: "1")
         let answer = Task { await model.ask(request) }
-        XCTAssertTrue(await waitUntil { model.approval != nil })
+        await assertEventually { model.approval != nil }
         XCTAssertEqual(model.approval, PairApproval(name: "Pixel", platform: "android"))
         model.answerApproval(true)
         let allowed = await answer.value
@@ -305,7 +305,7 @@ final class ModelTests: XCTestCase {
         XCTAssertNil(model.approval)
 
         let second = Task { await model.ask(request) }
-        XCTAssertTrue(await waitUntil { model.approval != nil })
+        await assertEventually { model.approval != nil }
         model.answerApproval(false)
         let refused = await second.value
         XCTAssertFalse(refused)
@@ -314,7 +314,7 @@ final class ModelTests: XCTestCase {
     func testAnApprovalThatIsCancelledDeclines() async throws {
         let request = PairRequest(token: "x", phoneId: newId(), phoneName: "Pixel", platform: "android", appVersion: "1")
         let answer = Task { await model.ask(request) }
-        XCTAssertTrue(await waitUntil { model.approval != nil })
+        await assertEventually { model.approval != nil }
         answer.cancel()
         let allowed = await answer.value
         XCTAssertFalse(allowed)
@@ -342,11 +342,11 @@ final class ModelTests: XCTestCase {
         let client = LinkClient(endpoint: Endpoint(host: "127.0.0.1", port: state.code.port), pin: fixture.service.fingerprint)
         let id = newId()
         let pairing = Task { try await client.pair(token: state.code.token, phoneId: id, phoneName: "Pixel 9", appVersion: "1") }
-        XCTAssertTrue(await waitUntil { model.approval != nil })
+        await assertEventually { model.approval != nil }
         model.answerApproval(true)
         let answer = try await pairing.value
         XCTAssertFalse(answer.deviceSecret.isEmpty)
-        XCTAssertTrue(await waitUntil { model.pairing?.pairedName == "Pixel 9" })
+        await assertEventually { model.pairing?.pairedName == "Pixel 9" }
         XCTAssertEqual(model.phones.map(\.name), ["Pixel 9"])
         model.closePairing()
     }
@@ -390,5 +390,10 @@ func waitUntil(timeout: TimeInterval = 5, _ condition: @MainActor () -> Bool) as
         try? await Task.sleep(nanoseconds: 20_000_000)
     }
     return await condition()
+}
+
+func assertEventually(file: StaticString = #filePath, line: UInt = #line, _ condition: @MainActor () -> Bool) async {
+    let reached = await waitUntil(condition)
+    XCTAssertTrue(reached, file: file, line: line)
 }
 #endif
