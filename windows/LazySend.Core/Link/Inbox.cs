@@ -97,19 +97,7 @@ public sealed class Inbox
             if (request.Sha256.Length != 64 || !request.Sha256.All(Uri.IsHexDigit)) throw new InboxException(400, LinkError.BadRequest);
             sha256 = request.Sha256.ToLowerInvariant();
         }
-        if (request.SourceId is { } source)
-        {
-            if (_index.Contains(device.Id, source)) return new ItemState("", size, true, Duplicate: true);
-            lock (_gate)
-            {
-                var existing = _files.Values.FirstOrDefault(f => f.DeviceId == device.Id && f.SourceId == source && !f.Done);
-                if (existing is not null && existing.Size == size)
-                {
-                    FinishIfFull(existing);
-                    return StateOf(existing);
-                }
-            }
-        }
+        if (request.SourceId is { } source && _index.Contains(device.Id, source)) return new ItemState("", size, true, Duplicate: true);
 
         var now = _clock();
         // A phone can send any date; only plausible ones are kept (a file time outside this range cannot be set).
@@ -131,16 +119,31 @@ public sealed class Inbox
             Directory = folder,
             Started = now,
         };
+        // Looked up and added in one step, so two requests for the same asset cannot start two transfers.
+        IncomingFile? existing = null;
+        lock (_gate)
+        {
+            if (request.SourceId is { } asset)
+            {
+                existing = _files.Values.FirstOrDefault(f => f.DeviceId == device.Id && f.SourceId == asset && !f.Done && f.Size == size);
+            }
+            if (existing is null) _files[file.Id] = file;
+        }
+        if (existing is not null)
+        {
+            FinishIfFull(existing);
+            return StateOf(existing);
+        }
         try
         {
             Directory.CreateDirectory(folder);
             using (File.Create(PartPath(file))) { }
-            lock (_gate) _files[file.Id] = file;
             Save(file);
             if (size == 0) Complete(file, null);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
+            Discard(file);
             throw Failed(e);
         }
         return StateOf(file);
@@ -181,12 +184,17 @@ public sealed class Inbox
         using var takeOver = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         if (!writer.Gate.Wait(0))
         {
-            writer.Active?.Cancel();
+            CancelActive(writer);
             if (!await writer.Gate.WaitAsync(TakeOverWait, cancellation).ConfigureAwait(false)) throw new InboxException(409, LinkError.Busy);
         }
         writer.Active = takeOver;
         try
         {
+            // The record may have been discarded while this request waited for the gate.
+            lock (_gate)
+            {
+                if (!_files.ContainsKey(id)) throw new InboxException(404, LinkError.NotFound);
+            }
             if (file.Done) return StateOf(file);
             if (length == 0)
             {
@@ -202,7 +210,7 @@ public sealed class Inbox
                 await using var stream = OpenPart(file);
                 if (stream.Length != offset)
                 {
-                    await DiscardAsync(body, length, cancellation).ConfigureAwait(false);
+                    await DiscardAsync(body, length, takeOver.Token).ConfigureAwait(false);
                     throw new InboxException(409, LinkError.OffsetMismatch(stream.Length));
                 }
                 if (offset == 0)
@@ -255,7 +263,21 @@ public sealed class Inbox
     {
         IncomingFile[] files;
         lock (_gate) files = [.. _files.Values.Where(f => f.DeviceId == deviceId)];
-        foreach (var file in files) Discard(file);
+        foreach (var file in files)
+        {
+            // A chunk still coming in is stopped first, so its part can be deleted.
+            var writer = _writers.GetOrAdd(file.Id, _ => new Writer());
+            CancelActive(writer);
+            bool held = writer.Gate.Wait(TakeOverWait);
+            try
+            {
+                Discard(file);
+            }
+            finally
+            {
+                if (held) writer.Gate.Release();
+            }
+        }
     }
 
     /// <summary>
@@ -285,6 +307,10 @@ public sealed class Inbox
     {
         string part = PartPath(file);
         string path;
+        lock (_gate)
+        {
+            if (!_files.ContainsKey(file.Id)) throw new InboxException(404, LinkError.NotFound);
+        }
         try
         {
             if (file.Sha256 is { } expected)
@@ -308,6 +334,10 @@ public sealed class Inbox
         file.Done = true;
         file.Path = path;
         file.Finished = _clock();
+        bool removed;
+        lock (_gate) removed = !_files.ContainsKey(file.Id);
+        // The phone was removed while the file was finishing: the file stays, nothing is announced or recorded.
+        if (removed) return;
         BestEffort(() => Save(file));
         if (file.Modified is { } modified) BestEffort(() => File.SetLastWriteTimeUtc(path, modified.UtcDateTime));
         if (file.SourceId is { } source) BestEffort(() => _index.Add(file.DeviceId, source));
@@ -355,9 +385,10 @@ public sealed class Inbox
 
     private void Discard(IncomingFile file)
     {
+        // A part that cannot be deleted keeps its record, so a later cleanup finds it again.
+        if (!TryDelete(PartPath(file))) return;
         lock (_gate) _files.Remove(file.Id);
         _writers.TryRemove(file.Id, out _);
-        TryDelete(PartPath(file));
         TryDelete(MetaPath(file.Id));
     }
 
@@ -384,11 +415,29 @@ public sealed class Inbox
 
     private static string PartPath(IncomingFile file) => Path.Combine(file.Directory, file.Id + ".part");
 
-    private static FileStream OpenPart(IncomingFile file)
+    private static void CancelActive(Writer writer)
     {
         try
         {
-            return new FileStream(PartPath(file), FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 1, FileOptions.Asynchronous);
+            writer.Active?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The request that held it has just ended.
+        }
+    }
+
+    private FileStream OpenPart(IncomingFile file)
+    {
+        try
+        {
+            return new FileStream(PartPath(file), FileMode.Open, FileAccess.Write, FileShare.Read, 1, FileOptions.Asynchronous);
+        }
+        catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException)
+        {
+            // Someone removed the part: the record is no use, the phone starts the file again.
+            Discard(file);
+            throw new InboxException(404, LinkError.NotFound);
         }
         catch (IOException e)
         {
@@ -421,6 +470,8 @@ public sealed class Inbox
 
     private static async Task DiscardAsync(Stream body, long length, CancellationToken cancellation)
     {
+        // A body the client holds back (Expect: 100-continue) is never sent, so there is nothing to read.
+        if (body is LinkRequestBody { IsWithheld: true }) return;
         var buffer = new byte[81920];
         while (length > 0)
         {
@@ -455,15 +506,17 @@ public sealed class Inbox
         return written.Year > 1700 ? new DateTimeOffset(written) : file.Started;
     }
 
-    private static void TryDelete(string path)
+    private static bool TryDelete(string path)
     {
         try
         {
             File.Delete(path);
+            return true;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             // Left for the next cleanup.
+            return false;
         }
     }
 

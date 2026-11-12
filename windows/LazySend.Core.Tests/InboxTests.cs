@@ -109,3 +109,53 @@ public class ModifiedDateTests
         Assert.Empty((await Harness.ReadAsync<GalleryCheckResponse>(check)).Missing);
     }
 }
+
+public class InboxRaceTests
+{
+    [Fact]
+    public async Task ConcurrentBeginsForOneAssetStartOneTransfer()
+    {
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+        var device = h.Service.Devices.Devices.Single();
+        var request = new ItemRequest(ItemKind.File, Name: "a.jpg", Size: 1000, SourceId: "asset-1");
+
+        var ids = await Task.WhenAll(Enumerable.Range(0, 16).Select(_ => Task.Run(() => h.Service.Inbox.Begin(device, request).Id)));
+
+        Assert.Single(ids.Distinct());
+        Assert.Single(h.Service.Inbox.InProgress);
+    }
+
+    [Fact]
+    public async Task RemovedPhoneCannotWriteAndLeavesNoPartBehind()
+    {
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+        var content = new byte[1000];
+        var state = await phone.BeginFileAsync("a.bin", content);
+        string folder = h.Service.Inbox.InProgress.Single().Directory;
+
+        h.Service.Inbox.RemoveDevice(phone.Id);
+        using var response = await phone.PutChunkAsync(state.Id, 0, content);
+
+        Assert.Empty(h.Service.Inbox.InProgress);
+        Assert.Empty(Directory.GetFiles(folder));
+        Assert.NotEqual(System.Net.HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PartDeletedBehindOurBackDropsTheRecord()
+    {
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+        var content = new byte[1000];
+        var state = await phone.BeginFileAsync("a.bin", content);
+        var file = h.Service.Inbox.InProgress.Single();
+        File.Delete(Path.Combine(file.Directory, file.Id + ".part"));
+
+        using var response = await phone.PutChunkAsync(state.Id, 0, content);
+
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Empty(h.Service.Inbox.InProgress);
+    }
+}
