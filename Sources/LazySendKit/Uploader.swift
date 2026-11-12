@@ -21,7 +21,6 @@ public struct FileDataSource: DataSource {
     }
 }
 
-/// The SHA-256 of a whole file as 64 hex digits, read a megabyte at a time.
 public func sha256Hex(of url: URL) throws -> String {
     let handle = try FileHandle(forReadingFrom: url)
     defer { try? handle.close() }
@@ -53,25 +52,31 @@ public final class Uploader: @unchecked Sendable {
     private let retryDelays: [TimeInterval]
     private let sleep: (TimeInterval) async throws -> Void
     private var client: UploadAPI?
+    private var resumeItemId: String?
 
-    /// `connect` gives a client for the computer, a new one when asked again after a failure.
-    public init(chunkBytes: Int = LinkProtocol.chunkBytes, retryDelays: [TimeInterval] = Uploader.retryDelays,
+    /// `connect` gives a client for the computer, a new one when asked again after a failure. With a
+    /// `resumeItemId` from an earlier run the upload carries on from where the computer says that item stands;
+    /// when the computer no longer has it, the file is announced again.
+    public init(chunkBytes: Int = LinkProtocol.chunkBytes, retryDelays: [TimeInterval] = Uploader.retryDelays, resumeItemId: String? = nil,
                 sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) },
                 connect: @escaping () async throws -> UploadAPI) {
         self.connect = connect
         self.chunkBytes = Int64(chunkBytes)
         self.retryDelays = retryDelays
+        self.resumeItemId = resumeItemId
         self.sleep = sleep
     }
 
     /// `onProgress` gets the bytes the computer is known to have, and `onBytes` the bytes of the chunk on
-    /// the wire as they go. Throws the last connection error once the computer has stayed out of reach.
-    public func send(_ request: ItemRequest, source: DataSource, onProgress: @escaping @Sendable (Int64) -> Void = { _ in },
+    /// the wire as they go. `onItem` gets the computer's id for the file as soon as it is known. Throws the
+    /// last connection error once the computer has stayed out of reach.
+    public func send(_ request: ItemRequest, source: DataSource, onItem: @escaping (String) -> Void = { _ in },
+                     onProgress: @escaping @Sendable (Int64) -> Void = { _ in },
                      onBytes: @escaping @Sendable (Int64) -> Void = { _ in }) async throws -> UploadResult {
         guard let size = request.size else { throw LinkError.badResponse }
         client = try await connect()
         var restarted = false
-        var state = try await begin(request)
+        var state = try await begin(request, onItem: onItem)
         if state.duplicate == true { return UploadResult(duplicate: true) }
         onProgress(state.offset)
         while !state.done {
@@ -82,7 +87,7 @@ public final class Uploader: @unchecked Sendable {
                     state = ItemState(id: state.id, offset: offset, done: false)
                 } else if (error.code == "hashMismatch" || error.code == "notFound") && !restarted {
                     restarted = true
-                    state = try await begin(request)
+                    state = try await begin(request, onItem: onItem)
                 } else {
                     throw error
                 }
@@ -92,11 +97,24 @@ public final class Uploader: @unchecked Sendable {
         return UploadResult(duplicate: false)
     }
 
-    private func begin(_ request: ItemRequest) async throws -> ItemState {
+    private func begin(_ request: ItemRequest, onItem: (String) -> Void) async throws -> ItemState {
         var failures = 0
         while true {
             do {
-                return try await api().postItem(request)
+                let state: ItemState
+                if let id = resumeItemId {
+                    do {
+                        state = try await api().itemState(id)
+                        resumeItemId = nil
+                    } catch let error as LinkError where error.code == "notFound" {
+                        resumeItemId = nil
+                        state = try await api().postItem(request)
+                    }
+                } else {
+                    state = try await api().postItem(request)
+                }
+                if state.duplicate != true, !state.id.isEmpty { onItem(state.id) }
+                return state
             } catch let error as LinkError where error.isTransient {
                 failures = try await backOff(failures, error)
             }
@@ -135,7 +153,6 @@ public final class Uploader: @unchecked Sendable {
     }
 }
 
-/// The ids the computer does not have yet, asked `LinkProtocol.galleryBatch` at a time and kept in the order given.
 public func missingIds(_ ids: [String], using api: GalleryCheckAPI) async throws -> [String] {
     var missing: [String] = []
     var start = 0

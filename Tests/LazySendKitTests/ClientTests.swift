@@ -80,6 +80,46 @@ final class ClientTests: XCTestCase {
         XCTAssertEqual(pc.chunkOffsets, [0, 300_000])
     }
 
+    func testANewUploaderContinuesAnItemFromTheComputersOffset() async throws {
+        let pc = try FakePc()
+        let folder = try temporaryFolder()
+        let file = try randomFile(in: folder, bytes: 1_200_000)
+        let request = try ItemRequest.file(at: file.url, name: "payload.bin", mime: nil, modified: nil)
+        pc.dropNextChunkAfter = 300_000
+        let client = LinkClient(endpoint: pc.endpoint, pin: pc.pin, credentials: pc.credentials)
+        var ids: [String] = []
+        do {
+            _ = try await Uploader(chunkBytes: 1_000_000, retryDelays: [], sleep: { _ in }, connect: { client })
+                .send(request, source: FileDataSource(url: file.url), onItem: { ids.append($0) })
+            XCTFail("The dropped chunk should have ended the upload")
+        } catch {
+            XCTAssertNotNil(error as? LinkError)
+        }
+        XCTAssertEqual(ids, ["item1"])
+
+        let posts = pc.server.requests.filter { $0.method == "POST" }.count
+        let resumed = Uploader(chunkBytes: 1_000_000, resumeItemId: "item1", sleep: { _ in }, connect: { client })
+        let result = try await resumed.send(request, source: FileDataSource(url: file.url))
+        XCTAssertFalse(result.duplicate)
+        XCTAssertEqual(pc.server.requests.filter { $0.method == "POST" }.count, posts)
+        XCTAssertEqual(pc.chunkOffsets, [0, 300_000])
+        XCTAssertEqual(pc.uploads["item1"]?.data, file.data)
+    }
+
+    func testAnItemTheComputerLostIsAnnouncedAgain() async throws {
+        let pc = try FakePc()
+        let folder = try temporaryFolder()
+        let file = try randomFile(in: folder, bytes: 10_000)
+        let request = try ItemRequest.file(at: file.url, name: "payload.bin", mime: nil, modified: nil)
+        let client = LinkClient(endpoint: pc.endpoint, pin: pc.pin, credentials: pc.credentials)
+        var ids: [String] = []
+        _ = try await Uploader(resumeItemId: "gone", sleep: { _ in }, connect: { client })
+            .send(request, source: FileDataSource(url: file.url), onItem: { ids.append($0) })
+        XCTAssertEqual(pc.server.requests.map(\.method), ["GET", "POST", "PUT"])
+        XCTAssertEqual(ids, ["item1"])
+        XCTAssertEqual(pc.uploads["item1"]?.data, file.data)
+    }
+
     func testPausesWhileTheComputerIsBusy() async throws {
         let pc = try FakePc()
         let folder = try temporaryFolder()

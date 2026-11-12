@@ -37,10 +37,15 @@ public struct TimelineEntry: Codable, Identifiable, Equatable, Sendable {
     /// A received file's name in the app's Documents folder; for a download in progress, the part that is there so far.
     public var fileName: String?
     public var mime: String?
+    /// For a file being sent: the computer it goes to, its id for the file once known, and where the app keeps
+    /// the copy it sends from (relative to its outgoing folder) until the file is delivered.
+    public var pcId: String?
+    public var itemId: String?
+    public var localFile: String?
 
     public init(id: String, time: Date = Date(), direction: Direction, kind: EntryKind, pcName: String, title: String, detail: String = "",
                 state: EntryState = .active, bytes: Int64 = 0, totalBytes: Int64 = 0, count: Int = 0, totalCount: Int = 0,
-                fileName: String? = nil, mime: String? = nil) {
+                fileName: String? = nil, mime: String? = nil, pcId: String? = nil, itemId: String? = nil, localFile: String? = nil) {
         self.id = id
         self.time = time
         self.direction = direction
@@ -55,10 +60,12 @@ public struct TimelineEntry: Codable, Identifiable, Equatable, Sendable {
         self.totalCount = totalCount
         self.fileName = fileName
         self.mime = mime
+        self.pcId = pcId
+        self.itemId = itemId
+        self.localFile = localFile
     }
 }
 
-/// Sent and received things, newest first, kept in a JSON file.
 @MainActor
 public final class Timeline: ObservableObject {
     @Published public private(set) var entries: [TimelineEntry]
