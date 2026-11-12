@@ -4,6 +4,6 @@ Lazy Send moves text, links, files and whole photo galleries between a computer 
 
 The source is available under the PolyForm Noncommercial License 1.0.0 (see LICENSE). It is source available, not open source.
 
-Only the Windows core library exists so far. To build and test it you need the .NET 10 SDK:
+Only the Windows app and its core library exist so far (windows/LazySend.App and windows/LazySend.Core). To build and test them you need the .NET 10 SDK:
 
     dotnet test windows/LazySend.sln
