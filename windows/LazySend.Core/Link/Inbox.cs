@@ -103,7 +103,11 @@ public sealed class Inbox
             lock (_gate)
             {
                 var existing = _files.Values.FirstOrDefault(f => f.DeviceId == device.Id && f.SourceId == source && !f.Done);
-                if (existing is not null && existing.Size == size) return StateOf(existing);
+                if (existing is not null && existing.Size == size)
+                {
+                    FinishIfFull(existing);
+                    return StateOf(existing);
+                }
             }
         }
 
@@ -143,10 +147,11 @@ public sealed class Inbox
     /// <summary>Where a file of <paramref name="deviceId"/> stands; null when there is no such file.</summary>
     public ItemState? State(string deviceId, string id)
     {
-        lock (_gate)
-        {
-            return _files.TryGetValue(id, out var file) && file.DeviceId == deviceId ? StateOf(file) : null;
-        }
+        IncomingFile? file;
+        lock (_gate) _files.TryGetValue(id, out file);
+        if (file is null || file.DeviceId != deviceId) return null;
+        FinishIfFull(file);
+        lock (_gate) return _files.ContainsKey(id) ? StateOf(file) : null;
     }
 
     /// <summary>
@@ -166,7 +171,7 @@ public sealed class Inbox
             await DiscardAsync(body, length, cancellation).ConfigureAwait(false);
             return StateOf(file);
         }
-        if (length <= 0 || offset < 0 || offset > file.Size || length > file.Size - offset) throw new InboxException(400, LinkError.BadRequest);
+        if (length < 0 || (length == 0 && offset != file.Size) || offset < 0 || offset > file.Size || length > file.Size - offset) throw new InboxException(400, LinkError.BadRequest);
         if (length > Protocol.MaxChunkBytes) throw new InboxException(413, LinkError.TooLarge);
         if (_freeSpace(file.Directory) - length < Protocol.MinFreeBytes) throw new InboxException(507, LinkError.DiskFull);
 
@@ -181,6 +186,14 @@ public sealed class Inbox
         try
         {
             if (file.Done) return StateOf(file);
+            if (length == 0)
+            {
+                // A part that is full but never got through Complete: finish it.
+                long current = PartLength(file);
+                if (current != file.Size) throw new InboxException(409, LinkError.OffsetMismatch(current));
+                Complete(file, writer);
+                return StateOf(file);
+            }
             long end;
             try
             {
@@ -243,6 +256,29 @@ public sealed class Inbox
         foreach (var file in files) Discard(file);
     }
 
+    /// <summary>
+    /// Finishes a file whose part is already full but never got through <see cref="Complete"/> (it threw,
+    /// or the process ended first). Skipped while a chunk is being written.
+    /// </summary>
+    private void FinishIfFull(IncomingFile file)
+    {
+        if (file.Done || PartLength(file) != file.Size) return;
+        var writer = _writers.GetOrAdd(file.Id, _ => new Writer());
+        if (!writer.Gate.Wait(0)) return;
+        try
+        {
+            if (!file.Done) Complete(file, writer);
+        }
+        catch (InboxException)
+        {
+            // Answered by the next request; a hash mismatch has removed the file.
+        }
+        finally
+        {
+            writer.Gate.Release();
+        }
+    }
+
     private void Complete(IncomingFile file, Writer? writer)
     {
         string part = PartPath(file);
@@ -279,7 +315,8 @@ public sealed class Inbox
 
     private static string MoveIntoPlace(IncomingFile file, string part)
     {
-        // Another file may take the name between the check and the move.
+        // Another file may take the name between the check and the move, and a virus scanner
+        // may hold the part file for a moment.
         for (int attempt = 0; ; attempt++)
         {
             string path = Path.Combine(file.Directory, FileNames.Unique(file.Directory, file.Name));
@@ -288,8 +325,9 @@ public sealed class Inbox
                 File.Move(part, path);
                 return path;
             }
-            catch (IOException) when (File.Exists(path) && attempt < 20)
+            catch (IOException) when (attempt < 20)
             {
+                if (!File.Exists(path)) Thread.Sleep(100);
             }
         }
     }
@@ -392,6 +430,7 @@ public sealed class Inbox
             bool stale = file.Done ? now - (file.Finished ?? file.Started) > DoneKept : now - LastActivity(file) > PartKept;
             lock (_gate) _files[file.Id] = file;
             if (stale) Discard(file);
+            else FinishIfFull(file);
         }
     }
 
