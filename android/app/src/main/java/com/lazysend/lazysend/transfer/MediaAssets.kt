@@ -9,8 +9,8 @@ import android.provider.MediaStore
 data class Asset(val sourceId: String, val uri: Uri, val name: String, val size: Long, val mime: String, val modifiedMs: Long)
 
 /** The photos and videos this app may read, newest first. With partial access (Android 14) only the ones the user allowed show up. */
-class MediaAssets(private val context: Context) {
-    fun list(): List<Asset> {
+open class MediaAssets(private val context: Context) {
+    open fun list(): List<Asset> {
         val volumes = if (Build.VERSION.SDK_INT >= 29) MediaStore.getExternalVolumeNames(context) else setOf("external")
         return volumes.flatMap { volume ->
             query(volume, "image", MediaStore.Images.Media.getContentUri(volume)) +

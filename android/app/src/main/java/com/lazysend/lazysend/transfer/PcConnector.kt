@@ -73,8 +73,8 @@ class PcConnector(
         attempt(known)?.let { return it }
         if (forgotten) return Reach.Forgotten
         if (!search) return Reach.Unreachable
-        attempt(nsd?.find(pc.id, 2500).orEmpty())?.let { return it }
-        attempt(probeSubnets(pc.port))?.let { return it }
+        attempt(nsd?.find(pc.id, 2500).orEmpty().filter { '%' !in it })?.let { return it }
+        attempt(probeSubnets(pc.port).filter { '%' !in it })?.let { return it }
         return if (forgotten) Reach.Forgotten else Reach.Unreachable
     }
 

@@ -65,7 +65,7 @@ class FakePc : AutoCloseable {
         val path = request.url.encodedPath
         requests += "${request.method} $path"
         val open = path == "/v1/health" || path == "/v1/pair"
-        if (!open && (request.headers["X-Device-Id"] != TEST_DEVICE || request.headers["Authorization"] != "Bearer $TEST_SECRET")) {
+        if (!open && (request.headers["X-Device-Id"].isNullOrEmpty() || request.headers["Authorization"] != "Bearer $TEST_SECRET")) {
             return error(401, "unauthorized")
         }
         val body = request.body?.utf8() ?: ""

@@ -71,6 +71,11 @@ class Sender(
         } catch (e: LinkException) {
             timeline.update(entry.id) { it.copy(state = EntryState.Failed, detail = e.message.orEmpty()) }
             e.message
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            timeline.update(entry.id) { it.copy(state = EntryState.Failed, detail = e.message.orEmpty()) }
+            e.message ?: "Not sent."
         } finally {
             timeline.save()
         }
@@ -105,12 +110,11 @@ class Sender(
     }
 
     private suspend fun sendOne(pc: Pc, uri: Uri) {
-        val meta = withContext(Dispatchers.IO) { describe(uri) }
         val id = UUID.randomUUID().toString()
-        timeline.add(
-            TimelineEntry(id, clock(), Direction.Sent, EntryKind.File, pc.name, meta.name, state = EntryState.Active, totalBytes = meta.size, mime = meta.mime),
-        )
+        timeline.add(TimelineEntry(id, clock(), Direction.Sent, EntryKind.File, pc.name, uri.lastPathSegment ?: "file", state = EntryState.Active))
         try {
+            val meta = withContext(Dispatchers.IO) { describe(uri) }
+            timeline.update(id) { it.copy(title = meta.name, totalBytes = meta.size, mime = meta.mime) }
             val first = connector.connect(pc).reachedOrNull() ?: throw IOException("${pc.name} is not reachable.")
             val source = DataSource { offset -> open(uri, offset) }
             shown.value = SendProgress(meta.name, pc.name, 0, meta.size)
@@ -129,9 +133,8 @@ class Sender(
         } catch (e: CancellationException) {
             timeline.update(id) { it.copy(state = EntryState.Paused) }
             throw e
-        } catch (e: IOException) {
-            timeline.update(id) { it.copy(state = EntryState.Failed, detail = e.message.orEmpty()) }
-        } catch (e: LinkException) {
+        } catch (e: Exception) {
+            // A file that cannot be read, a PC that cannot be reached and a refusal all end this one file, not the app.
             timeline.update(id) { it.copy(state = EntryState.Failed, detail = e.message.orEmpty()) }
         } finally {
             timeline.save()
@@ -170,14 +173,25 @@ class Sender(
                 it.copy(state = EntryState.Active, detail = "", count = sentCount, totalCount = all.size, bytes = 0, totalBytes = totalBytes)
             }
             for (asset in todo) {
+                // Read before anything goes over the network: a photo deleted or no longer allowed is skipped, not retried.
+                val request = try {
+                    ItemRequest(
+                        "file", name = asset.name, size = asset.size, mime = asset.mime,
+                        modified = Instant.ofEpochMilli(asset.modifiedMs).toString(), sourceId = asset.sourceId,
+                        sha256 = withContext(Dispatchers.IO) { sha256Hex { offset -> open(asset.uri, offset) } },
+                    )
+                } catch (e: IOException) {
+                    null
+                } catch (e: SecurityException) {
+                    null
+                }
+                if (request == null) {
+                    failed++
+                    continue
+                }
                 var done = false
                 while (!done) {
                     try {
-                        val request = ItemRequest(
-                            "file", name = asset.name, size = asset.size, mime = asset.mime,
-                            modified = Instant.ofEpochMilli(asset.modifiedMs).toString(), sourceId = asset.sourceId,
-                            sha256 = withContext(Dispatchers.IO) { sha256Hex { offset -> open(asset.uri, offset) } },
-                        )
                         var lastReport = 0L
                         Uploader(refresher(pc, reached.client)).sendFile(request, { offset -> open(asset.uri, offset) }) { sent ->
                             val now = System.nanoTime()
@@ -212,6 +226,8 @@ class Sender(
         } catch (e: CancellationException) {
             timeline.update(id) { it.copy(state = EntryState.Paused, detail = "Stopped") }
             throw e
+        } catch (e: Exception) {
+            failGallery(id, e.message ?: "Could not read the photos.")
         } finally {
             timeline.save()
         }

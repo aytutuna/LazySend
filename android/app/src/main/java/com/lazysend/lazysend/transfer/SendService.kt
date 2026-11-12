@@ -74,6 +74,10 @@ class SendService : Service() {
         scope.launch {
             try {
                 block()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Sender reports its own failures in the timeline; nothing here may take the process down.
             } finally {
                 if (running.decrementAndGet() == 0) finish()
             }

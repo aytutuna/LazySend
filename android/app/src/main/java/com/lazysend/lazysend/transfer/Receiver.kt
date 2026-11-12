@@ -11,6 +11,7 @@ import com.lazysend.lazysend.link.LinkException
 import com.lazysend.lazysend.link.MAX_OUTBOX_WAIT
 import com.lazysend.lazysend.link.OutboxEntry
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlin.coroutines.coroutineContext
@@ -29,7 +30,18 @@ class Receiver(
         do {
             val reply = client.outbox(wait.coerceAtMost(MAX_OUTBOX_WAIT))
             for (item in reply.items) {
-                take(pc, client, item)
+                try {
+                    take(pc, client, item)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: IOException) {
+                    throw e
+                } catch (e: LinkException) {
+                    throw e
+                } catch (e: Exception) {
+                    // One item that cannot be stored must not stop the ones behind it.
+                    fail(pc, item, e.message)
+                }
                 client.acknowledge(item.id)
                 taken++
             }
@@ -50,8 +62,22 @@ class Receiver(
             } catch (e: IOException) {
                 connector.lost(pc.id)
                 delay(2000)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                delay(5000)
             }
         }
+    }
+
+    private fun fail(pc: Pc, item: OutboxEntry, reason: String?) {
+        val id = "in-${item.id}"
+        val entry = TimelineEntry(
+            id, clock(), Direction.Received, if (item.kind == "file") EntryKind.File else EntryKind.Text, pc.name,
+            item.name ?: item.text ?: item.url ?: "", state = EntryState.Failed, detail = reason.orEmpty(),
+        )
+        if (timeline.get(id) == null) timeline.add(entry) else timeline.update(id) { it.copy(state = EntryState.Failed, detail = reason.orEmpty()) }
+        timeline.save()
     }
 
     private suspend fun take(pc: Pc, client: LinkClient, item: OutboxEntry) {
