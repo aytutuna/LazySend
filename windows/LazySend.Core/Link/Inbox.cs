@@ -55,6 +55,9 @@ public sealed class Inbox
     private readonly Func<DateTimeOffset> _clock;
     private readonly object _gate = new();
     private readonly Dictionary<string, IncomingFile> _files = [];
+    /// <summary>The unfinished file of each (phone, source id), so a gallery sync of tens of thousands of photos does not scan every record.</summary>
+    private readonly Dictionary<(string Device, string Source), IncomingFile> _bySource = [];
+    private DateTimeOffset _lastPrune;
     private readonly ConcurrentDictionary<string, Writer> _writers = new();
 
     /// <param name="directory">Where the transfers' small state files go (<see cref="SendPaths.IncomingDirectory"/>).</param>
@@ -100,6 +103,7 @@ public sealed class Inbox
         if (request.SourceId is { } source && _index.Contains(device.Id, source)) return new ItemState("", size, true, Duplicate: true);
 
         var now = _clock();
+        PruneIfDue(now);
         // A phone can send any date; only plausible ones are kept (a file time outside this range cannot be set).
         DateTimeOffset? modified = request.Modified is { Year: >= 1980 and <= 2100 } m ? m : null;
         string folder = Path.Combine(_receiveRoot(), FileNames.Clean(device.Name, "Phone"));
@@ -125,9 +129,9 @@ public sealed class Inbox
         {
             if (request.SourceId is { } asset)
             {
-                existing = _files.Values.FirstOrDefault(f => f.DeviceId == device.Id && f.SourceId == asset && !f.Done && f.Size == size);
+                if (_bySource.TryGetValue((device.Id, asset), out var known) && !known.Done && known.Size == size) existing = known;
             }
-            if (existing is null) _files[file.Id] = file;
+            if (existing is null) Track(file);
         }
         if (existing is not null)
         {
@@ -335,7 +339,11 @@ public sealed class Inbox
         file.Path = path;
         file.Finished = _clock();
         bool removed;
-        lock (_gate) removed = !_files.ContainsKey(file.Id);
+        lock (_gate)
+        {
+            removed = !_files.ContainsKey(file.Id);
+            Untrack(file);
+        }
         // The phone was removed while the file was finishing: the file stays, nothing is announced or recorded.
         if (removed) return;
         BestEffort(() => Save(file));
@@ -387,9 +395,64 @@ public sealed class Inbox
     {
         // A part that cannot be deleted keeps its record, so a later cleanup finds it again.
         if (!TryDelete(PartPath(file))) return;
-        lock (_gate) _files.Remove(file.Id);
+        Forget(file);
         _writers.TryRemove(file.Id, out _);
         TryDelete(MetaPath(file.Id));
+    }
+
+    private void Track(IncomingFile file)
+    {
+        lock (_gate)
+        {
+            _files[file.Id] = file;
+            if (!file.Done && file.SourceId is { } source) _bySource[(file.DeviceId, source)] = file;
+        }
+    }
+
+    private void Forget(IncomingFile file)
+    {
+        lock (_gate)
+        {
+            _files.Remove(file.Id);
+            Untrack(file);
+        }
+    }
+
+    // With the gate held.
+    private void Untrack(IncomingFile file)
+    {
+        if (file.SourceId is { } source && _bySource.TryGetValue((file.DeviceId, source), out var current) && ReferenceEquals(current, file))
+        {
+            _bySource.Remove((file.DeviceId, source));
+        }
+    }
+
+    private static bool IsStale(IncomingFile file, DateTimeOffset now) =>
+        file.Done ? now - (file.Finished ?? file.Started) > DoneKept : now - LastActivity(file) > PartKept;
+
+    /// <summary>Drops finished records older than a day and parts nobody has touched for a week; at most once an hour.</summary>
+    private void PruneIfDue(DateTimeOffset now)
+    {
+        IncomingFile[] stale;
+        lock (_gate)
+        {
+            if (now - _lastPrune < TimeSpan.FromHours(1)) return;
+            _lastPrune = now;
+            stale = [.. _files.Values.Where(f => IsStale(f, now))];
+        }
+        foreach (var file in stale)
+        {
+            var writer = _writers.GetOrAdd(file.Id, _ => new Writer());
+            if (!writer.Gate.Wait(0)) continue;
+            try
+            {
+                Discard(file);
+            }
+            finally
+            {
+                writer.Gate.Release();
+            }
+        }
     }
 
     private static ItemState StateOf(IncomingFile file, long? offset = null)
@@ -485,6 +548,7 @@ public sealed class Inbox
     {
         if (!Directory.Exists(_directory)) return;
         var now = _clock();
+        _lastPrune = now;
         foreach (string path in Directory.EnumerateFiles(_directory, "*.json"))
         {
             var file = JsonFile.Load<IncomingFile>(path);
@@ -493,8 +557,8 @@ public sealed class Inbox
                 TryDelete(path);
                 continue;
             }
-            bool stale = file.Done ? now - (file.Finished ?? file.Started) > DoneKept : now - LastActivity(file) > PartKept;
-            lock (_gate) _files[file.Id] = file;
+            bool stale = IsStale(file, now);
+            Track(file);
             if (stale) Discard(file);
             else FinishIfFull(file);
         }

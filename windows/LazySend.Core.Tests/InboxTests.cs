@@ -159,3 +159,40 @@ public class InboxRaceTests
         Assert.Empty(h.Service.Inbox.InProgress);
     }
 }
+
+public class InboxPruneTests
+{
+    [Fact]
+    public async Task FinishedRecordsAreDroppedWhileRunning()
+    {
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+        var content = new byte[100];
+        var first = await phone.BeginFileAsync("a.bin", content);
+        using (var response = await phone.PutChunkAsync(first.Id, 0, content)) response.EnsureSuccessStatusCode();
+        Assert.True((await phone.GetStateAsync(first.Id)).Done);
+
+        h.Now += TimeSpan.FromDays(2);
+        await phone.BeginFileAsync("b.bin", content);
+
+        Assert.Null(h.Service.Inbox.State(phone.Id, first.Id));
+        Assert.Empty(Directory.GetFiles(h.Paths.IncomingDirectory).Where(p => p.Contains(first.Id)));
+    }
+
+    [Fact]
+    public async Task ManyGalleryStartsStayQuick()
+    {
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+        var device = h.Service.Devices.Devices.Single();
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
+        for (int i = 0; i < 3000; i++)
+        {
+            h.Service.Inbox.Begin(device, new ItemRequest(ItemKind.File, Name: $"{i}.jpg", Size: 10, SourceId: $"asset-{i}"));
+        }
+
+        Assert.Equal(3000, h.Service.Inbox.InProgress.Count);
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(60));
+    }
+}
