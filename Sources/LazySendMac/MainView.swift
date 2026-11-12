@@ -76,7 +76,7 @@ struct MainView: View {
                     .font(.body)
                     .scrollContentBackground(.hidden)
                     .padding(4)
-                    .frame(minHeight: 40, maxHeight: 140)
+                    .frame(height: 64)
                     .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
                 if compose.isEmpty {
