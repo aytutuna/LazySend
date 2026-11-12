@@ -1,0 +1,103 @@
+# The iPhone and iPad app's Xcode project, for XcodeGen. `xcodegen generate --spec ios/project.yml`
+# writes ios/LazySendiOS.xcodeproj, which is not checked in. The app target holds no logic: it starts
+# LazySendIOSApp from the package at the repository root (Sources/LazySendIOS).
+name: LazySendiOS
+
+options:
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+
+packages:
+  LazySend:
+    path: ..
+
+targets:
+  LazySendiOS:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: LazySendiOS
+        excludes:
+          - Info.plist
+          - LazySend.entitlements
+          - PrivacyInfo.xcprivacy
+      - path: LazySendiOS/PrivacyInfo.xcprivacy
+        buildPhase: resources
+    dependencies:
+      - package: LazySend
+        product: LazySendIOS
+      - target: LazySendShare
+    settings:
+      base:
+        PRODUCT_NAME: LazySend
+        PRODUCT_MODULE_NAME: LazySendiOS
+        PRODUCT_BUNDLE_IDENTIFIER: com.lazysend.lazysend
+        INFOPLIST_FILE: LazySendiOS/Info.plist
+        CODE_SIGN_ENTITLEMENTS: LazySendiOS/LazySend.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+
+  # The share sheet's Lazy Send.
+  LazySendShare:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: LazySendShare
+        excludes:
+          - Info.plist
+          - LazySendShare.entitlements
+    dependencies:
+      - package: LazySend
+        product: LazySendKit
+    settings:
+      base:
+        PRODUCT_NAME: LazySendShare
+        PRODUCT_BUNDLE_IDENTIFIER: com.lazysend.lazysend.share
+        INFOPLIST_FILE: LazySendShare/Info.plist
+        CODE_SIGN_ENTITLEMENTS: LazySendShare/LazySendShare.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: YES
+
+  LazySendiOSUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: LazySendiOSUITests
+    dependencies:
+      - target: LazySendiOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lazysend.lazysend.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        TEST_TARGET_NAME: LazySendiOS
+
+schemes:
+  LazySendiOS:
+    build:
+      targets:
+        LazySendiOS: all
+        LazySendiOSUITests: [test]
+    test:
+      targets:
+        - LazySendiOSUITests
+      gatherCoverageData: false

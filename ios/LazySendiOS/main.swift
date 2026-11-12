@@ -1,0 +1,3 @@
+import LazySendIOS
+
+LazySendIOSApp.main()
