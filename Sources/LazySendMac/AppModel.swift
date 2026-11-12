@@ -275,7 +275,7 @@ public final class AppModel: ObservableObject {
                     self.settleApproval(false)
                     self.approvalAnswer = continuation
                     self.approval = PairApproval(name: PairedDeviceStore.cleanName(request.phoneName), platform: request.platform)
-                    NSApp.activate(ignoringOtherApps: true)
+                    NSApplication.shared.activate(ignoringOtherApps: true)
                 }
             }
         } onCancel: {
