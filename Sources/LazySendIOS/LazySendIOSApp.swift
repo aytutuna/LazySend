@@ -40,6 +40,7 @@ public struct LazySendIOSApp: App {
                 }
                 task.expirationHandler = { work.cancel() }
             }
+            BackgroundGallery.register { made.pauseGallery() }
         }
     }
 

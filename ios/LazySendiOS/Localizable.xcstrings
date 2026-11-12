@@ -291,12 +291,82 @@
         }
       }
     },
-    "Sending a whole gallery is not available yet." : {
+    "Only the photos you allowed are sent." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sending a whole gallery is not available yet."
+            "value" : "Only the photos you allowed are sent."
+          }
+        }
+      }
+    },
+    "Allow all" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow all"
+          }
+        }
+      }
+    },
+    "Lazy Send needs access to your photos to send them." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lazy Send needs access to your photos to send them."
+          }
+        }
+      }
+    },
+    "Photos are not allowed." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Photos are not allowed."
+          }
+        }
+      }
+    },
+    "Looking for what is new" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Looking for what is new"
+          }
+        }
+      }
+    },
+    "Waiting for %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for %@"
+          }
+        }
+      }
+    },
+    "%lld could not be sent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld could not be sent"
+          }
+        }
+      }
+    },
+    "Sending photos and videos" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sending photos and videos"
           }
         }
       }

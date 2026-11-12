@@ -71,10 +71,32 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(model.queue.items().isEmpty)
     }
 
-    func testGallerySyncSaysItIsNotAvailableYet() throws {
+    func testGallerySyncWithoutPhotoAccessAddsNothingAndAsksForSettings() async throws {
         let (model, pc) = try pairedModel()
         model.startGallerySync(for: pc)
-        XCTAssertNotNil(model.galleryMessage)
+        await model.waitForGallery()
+        XCTAssertEqual(model.photoNotice, .denied)
+        XCTAssertNil(model.timeline.get("gallery-" + pc.id))
+        XCTAssertFalse(model.galleryRunning)
+        XCTAssertFalse(model.env.defaults.bool(forKey: Keys.galleryPending))
+    }
+
+    func testGallerySyncWithLimitedAccessStartsAndWaitsForTheUnreachablePc() async throws {
+        var env = AppEnvironment.temporary()
+        env.photos = PhotoSource(access: { .limited }, items: { [] })
+        let model = AppModel(env: env)
+        let pc = PairedPc(id: "office-pc-1", name: "Office PC", fingerprint: Base64Url.encode(Data(repeating: 3, count: 32)),
+                          addresses: [], port: 52734)
+        try model.store.put(pc, secret: "secret")
+        model.refreshPcs()
+        model.startGallerySync(for: pc)
+        await Task.yield()
+        XCTAssertTrue(model.galleryRunning)
+        model.stopGallery()
+        await model.waitForGallery()
+        XCTAssertEqual(model.photoNotice, .limited)
+        XCTAssertEqual(model.timeline.get("gallery-" + pc.id)?.state, .paused)
+        XCTAssertFalse(model.env.defaults.bool(forKey: Keys.galleryPending))
     }
 }
 #endif

@@ -49,6 +49,12 @@ private enum Sent {
     case failed
 }
 
+/// Why the photo library may not give the gallery sync everything.
+enum PhotoNotice: Equatable {
+    case limited
+    case denied
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     let env: AppEnvironment
@@ -61,8 +67,12 @@ final class AppModel: ObservableObject {
     @Published private(set) var selectedId: String?
     @Published private(set) var links: [String: LinkKind] = [:]
     @Published private(set) var savesToPhotos: Bool
-    @Published var galleryMessage: String?
+    @Published private(set) var photoNotice: PhotoNotice?
+    @Published private(set) var galleryRunning = false
 
+    private var galleryTask: Task<Void, Never>?
+    private var galleryRun = 0
+    private var gallerySaved = 0
     private var watchers: [String: Task<Void, Never>] = [:]
     private var collectors: [String: OutboxCollector] = [:]
     private var jobs: [Job] = []
@@ -119,6 +129,7 @@ final class AppModel: ObservableObject {
             watchers[id] = Task { await self.watch(id) }
         }
         drainShareQueue()
+        resumeGallery()
     }
 
     func stopWatching() {
@@ -231,7 +242,120 @@ final class AppModel: ObservableObject {
     }
 
     func startGallerySync(for pc: PairedPc) {
-        galleryMessage = String(localized: "Sending a whole gallery is not available yet.")
+        guard galleryTask == nil else { return }
+        galleryRunning = true
+        env.defaults.set(true, forKey: Keys.galleryPending)
+        beginGrace()
+        galleryTask = Task { await self.runGallery(pc) }
+    }
+
+    func stopGallery() {
+        env.defaults.set(false, forKey: Keys.galleryPending)
+        galleryTask?.cancel()
+    }
+
+    /// For the system ending a background task: the sync pauses and carries on when the app is opened again.
+    func pauseGallery() {
+        galleryTask?.cancel()
+    }
+
+    func waitForGallery() async {
+        await galleryTask?.value
+    }
+
+    private func resumeGallery() {
+        guard galleryTask == nil, let id = galleryToResume(timeline.entries, pending: env.defaults.bool(forKey: Keys.galleryPending)) else { return }
+        guard let pc = store.get(id) else {
+            env.defaults.set(false, forKey: Keys.galleryPending)
+            return
+        }
+        startGallerySync(for: pc)
+    }
+
+    private func runGallery(_ pc: PairedPc) async {
+        let id = TimelineEntry.galleryId(pc.id)
+        galleryRun += 1
+        let run = galleryRun
+        gallerySaved = 0
+        defer {
+            galleryTask = nil
+            galleryRunning = false
+            if env.background { UIApplication.shared.isIdleTimerDisabled = false }
+            endGrace()
+        }
+        switch await env.photos.access() {
+        case .denied:
+            photoNotice = .denied
+            env.defaults.set(false, forKey: Keys.galleryPending)
+            if timeline.get(id)?.state == .paused { finish(id, .failed, String(localized: "Photos are not allowed.")) }
+            return
+        case .limited:
+            photoNotice = .limited
+        case .allowed:
+            photoNotice = nil
+        }
+        if env.background { UIApplication.shared.isIdleTimerDisabled = true }
+        let previous = timeline.get(id)
+        timeline.add(TimelineEntry(id: id, direction: .sent, kind: .gallery, pcName: pc.name, title: String(localized: "Photos and videos"),
+                                   detail: String(localized: "Looking for what is new"), state: .active,
+                                   count: previous?.count ?? 0, totalCount: previous?.totalCount ?? 0))
+        BackgroundGallery.request(title: String(localized: "Sending photos and videos"), subtitle: pc.name)
+        let items = await env.photos.items()
+        let connector = self.connector
+        let sync = GallerySync(
+            items: items,
+            awaitReachable: { [weak self] in
+                guard let reached = try await connector.awaitReachable(pc.id) else { return nil }
+                await self?.noteLink(reached.link, for: pc.id)
+                return reached.client
+            },
+            reconnect: {
+                guard let again = await connector.connect(pc, search: false).reached else {
+                    throw LinkError.network(String(localized: "\(pc.name) is not reachable"))
+                }
+                return again.client
+            },
+            report: { [weak self] progress in
+                Task { @MainActor in self?.galleryProgress(progress, run: run, pc: pc) }
+            })
+        do {
+            let result = try await sync.run()
+            if result == .forgotten { lostPc(pc.id) }
+            timeline.update(id) { $0.finish(result, pcName: pc.name) }
+            timeline.save()
+            env.defaults.set(false, forKey: Keys.galleryPending)
+            if case .finished = result {
+                BackgroundGallery.finish(success: true)
+            } else {
+                BackgroundGallery.finish(success: false)
+            }
+        } catch {
+            if error is CancellationError || Task.isCancelled {
+                finish(id, .paused)
+            } else {
+                env.defaults.set(false, forKey: Keys.galleryPending)
+                finish(id, .failed, error.localizedDescription)
+            }
+            BackgroundGallery.finish(success: false)
+        }
+    }
+
+    private func noteLink(_ link: LinkKind, for pcId: String) {
+        links[pcId] = link
+    }
+
+    private func galleryProgress(_ progress: GalleryProgress, run: Int, pc: PairedPc) {
+        guard run == galleryRun, galleryTask != nil else { return }
+        let link = links[pc.id]
+        timeline.update(TimelineEntry.galleryId(pc.id)) { $0.apply(progress, pcName: pc.name, link: link) }
+        if progress.count != gallerySaved, progress.count % 20 == 0 {
+            gallerySaved = progress.count
+            timeline.save()
+        }
+        if let entry = timeline.get(TimelineEntry.galleryId(pc.id)) {
+            BackgroundGallery.update(title: String(localized: "Sending photos and videos"), subtitle: entry.progressLine,
+                                     completed: progress.bytes, total: progress.totalBytes)
+        }
     }
 
     func stopSending() {
@@ -267,13 +391,16 @@ final class AppModel: ObservableObject {
         grace = UIApplication.shared.beginBackgroundTask(withName: "send") { [weak self] in
             MainActor.assumeIsolated {
                 self?.pump?.cancel()
-                self?.endGrace()
+                // A continued processing task is given its own time, so the gallery only stops with that one.
+                if !BackgroundGallery.isRunning { self?.galleryTask?.cancel() }
+                self?.endGrace(force: true)
             }
         }
     }
 
-    private func endGrace() {
-        guard grace != .invalid else { return }
+    // Shared by the send queue and the gallery sync: it ends when both are done, or when the system says time is up.
+    private func endGrace(force: Bool = false) {
+        guard grace != .invalid, force || (pump == nil && galleryTask == nil) else { return }
         UIApplication.shared.endBackgroundTask(grace)
         grace = .invalid
     }
@@ -469,7 +596,7 @@ final class AppModel: ObservableObject {
             TimelineEntry(id: "demo-5", time: now.addingTimeInterval(-1800), direction: .received, kind: .text, pcName: pc.name,
                           title: "The door code is 4821", state: .done),
             TimelineEntry(id: "demo-6", time: now.addingTimeInterval(-600), direction: .sent, kind: .gallery, pcName: pc.name,
-                          title: String(localized: "Photos and videos"), state: .active, bytes: 1_300_000_000,
+                          title: String(localized: "Photos and videos"), detail: LinkKind.wifi.label, state: .active, bytes: 1_300_000_000,
                           totalBytes: 3_900_000_000, count: 128, totalCount: 412),
         ]
         for entry in entries { timeline.add(entry) }

@@ -32,6 +32,16 @@ final class ScreenshotTests: XCTestCase {
     }
 
     @MainActor
+    func testGalleryInProgress() {
+        let app = XCUIApplication.launched(demo: true)
+        let progress = app.item("entry.gallery")
+        XCTAssertTrue(progress.waitForExistence(timeout: 30))
+        XCTAssertTrue(progress.label.hasPrefix("128 of 412"))
+        XCTAssertTrue(app.item("entry.gallery.stop").exists)
+        attach(app, as: "05-gallery")
+    }
+
+    @MainActor
     func testPairScreenWithoutCamera() {
         let app = XCUIApplication.launched()
         let pair = app.item("empty.pair")

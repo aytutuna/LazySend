@@ -2,6 +2,7 @@
 import LazySendKit
 import PhotosUI
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 struct SendView: View {
@@ -44,9 +45,17 @@ struct SendView: View {
                 }
                 .accessibilityIdentifier("send.photos")
                 Button("All photos and videos") { model.startGallerySync(for: pc) }
+                    .disabled(model.galleryRunning)
                     .accessibilityIdentifier("send.gallery")
-                if let message = model.galleryMessage {
-                    Text(message).foregroundStyle(.secondary)
+                if model.photoNotice == .limited {
+                    Text("Only the photos you allowed are sent.").foregroundStyle(.secondary)
+                    Button("Allow all") { openSettings() }
+                        .accessibilityIdentifier("send.photoSettings")
+                }
+                if model.photoNotice == .denied {
+                    Text("Lazy Send needs access to your photos to send them.").foregroundStyle(.secondary)
+                    Button("Open Settings") { openSettings() }
+                        .accessibilityIdentifier("send.photoSettings")
                 }
             }
         }
@@ -66,6 +75,11 @@ struct SendView: View {
                 model.sendFiles(urls, to: pc)
             }
         }
+    }
+
+    private func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url, options: [:], completionHandler: nil)
     }
 
     private func sendText(to pc: PairedPc) {

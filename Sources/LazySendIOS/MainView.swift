@@ -136,7 +136,11 @@ private struct EntryRow: View {
         case .active:
             if entry.kind == .gallery {
                 ProgressView(value: Double(entry.count), total: Double(max(entry.totalCount, 1)))
-                Text(verbatim: galleryLine).font(.caption)
+                Text(verbatim: entry.progressLine).font(.caption)
+                    .accessibilityIdentifier("entry.gallery")
+                if !entry.detail.isEmpty {
+                    Text(verbatim: entry.detail).font(.caption).foregroundStyle(.secondary)
+                }
             } else if entry.kind == .file {
                 ProgressView(value: Double(entry.bytes), total: Double(max(entry.totalBytes, 1)))
                 Text(verbatim: String(localized: "\(formatBytes(entry.bytes)) of \(formatBytes(entry.totalBytes))")).font(.caption)
@@ -150,12 +154,11 @@ private struct EntryRow: View {
         case .done:
             if entry.kind == .gallery {
                 Text(verbatim: String(localized: "\(entry.count) sent")).font(.caption)
+                if !entry.detail.isEmpty {
+                    Text(verbatim: entry.detail).font(.caption).foregroundStyle(.secondary)
+                }
             }
         }
-    }
-
-    private var galleryLine: String {
-        String(localized: "\(entry.count) of \(entry.totalCount) · \(formatBytes(entry.bytes)) of \(formatBytes(entry.totalBytes))")
     }
 
     private var failedLine: String {
@@ -176,6 +179,10 @@ private struct EntryRow: View {
             }
             if entry.kind == .file, sent, entry.state == .active {
                 Button("Stop") { model.stopSending() }
+            }
+            if entry.kind == .gallery, entry.state == .active {
+                Button("Stop") { model.stopGallery() }
+                    .accessibilityIdentifier("entry.gallery.stop")
             }
         }
         .buttonStyle(.borderless)

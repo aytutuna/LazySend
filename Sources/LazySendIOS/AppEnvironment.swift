@@ -8,6 +8,7 @@ enum Keys {
     static let photos = "savePhotos"
     static let selected = "selectedPc"
     static let check = "com.lazysend.lazysend.check"
+    static let galleryPending = "gallerySyncPending"
 }
 
 struct Notifier: Sendable {
@@ -43,6 +44,7 @@ struct AppEnvironment {
     var discovery: Discovery
     var defaults: UserDefaults
     var notifier: Notifier
+    var photos: PhotoSource
     var phoneName: String
     var appVersion: String
     var background: Bool
@@ -63,6 +65,7 @@ struct AppEnvironment {
             discovery: .live,
             defaults: .standard,
             notifier: .live,
+            photos: .live,
             phoneName: UIDevice.current.name,
             appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0",
             background: true,
@@ -81,6 +84,7 @@ struct AppEnvironment {
             discovery: quiet,
             defaults: UserDefaults(suiteName: "lazysend.tests." + UUID().uuidString) ?? .standard,
             notifier: notifier,
+            photos: .none,
             phoneName: "Test phone",
             appVersion: "1.0",
             background: false,

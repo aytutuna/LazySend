@@ -49,6 +49,15 @@ public struct GalleryProgress: Equatable, Sendable {
     public var bytes: Int64
     public var totalBytes: Int64
     public var failed: Int
+
+    public init(phase: Phase, count: Int, totalCount: Int, bytes: Int64, totalBytes: Int64, failed: Int) {
+        self.phase = phase
+        self.count = count
+        self.totalCount = totalCount
+        self.bytes = bytes
+        self.totalBytes = totalBytes
+        self.failed = failed
+    }
 }
 
 public enum GalleryResult: Equatable, Sendable {
