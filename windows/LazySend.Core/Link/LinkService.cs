@@ -71,8 +71,19 @@ public sealed class LinkService : IAsyncDisposable
     {
         if (!Server.IsRunning) throw new InvalidOperationException("The server is not running.");
         _pairing?.Close();
-        var session = new PairingSession(_clock());
-        _pairing = session;
+        _pairing = new PairingSession(_clock());
+        return CodeFor(_pairing, addresses);
+    }
+
+    /// <summary>
+    /// The code of the pairing session that is open, with the computer's addresses as they are now (a USB
+    /// tether that appeared since gives a new code with the same token); null when no session is open.
+    /// </summary>
+    public PairingUri? PairingCode(IReadOnlyList<string>? addresses = null) =>
+        Pairing is { } session ? CodeFor(session, addresses) : null;
+
+    private PairingUri CodeFor(PairingSession session, IReadOnlyList<string>? addresses)
+    {
         string name = PairedDeviceStore.CleanName(Router.DesktopName());
         return new PairingUri(Devices.DesktopId, name.Length > 0 ? name : "Computer", SpkiFingerprint.Text(Fingerprint),
                               addresses ?? LocalNetworks.PairingAddresses(), Server.Port, session.Token);

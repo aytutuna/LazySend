@@ -332,3 +332,48 @@ public class SharedAddressTests
         Assert.False(new LocalSubnet(IPAddress.Parse("192.168.1.9"), 24).Contains(peer));
     }
 }
+
+public class FirewallTests
+{
+    private const string App = @"C:\Apps\LazySend.exe";
+
+    private static FirewallRule Rule(bool allow, string ports = "*", string path = App, FirewallProfiles profiles = FirewallProfiles.All, int protocol = Firewall.ProtocolTcp) =>
+        new("Lazy Send", path, true, allow, true, profiles, protocol, ports);
+
+    [Fact]
+    public void VerdictFollowsTheRules()
+    {
+        Assert.Equal(FirewallVerdict.Off, Firewall.Evaluate([], App, FirewallProfiles.Private, false, 52734));
+        Assert.Equal(FirewallVerdict.WillAsk, Firewall.Evaluate([], App, FirewallProfiles.Private, true, 52734));
+        Assert.Equal(FirewallVerdict.Allowed, Firewall.Evaluate([Rule(true)], App, FirewallProfiles.Private, true, 52734));
+        Assert.Equal(FirewallVerdict.Blocked, Firewall.Evaluate([Rule(true), Rule(false)], App, FirewallProfiles.Private, true, 52734));
+        Assert.Equal(FirewallVerdict.WillAsk, Firewall.Evaluate([Rule(true, path: @"C:\Other.exe")], App, FirewallProfiles.Private, true, 52734));
+        Assert.Equal(FirewallVerdict.WillAsk, Firewall.Evaluate([Rule(true, profiles: FirewallProfiles.Public)], App, FirewallProfiles.Private, true, 52734));
+        Assert.Equal(FirewallVerdict.WillAsk, Firewall.Evaluate([Rule(true, protocol: 17)], App, FirewallProfiles.Private, true, 52734));
+    }
+
+    [Theory]
+    [InlineData("*", true)]
+    [InlineData("", true)]
+    [InlineData("52734", true)]
+    [InlineData("80,52700-52800", true)]
+    [InlineData("80,443", false)]
+    public void PortsAreMatchedInListsAndRanges(string ports, bool expected) => Assert.Equal(expected, Firewall.PortMatches(ports, 52734));
+}
+
+public class PairingCodeTests
+{
+    [Fact]
+    public async Task CodeKeepsItsTokenWhenAddressesChange()
+    {
+        await using var h = new Harness();
+        var first = h.Service.OpenPairing(["192.168.1.5"]);
+
+        var later = h.Service.PairingCode(["192.168.1.5", "172.20.10.2"]);
+
+        Assert.Equal(first.Token, later!.Token);
+        Assert.Equal(["192.168.1.5", "172.20.10.2"], later.Addresses);
+        h.Service.ClosePairing();
+        Assert.Null(h.Service.PairingCode());
+    }
+}

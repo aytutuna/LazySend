@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LazySend.Core", "LazySend.C
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LazySend.Core.Tests", "LazySend.Core.Tests\LazySend.Core.Tests.csproj", "{1A89C13F-20C5-476F-9BC1-912088D3D3A1}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LazySend.App", "LazySend.App\LazySend.App.csproj", "{2A54D2FC-9358-4AEC-A477-B0BA81440C38}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -41,6 +43,18 @@ Global
 		{1A89C13F-20C5-476F-9BC1-912088D3D3A1}.Release|x64.Build.0 = Release|Any CPU
 		{1A89C13F-20C5-476F-9BC1-912088D3D3A1}.Release|x86.ActiveCfg = Release|Any CPU
 		{1A89C13F-20C5-476F-9BC1-912088D3D3A1}.Release|x86.Build.0 = Release|Any CPU
+		{2A54D2FC-9358-4AEC-A477-B0BA81440C38}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2A54D2FC-9358-4AEC-A477-B0BA81440C38}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2A54D2FC-9358-4AEC-A477-B0BA81440C38}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{2A54D2FC-9358-4AEC-A477-B0BA81440C38}.Debug|x64.Build.0 = Debug|Any CPU
+		{2A54D2FC-9358-4AEC-A477-B0BA81440C38}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{2A54D2FC-9358-4AEC-A477-B0BA81440C38}.Debug|x86.Build.0 = Debug|Any CPU
+		{2A54D2FC-9358-4AEC-A477-B0BA81440C38}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2A54D2FC-9358-4AEC-A477-B0BA81440C38}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2A54D2FC-9358-4AEC-A477-B0BA81440C38}.Release|x64.ActiveCfg = Release|Any CPU
+		{2A54D2FC-9358-4AEC-A477-B0BA81440C38}.Release|x64.Build.0 = Release|Any CPU
+		{2A54D2FC-9358-4AEC-A477-B0BA81440C38}.Release|x86.ActiveCfg = Release|Any CPU
+		{2A54D2FC-9358-4AEC-A477-B0BA81440C38}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
