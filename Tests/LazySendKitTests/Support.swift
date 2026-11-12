@@ -5,6 +5,7 @@ final class MemorySecrets: SecretStore, @unchecked Sendable {
     private let lock = NSLock()
     private var items: [String: Data] = [:]
     var failsSaves = false
+    var failsLoads = false
 
     func save(_ data: Data, for key: String) throws {
         if failsSaves { throw CocoaError(.fileWriteUnknown) }
@@ -14,6 +15,7 @@ final class MemorySecrets: SecretStore, @unchecked Sendable {
     }
 
     func load(for key: String) throws -> Data? {
+        if failsLoads { throw CocoaError(.fileReadUnknown) }
         lock.lock()
         defer { lock.unlock() }
         return items[key]

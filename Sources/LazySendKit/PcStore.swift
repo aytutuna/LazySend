@@ -37,7 +37,8 @@ public final class PcStore: @unchecked Sendable {
     private let repairs: Bool
     private let lock = NSLock()
     private var list: [PairedPc]
-    private var phone: String
+    private var phone = ""
+    private var settled = false
 
     /// A store that `repairs` rewrites an unreadable state with a new phone id; one that does not (the share
     /// extension's) only reads, so a Keychain it cannot reach never costs the app its pairings.
@@ -46,40 +47,67 @@ public final class PcStore: @unchecked Sendable {
         self.secrets = secrets
         self.repairs = repairs
         let saved = (try? Data(contentsOf: file)).flatMap { try? JSONDecoder().decode(Saved.self, from: $0) }
-        var pcs = saved?.pcs ?? []
-        let stored = (try? secrets.load(for: PcStore.phoneKey)).flatMap { String(data: $0, encoding: .utf8) }
-        let unreadable = pcs.contains { (try? secrets.load(for: $0.id)) == nil } || (stored == nil && !pcs.isEmpty)
+        list = saved?.pcs ?? []
+        lock.lock()
+        settle()
+        lock.unlock()
+    }
+
+    // Decides what the Keychain says about the saved state, with the lock held. A Keychain that throws (it is
+    // locked until the first unlock after a restart) says nothing, so it is asked again on the next use.
+    private func settle() {
+        guard !settled else { return }
+        var unreadable = false
+        let stored: String?
+        do {
+            stored = try secrets.load(for: PcStore.phoneKey).flatMap { String(data: $0, encoding: .utf8) }
+            unreadable = stored == nil && !list.isEmpty
+            for pc in list {
+                if try secrets.load(for: pc.id) == nil { unreadable = true }
+            }
+        } catch {
+            return
+        }
         // A secret that cannot be opened means the file came from another phone or the Keychain was reset. Starting
         // over with a new id keeps this phone from sharing a gallery index on the computer with the one before.
         if unreadable {
-            if repairs { pcs.forEach { try? secrets.delete(for: $0.id) } }
-            pcs = []
+            if repairs { list.forEach { try? secrets.delete(for: $0.id) } }
+            list = []
         }
-        list = pcs
         if let stored = stored, !unreadable {
             phone = stored
         } else {
             phone = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
             if repairs {
                 try? secrets.save(Data(phone.utf8), for: PcStore.phoneKey)
-                save()
+                write(list)
             }
         }
+        settled = true
     }
 
     private struct Saved: Codable {
         var pcs: [PairedPc]
     }
 
+    public var secretsAvailable: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        settle()
+        return settled
+    }
+
     public var phoneId: String {
         lock.lock()
         defer { lock.unlock() }
+        settle()
         return phone
     }
 
     public var pcs: [PairedPc] {
         lock.lock()
         defer { lock.unlock() }
+        settle()
         return list
     }
 
@@ -88,12 +116,14 @@ public final class PcStore: @unchecked Sendable {
     }
 
     public func secret(for id: String) -> String? {
-        (try? secrets.load(for: id)).flatMap { String(data: $0, encoding: .utf8) }
+        guard secretsAvailable else { return nil }
+        return (try? secrets.load(for: id)).flatMap { String(data: $0, encoding: .utf8) }
     }
 
     /// Pairing again with the same computer replaces its entry. The secret is written first, so a computer is
     /// listed only once its secret is kept; when the write fails nothing is recorded and the error is thrown.
     public func put(_ pc: PairedPc, secret: String) throws {
+        guard secretsAvailable else { throw CocoaError(.fileReadUnknown) }
         try secrets.save(Data(secret.utf8), for: pc.id)
         lock.lock()
         list = list.filter { $0.id != pc.id } + [pc]
@@ -119,11 +149,14 @@ public final class PcStore: @unchecked Sendable {
     }
 
     private func save() {
-        guard repairs else { return }
         lock.lock()
-        let data = try? JSONEncoder().encode(Saved(pcs: list))
+        let current = list
         lock.unlock()
-        guard let data = data else { return }
+        write(current)
+    }
+
+    private func write(_ pcs: [PairedPc]) {
+        guard repairs, let data = try? JSONEncoder().encode(Saved(pcs: pcs)) else { return }
         try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: file, options: .atomic)
     }
