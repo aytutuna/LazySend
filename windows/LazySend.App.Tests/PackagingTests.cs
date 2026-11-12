@@ -31,4 +31,14 @@ public sealed class PackagingTests
             Packaging.IsPackaged = false;
         }
     }
+
+    [Fact]
+    public void APackageRuleIsRecognisedByThePackagesNameAndPublisher()
+    {
+        string[] tokens = ["Aytu.LazySend", "sz3y6cn7106ae"];
+
+        Assert.True(FirewallReader.IsPackageRule("@{Aytu.LazySend_1.0.2.0_x64__sz3y6cn7106ae?ms-resource://x} ", tokens));
+        Assert.False(FirewallReader.IsPackageRule("@{Aytu.LazyPrint_1.0.0.0_x64__sz3y6cn7106ae?x}", tokens));
+        Assert.False(FirewallReader.IsPackageRule("Aytu.LazySend", null));
+    }
 }

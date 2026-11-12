@@ -82,7 +82,7 @@ public sealed partial class AppModel : IDisposable
         ReadFirewall();
     }
 
-    public void ReadFirewall() => Task.Run(() => FirewallReader.Read(Environment.ProcessPath ?? "")).ContinueWith(read =>
+    public void ReadFirewall() => Task.Run(() => FirewallReader.Read(Environment.ProcessPath ?? "", Packaging.FirewallTokens)).ContinueWith(read =>
     {
         Firewall = read.Result;
         StatusChanged?.Invoke(this, EventArgs.Empty);

@@ -36,6 +36,9 @@ internal static class Packaging
         }
     }
 
+    /// <summary>What a firewall rule of this package has in its name: the package name and publisher id; null when unpackaged.</summary>
+    internal static IReadOnlyList<string>? FirewallTokens => IsPackaged ? [Package.Current.Id.Name, Package.Current.Id.PublisherId] : null;
+
     private static bool Query()
     {
         int length = 0;
