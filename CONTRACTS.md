@@ -1,6 +1,6 @@
 # Lazy Send contracts
 
-Lazy Send moves text, links, files and whole photo galleries between a computer and a phone, in both directions. This file is the protocol and the rules both sides keep. The Windows core is C# in `windows/LazySend.Core/Link`; the Android app (`android/`), the iPhone app (`ios/` and the Swift package at the root), the Windows app and the Mac app (`mac/`, with the server in `Sources/LazySendServer`) follow this file.
+Lazy Send moves text, links, files and whole photo galleries between a computer and a phone, in both directions, and between two computers. This file is the protocol and the rules both sides keep. The Windows core is C# in `windows/LazySend.Core/Link`; the Android app (`android/`), the iPhone app (`ios/` and the Swift package at the root), the Windows app and the Mac app (`mac/`, with the server in `Sources/LazySendServer`) follow this file.
 
 The phone link is Lazy Print's (its CONTRACTS.md, "The phone link"), copied and changed: the same TLS server, pinning, pairing and limits, with the print package and the sync folder left out and uploads, a gallery index and a computer-to-phone outbox added. The apps do not share pairings, ports or files with any other Lazy app.
 
@@ -12,10 +12,11 @@ The phone link is Lazy Print's (its CONTRACTS.md, "The phone link"), copied and 
 | Namespace (Windows core) | `LazySend.Core` |
 | Protocol version | 1, in the pairing code and every hello, health and pair answer |
 | Pairing code | `lazysend://pair?v=1&id=&n=&fp=&a=&p=&t=` |
-| DNS-SD service | `_lazysend._tcp`, TXT keys `v` (protocol version) and `id` (the computer's id) |
+| Short code | 8 characters of Crockford base32, shown `XXXX-XXXX` (see Short code) |
+| DNS-SD service | `_lazysend._tcp`, TXT keys `v` (protocol version), `id` (the computer's id) and `n` (its name, at most 64 UTF-8 bytes; left out when empty) |
 | Port | 52734 first (Lazy Scan 52731, Lazy Print 52732, Lazy PDF 52733), any free port when taken |
 | `service` in health answers | `lazysend` |
-| Settings | `%APPDATA%\Lazy Send\devices.json`, `settings.json` |
+| Settings | `%APPDATA%\Lazy Send\devices.json`, `hosts.json`, `settings.json` |
 | State | `%LOCALAPPDATA%\Lazy Send\` (see Storage) |
 | Mac | `~/Library/Application Support/Lazy Send/` (see Storage on the Mac) |
 
@@ -23,7 +24,7 @@ Ids (a computer's, a phone's, an item's) are 8 to 64 characters from letters, di
 
 ## Pairing
 
-The computer is the server and the phone is the client, always: the phone opens every connection, and the computer never connects out. The connection is HTTP/1.1 over TLS 1.2 or 1.3 with the computer's own certificate, self-signed ECDSA P-256. The phone does not trust a certificate authority; it trusts the one key whose fingerprint came in the pairing code, the SHA-256 of the certificate's SubjectPublicKeyInfo (so a renewed certificate on the same key keeps every pin).
+The host is the server and the guest is the client: the guest opens every connection, and the host never connects out. A computer is a host, and a Windows computer is also a guest of other computers (see The Windows app as a guest); a phone is a guest only. Below, "the computer" is the host and "the phone" the guest unless a guest that is a computer is meant. The connection is HTTP/1.1 over TLS 1.2 or 1.3 with the host's own certificate, self-signed ECDSA P-256. The guest does not trust a certificate authority; it trusts the one key whose fingerprint came in the pairing code, the SHA-256 of the certificate's SubjectPublicKeyInfo (so a renewed certificate on the same key keeps every pin).
 
 The code the computer shows as a QR is the URI above. `v` is the protocol version, `id` the computer's id, `n` its name, `fp` the fingerprint as base64url without padding (43 characters), `a` a comma-separated list of its addresses (each percent-encoded, at most 8, IPv4 first), `p` the port and `t` the pairing token, base64url of 16 random bytes. Values are percent-encoded UTF-8; unknown parameters are ignored so later versions can add some. A code with a higher `v` than the app speaks is refused with a message to update.
 
@@ -37,7 +38,18 @@ The server listens on every interface, IPv4 and IPv6, on one port. It answers on
 4. On approval the computer makes a 32-byte secret for the phone, stores only its SHA-256, and answers with the secret once. The phone counts as paired only once the answer has been written to it; when the write fails the phone is forgotten again.
 5. Every later request carries `X-Device-Id: <phone id>` and `Authorization: Bearer <secret>` (the secret as base64url). A wrong id or secret gets 401 and counts as a failure.
 
-Tokens are compared in constant time. Five wrong tokens from one address refuse that address for the rest of the session and 25 from all addresses together close the session. A closed, used or expired session answers `pairingClosed`. At most 16 phones can be paired; the answer for a 17th is 409 `tooManyDevices`. Pairing again with the same phone id replaces its entry and secret. Pairings are not shared with the other Lazy apps.
+Tokens are compared in constant time. Five wrong tokens from one address refuse that address for the rest of the session and 25 from all addresses together close the session (a wrong short code counts as a wrong token). A closed, used or expired session answers `pairingClosed`. At most 16 phones can be paired; the answer for a 17th is 409 `tooManyDevices`. Pairing again with the same phone id replaces its entry and secret. Pairings are not shared with the other Lazy apps.
+
+### Short code
+
+A session also has a short code for a guest that cannot scan: 8 characters from `0123456789ABCDEFGHJKMNPQRSTVWXYZ` (Crockford base32, no I, L, O or U), shown as `XXXX-XXXX`. `POST /v1/pair` takes it as `token` in place of the 22-character token. Case, dashes and spaces are ignored, and it is compared in constant time. It belongs to the same session, so either one uses the session up, and it works within the same 5 minutes and under the same limits on wrong tokens, which is what makes 40 bits enough.
+
+A guest that typed the short code has no fingerprint yet. It asks `GET /v1/health` at the host's addresses in turn, takes the fingerprint of the certificate it meets and pins the pairing request to it. To make a man in the middle visible, both screens show a match code that the user compares before allowing:
+
+- Paired from a QR code or a pasted link, the guest holds the fingerprint already, and both screens show the check code phones show: the first four bytes of the fingerprint as a big-endian number modulo one million, six digits with leading zeros.
+- Paired by short code, the same six digits are taken from SHA-256 over the 32 fingerprint bytes followed by the 8 canonical characters of the short code. The certificate is chosen before the code is known, so a man in the middle cannot grind a key until the plain check code of the real certificate comes out, as it could if the digits came from the fingerprint alone.
+
+The host works out which one applies from the shape of `token` (22 characters of base64url, or 8 of the alphabet), so existing phones, which only send tokens, see no change.
 
 ## Routes
 
@@ -57,7 +69,7 @@ Requests and answers are JSON (`application/json; charset=utf-8`) unless said ot
 | `GET /v1/outbox/{id}/data` | optional `Range: bytes=<n>-` | 200 or 206 with the file's bytes |
 | `DELETE /v1/outbox/{id}` | | 204 |
 
-### Phone to computer
+### Guest to host
 
 `POST /v1/items` takes `{kind: "text"|"link"|"file", text?, url?, name?, size?, mime?, modified?, sourceId?, sha256?}`.
 
@@ -79,7 +91,7 @@ Requests and answers are JSON (`application/json; charset=utf-8`) unless said ot
 
 A refused chunk or item request's unread body is dropped up to 1 MiB before the connection closes; a phone that sends larger chunks blindly may see the connection reset instead of the answer, and then asks `GET /v1/items/{id}`. Sending `Expect: 100-continue` avoids it.
 
-### Computer to phone
+### Host to guest
 
 The computer queues items per phone: text, a link, or a file reference with name, size and optional mime. The file stays where it is on the computer and is read when downloaded. At most 1000 items wait per phone, and the queue is kept on disk, so it survives a restart of the app.
 
@@ -122,6 +134,7 @@ Names come from the phone and are made safe: path separators, characters Windows
 | Path | Holds |
 | --- | --- |
 | `%APPDATA%\Lazy Send\devices.json` | The computer's id and the paired phones: id, name, platform, app version, the SHA-256 of the secret, paired and last-seen times. The secret itself is never stored |
+| `%APPDATA%\Lazy Send\hosts.json` | The computers this one is a guest of: id, name, fingerprint, addresses, port, the address that answered last, and the secret as DPAPI protected it for the current Windows user (a guest has to present the secret, so unlike devices.json it cannot be a hash) |
 | `%APPDATA%\Lazy Send\settings.json` | The receive folder |
 | `%LOCALAPPDATA%\Lazy Send\history.json` | Received texts and links, newest first, at most 500 entries and 16 MiB of text |
 | `%LOCALAPPDATA%\Lazy Send\incoming\<id>.json` | One record per file being received, or finished within the last day |
@@ -161,6 +174,14 @@ An item is added to the index once its file is in place, so Stop, a failed item 
 The core runs without a screen. The app adds the certificate (made once with `SelfSignedCertificate.Create` and kept under the user's account), the DNS-SD advertisement for `_lazysend._tcp` with the TXT keys above, the approval prompt (`LinkRouter.ApprovePairing`), the QR code, the firewall rule check and the windows. It starts the server while a phone is paired or a code is shown, and refreshes the addresses in the code when the network changes.
 
 The Store build keeps its certificate and its pairings per package, apart from the direct build's, so moving between the two builds or reinstalling means pairing phones again.
+
+## The Windows app as a guest
+
+A Windows computer pairs with another computer (a Mac or another Windows PC) as a phone does, with `platform` `windows`, its own computer id as `phoneId` and its name as `phoneName`; the wire names stay as they are. Connect to a computer browses `_lazysend._tcp` and lists what answers by its `n` (the instance name when a host sends none), leaving out its own `id`. The user picks one and types the short code, or pastes a pairing link, and sees the match code while the host's user answers.
+
+The app tries a host's addresses in turn, the one that answered last first, and checks each with `hello` over TLS pinned to the host's key. The addresses in `hello` replace the kept ones, and when none answers the ones the host announces on the network are tried. A host that answers 401 has forgotten this computer and is dropped here.
+
+While the app runs it keeps `GET /v1/outbox?wait=25` open for each host and takes the items as a phone does. Texts and links go into the received history under the item's own id, so a repeat is noticed. A file is written as `<id>.part` in `<receive root>\<host name>\`, continued with `Range` after a drop, renamed when whole, given the `Zone.Identifier` stream, and then acknowledged. A host out of reach is tried again after 5 seconds, then at doubling gaps up to 60. What this computer sends goes up through the same routes a phone uses, files in 4 MiB chunks, continuing from the offset the host gives after a drop.
 
 ## Hand-off from other apps (Windows and Mac)
 
