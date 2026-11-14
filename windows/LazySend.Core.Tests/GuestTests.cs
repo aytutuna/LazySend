@@ -736,6 +736,15 @@ public class GuestReceiveTests
         Assert.False(guest.Service.Received.Contains(host.Id, "asset-6"));
     }
 
+    [Theory]
+    [InlineData(unchecked((int)0x80070070), true)]
+    [InlineData(unchecked((int)0x80070027), true)]
+    [InlineData(unchecked((int)0x80070020), false)]
+    public void OnlyAFullDiskIsToldApart(int hresult, bool full)
+    {
+        Assert.Equal(full, HostReceiver.IsDiskFull(new IOException("x", hresult)));
+    }
+
     [Fact]
     public async Task FileWithAnUnusableSourceIdIsAnOrdinaryFile()
     {

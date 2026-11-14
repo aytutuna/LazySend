@@ -18,6 +18,7 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
     private readonly Queue<string> _finishedOrder = new();
     private readonly HashSet<string> _finished = [];
     private bool _storageReported;
+    private bool _fullReported;
 
     public event EventHandler<ReceivedItem>? TextReceived;
     public event EventHandler<ReceivedFile>? FileReceived;
@@ -167,6 +168,10 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
                 {
                     await output.WriteAsync(buffer.AsMemory(0, read), cancellation).ConfigureAwait(false);
                 }
+                catch (IOException e) when (IsDiskFull(e))
+                {
+                    throw DiskFull(e);
+                }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException)
                 {
                     throw new LocalFailure(e.Message);
@@ -205,6 +210,7 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
                 System.Diagnostics.Trace.TraceWarning($"Could not set the time of a received file: {e.Message}");
             }
         }
+        _fullReported = false;
         FileReceived?.Invoke(this, new ReceivedFile(host.Id, host.Name, path, size, GalleryIndex.IsValidSourceId(item.SourceId) ? item.SourceId : null));
     }
 
@@ -245,11 +251,29 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
         }
     }
 
-    private static T Local<T>(Func<T> step)
+    // ERROR_HANDLE_DISK_FULL and ERROR_DISK_FULL.
+    internal static bool IsDiskFull(IOException e) => (e.HResult & 0xFFFF) is 39 or 112;
+
+    /// <summary>A full disk says nothing about the item either: it stays queued, and the user is told once until a file gets through.</summary>
+    private IOException DiskFull(IOException e)
+    {
+        if (!_fullReported)
+        {
+            _fullReported = true;
+            Failed?.Invoke(this, "This PC is out of disk space. Files stay queued on the other computer until there is room.");
+        }
+        return new IOException(e.Message, e);
+    }
+
+    private T Local<T>(Func<T> step)
     {
         try
         {
             return step();
+        }
+        catch (IOException e) when (IsDiskFull(e))
+        {
+            throw DiskFull(e);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -257,7 +281,7 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
         }
     }
 
-    private static void Local(Action step) => Local(() =>
+    private void Local(Action step) => Local(() =>
     {
         step();
         return 0;
