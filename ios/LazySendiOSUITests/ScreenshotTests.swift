@@ -65,4 +65,29 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(app.item("receive.foreground").exists)
         attach(app, as: "06-receive")
     }
+
+    @MainActor
+    func testAllowingAPhoneOnTheApprovalPromptPairsIt() {
+        let app = XCUIApplication.launched(demo: true, approval: true)
+        app.item("main.receive").tap()
+        let allow = app.alerts.buttons["Allow"]
+        XCTAssertTrue(allow.waitForExistence(timeout: 30))
+        attach(app, as: "07-approval")
+        allow.tap()
+        let paired = app.item("receive.paired")
+        XCTAssertTrue(paired.waitForExistence(timeout: 30))
+        XCTAssertEqual(paired.label, "Paired with Pixel 9.")
+    }
+
+    @MainActor
+    func testDecliningAPhoneOnTheApprovalPromptDoesNotPairIt() {
+        let app = XCUIApplication.launched(demo: true, approval: true)
+        app.item("main.receive").tap()
+        let decline = app.alerts.buttons["Don't allow"]
+        XCTAssertTrue(decline.waitForExistence(timeout: 30))
+        decline.tap()
+        XCTAssertTrue(app.item("receive.shortCode").waitForExistence(timeout: 30))
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+        XCTAssertFalse(app.item("receive.paired").exists)
+    }
 }

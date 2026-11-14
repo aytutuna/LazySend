@@ -25,7 +25,9 @@ struct ReceiveView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { host.beginReceiving() }
         .onDisappear { host.endReceiving() }
-        .alert(approvalTitle, isPresented: Binding(get: { host.approval != nil }, set: { if !$0 { host.answerApproval(false) } }),
+        // The buttons answer. Leaving the screen or the app declines on its own, so dismissal needs no answer here, and
+        // one given here would run before the Allow button's action and decline it.
+        .alert(approvalTitle, isPresented: Binding(get: { host.approval != nil }, set: { _ in }),
                presenting: host.approval) { _ in
             Button("Don't allow", role: .cancel) { host.answerApproval(false) }
             Button("Allow") { host.answerApproval(true) }
@@ -84,6 +86,7 @@ struct ReceiveView: View {
     private func status(_ pairing: HostPairing) -> some View {
         if let name = pairing.pairedName {
             Text("Paired with \(name).").fontWeight(.semibold)
+                .accessibilityIdentifier("receive.paired")
         } else if pairing.finished {
             Text(host.approval == nil ? "This code has expired or was used." : "A phone is waiting for your answer.").fontWeight(.semibold)
             Button("New code") { host.renewPairing() }

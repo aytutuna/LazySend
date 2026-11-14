@@ -6,9 +6,9 @@ import XCTest
 
 extension XCUIApplication {
     @MainActor
-    static func launched(demo: Bool = false) -> XCUIApplication {
+    static func launched(demo: Bool = false, approval: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-uiTesting"] + (demo ? ["-demoData"] : [])
+        app.launchArguments = ["-uiTesting"] + (demo ? ["-demoData"] : []) + (approval ? ["-demoApproval"] : [])
         app.launch()
         return app
     }
