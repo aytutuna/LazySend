@@ -36,6 +36,7 @@ class GalleryFeedTest {
     private var free = Long.MAX_VALUE
     private val failures = HashMap<String, Int>()
     private var queueBytes = FEED_QUEUE_BYTES
+    private var readMs = 0L
     private var outbox = newOutbox()
     private var feed = newFeed()
 
@@ -44,7 +45,7 @@ class GalleryFeedTest {
     private fun newOutbox() = Outbox(File(dir, "outbox.json"), outgoing, freeSpace = { free })
 
     private fun newFeed() = GalleryFeed(
-        outbox, GalleryIndex(File(dir, "feed-index")), File(dir, "feeds.json"), scope, { library },
+        outbox, GalleryIndex(File(dir, "feed-index")), File(dir, "feeds.json"), scope, { Thread.sleep(readMs); library },
         { asset ->
             opened.incrementAndGet()
             val failing = failures[asset.sourceId] ?: 0
@@ -233,6 +234,20 @@ class GalleryFeedTest {
         assertEquals("external_primary:image:1", queued().first().sourceId)
         assertEquals(1, opened.get())
         waitFor("waiting again") { feed.progress.value[guest]?.wait == FeedWait.Outbox }
+    }
+
+    @Test
+    fun removingTheGuestWhileTheLibraryIsBeingReadCancelsTheStart() = runBlocking {
+        readMs = 300
+        restart()
+        val starting = feed.start(guest)
+        Thread.sleep(50)
+        feed.reconcile(emptySet())
+        starting.join()
+        assertNull(feed.progress.value[guest])
+        assertTrue(queued().isEmpty())
+        assertEquals(0, opened.get())
+        assertEquals(0, copies())
     }
 
     @Test

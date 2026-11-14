@@ -56,6 +56,8 @@ class GalleryFeed(
     private val later = HashMap<String, ArrayList<Asset>>()
     private val retried = HashMap<String, HashSet<String>>()
     private val waits = HashMap<String, FeedWait>()
+    // Guests whose run is being set up: the library is read before the run exists.
+    private val starting = HashSet<String>()
     private val locks = ConcurrentHashMap<String, Mutex>()
     private val shown = MutableStateFlow<Map<String, FeedProgress>>(emptyMap())
 
@@ -74,9 +76,11 @@ class GalleryFeed(
 
     /** Starts a run for the guest unless one is going; does nothing while the library cannot be read. */
     fun start(deviceId: String): Job = scope.launch {
-        if (active(deviceId)) return@launch
-        val todo = candidates(deviceId) ?: return@launch
+        if (!synchronized(this@GalleryFeed) { runs[deviceId]?.done != false && starting.add(deviceId) }) return@launch
+        val todo = candidates(deviceId)
         synchronized(this@GalleryFeed) {
+            // Removing the guest while the library was being read cancels the start.
+            if (!starting.remove(deviceId) || todo == null) return@launch
             runs = runs + (deviceId to FeedRun(todo.size, sent.count(deviceId)))
             lists[deviceId] = ArrayDeque(todo)
             save()
@@ -101,6 +105,7 @@ class GalleryFeed(
     /** Ends the run and takes back what was queued and not yet acknowledged, with its copies. */
     fun stop(deviceId: String) {
         synchronized(this) {
+            starting.remove(deviceId)
             runs = runs - deviceId
             clearState(deviceId)
             save()
@@ -117,7 +122,7 @@ class GalleryFeed(
 
     /** Drops what belongs to guests that are no longer paired. */
     fun reconcile(paired: Set<String>) {
-        synchronized(this) { runs.keys.filter { it !in paired } }.forEach(::forget)
+        synchronized(this) { (runs.keys + starting).filter { it !in paired } }.forEach(::forget)
     }
 
     private fun acknowledged(item: OutboxItem) {
