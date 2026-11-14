@@ -38,13 +38,19 @@ private struct Piece {
     var size: Int64 = 0
 }
 
+/// A computer to send to, or a phone paired with this one as its host (its id starts with `HostedPhones.prefix`).
+struct ShareTarget: Identifiable, Equatable {
+    var id: String
+    var name: String
+}
+
 @MainActor
 final class ShareModel: ObservableObject {
     @Published private(set) var state = ShareState.loading
     @Published private(set) var progress = 0.0
     @Published var chosen: String
     @Published private(set) var summary = ""
-    let pcs: [PairedPc]
+    let targets: [ShareTarget]
 
     private let store: PcStore
     private let connector: PcConnector
@@ -59,13 +65,14 @@ final class ShareModel: ObservableObject {
         store = PcStore(file: folder.appendingPathComponent("pcs.json"), secrets: ShareSecrets(), repairs: false)
         connector = PcConnector(store: store, discovery: .live)
         queue = ShareQueue(root: folder)
-        pcs = store.pcs
-        chosen = pcs.first?.id ?? ""
+        targets = store.pcs.map { ShareTarget(id: $0.id, name: $0.name) }
+            + HostedPhones.read(in: AppGroup.hostFolder()).map { ShareTarget(id: HostedPhones.target($0.id), name: $0.name) }
+        chosen = targets.first?.id ?? ""
         self.providers = providers
         self.finish = finish
         self.cancel = cancel
         ShareModel.removeStaleCopies()
-        if pcs.isEmpty {
+        if targets.isEmpty {
             state = .notPaired
         } else {
             Task { await load() }
@@ -84,7 +91,7 @@ final class ShareModel: ObservableObject {
     }
 
     var chosenName: String {
-        pcs.first { $0.id == chosen }?.name ?? ""
+        targets.first { $0.id == chosen }?.name ?? ""
     }
 
     func close() {
@@ -102,8 +109,8 @@ final class ShareModel: ObservableObject {
     }
 
     func sendLater() {
-        guard let pc = store.get(chosen) else { return }
-        save(for: pc, message: String(localized: "Saved. Lazy Send will send it when you open the app."))
+        guard targets.contains(where: { $0.id == chosen }) else { return }
+        save(for: chosen, message: String(localized: "Saved. Lazy Send will send it when you open the app."))
     }
 
     private func load() async {
@@ -124,7 +131,7 @@ final class ShareModel: ObservableObject {
         summary = found.map(\.label).joined(separator: ", ")
         state = .ready
         // With one computer there is nothing to choose, so it goes at once.
-        if pcs.count == 1 { await run() }
+        if targets.count == 1 { await run() }
     }
 
     private func piece(from provider: NSItemProvider) async throws -> Piece {
@@ -200,9 +207,15 @@ final class ShareModel: ObservableObject {
     }
 
     private func run() async {
-        guard let pc = store.get(chosen), !pieces.isEmpty else { return }
+        guard !pieces.isEmpty else { return }
+        // A phone paired with this one only connects while the app is open, so there is nothing to send to now.
+        if HostedPhones.id(ofTarget: chosen) != nil {
+            save(for: chosen, message: String(localized: "Saved. Lazy Send will pass it on when you open the app and \(chosenName) connects."))
+            return
+        }
+        guard let pc = store.get(chosen) else { return }
         if !ShareRouting.sendsDirectly(sizes: pieces.map(\.size)) {
-            save(for: pc, message: String(localized: "Too big to send from here. It is saved and Lazy Send will send it when you open the app."))
+            save(for: chosen, message: String(localized: "Too big to send from here. It is saved and Lazy Send will send it when you open the app."))
             return
         }
         state = .sending
@@ -260,14 +273,14 @@ final class ShareModel: ObservableObject {
         _ = try await uploader.send(request, source: FileDataSource(url: file), onBytes: onBytes)
     }
 
-    private func save(for pc: PairedPc, message: String) {
+    private func save(for target: String, message: String) {
         do {
             while let piece = pieces.first {
                 let id = UUID().uuidString.lowercased()
                 if let request = piece.request {
-                    try queue.add(QueuedItem(id: id, pcId: pc.id, kind: request.kind, text: request.text, url: request.url))
+                    try queue.add(QueuedItem(id: id, pcId: target, kind: request.kind, text: request.text, url: request.url))
                 } else if let file = piece.file {
-                    try queue.add(QueuedItem(id: id, pcId: pc.id, kind: "file", name: piece.name, mime: piece.mime, modified: piece.modified),
+                    try queue.add(QueuedItem(id: id, pcId: target, kind: "file", name: piece.name, mime: piece.mime, modified: piece.modified),
                                   file: file, move: true)
                     try? FileManager.default.removeItem(at: file.deletingLastPathComponent())
                 }

@@ -25,10 +25,10 @@ struct ShareView: View {
         case .loading:
             ProgressView()
         case .ready:
-            if model.pcs.count > 1 {
-                Picker("PC", selection: $model.chosen) {
-                    ForEach(model.pcs) { pc in
-                        Text(pc.name).tag(pc.id)
+            if model.targets.count > 1 {
+                Picker("Send to", selection: $model.chosen) {
+                    ForEach(model.targets) { target in
+                        Text(target.name).tag(target.id)
                     }
                 }
                 .pickerStyle(.menu)
@@ -56,7 +56,7 @@ struct ShareView: View {
             }
             Button("Cancel") { model.close() }
         case .notPaired:
-            Text("Open Lazy Send and pair a PC first.").multilineTextAlignment(.center)
+            Text("Open Lazy Send and pair a PC or a phone first.").multilineTextAlignment(.center)
             Button("Done") { model.done() }
                 .buttonStyle(.borderedProminent)
         }
