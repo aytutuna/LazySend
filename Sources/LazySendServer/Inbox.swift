@@ -166,14 +166,24 @@ public final class Inbox: @unchecked Sendable {
         file.sha256 = sha256
         file.directory = folder.path
         file.started = now
-        // Looked up and added in one step, so two requests for the same asset cannot start two transfers.
+        // Looked up and added in one step, so two requests for the same asset cannot start two transfers. The index is
+        // asked again here: a transfer that finishes between the first check and this one has left `bySource` but is in it.
         var existing: IncomingFile?
+        var duplicate = false
         lock.lock()
-        if let source = request.sourceId, let known = bySource[SourceKey(device: device.id, source: source)], !known.done, known.size == size {
-            existing = known
+        if let source = request.sourceId {
+            let known = bySource[SourceKey(device: device.id, source: source)]
+            if let known = known, known.done {
+                duplicate = true
+            } else if let known = known, known.size == size {
+                existing = known
+            } else if known == nil && index.contains(device.id, source) {
+                duplicate = true
+            }
         }
-        if existing == nil { track(file) }
+        if existing == nil && !duplicate { track(file) }
         lock.unlock()
+        if duplicate { return ItemState(id: "", offset: size, done: true, duplicate: true) }
         if let existing = existing {
             finishIfFull(existing)
             return state(of: existing)
@@ -338,10 +348,10 @@ public final class Inbox: @unchecked Sendable {
             throw Refusal(status: 500, failure: .serverError)
         }
         // The file is in place: record that first, so nothing below can make the phone send it again.
-        file.done = true
         file.path = placed.path
         file.finished = clock()
         lock.lock()
+        file.done = true
         let removed = files[file.id] == nil
         lock.unlock()
         // The index takes the asset before it stops being tracked, so a second request for it finds one or the other.

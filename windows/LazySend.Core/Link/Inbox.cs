@@ -119,16 +119,22 @@ public sealed class Inbox
             Directory = folder,
             Started = now,
         };
-        // Looked up and added in one step, so two requests for the same asset cannot start two transfers.
+        // Looked up and added in one step, so two requests for the same asset cannot start two transfers. The index is
+        // asked again here: a transfer that finishes between the first check and this one has left _bySource but is in it.
         IncomingFile? existing = null;
+        bool duplicate = false;
         lock (_gate)
         {
             if (request.SourceId is { } asset)
             {
-                if (_bySource.TryGetValue((device.Id, asset), out var known) && !known.Done && known.Size == size) existing = known;
+                _bySource.TryGetValue((device.Id, asset), out var known);
+                if (known is { Done: true }) duplicate = true;
+                else if (known is not null && known.Size == size) existing = known;
+                else if (known is null && _index.Contains(device.Id, asset)) duplicate = true;
             }
-            if (existing is null) Track(file);
+            if (existing is null && !duplicate) Track(file);
         }
+        if (duplicate) return new ItemState("", size, true, Duplicate: true);
         if (existing is not null)
         {
             FinishIfFull(existing);
@@ -331,11 +337,14 @@ public sealed class Inbox
             throw Failed(e);
         }
         // The file is in place: record that first, so nothing below can make the phone send it again.
-        file.Done = true;
         file.Path = path;
         file.Finished = _clock();
         bool removed;
-        lock (_gate) removed = !_files.ContainsKey(file.Id);
+        lock (_gate)
+        {
+            file.Done = true;
+            removed = !_files.ContainsKey(file.Id);
+        }
         // The index takes the asset before it stops being tracked, so a second request for it finds one or the other.
         if (!removed && file.SourceId is { } source) BestEffort(() => _index.Add(file.DeviceId, source));
         lock (_gate) Untrack(file);
