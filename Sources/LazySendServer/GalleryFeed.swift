@@ -37,7 +37,7 @@ public final class GalleryFeed {
     private var refill: Set<String> = []
     private var staging: Set<String> = []
 
-    public var onChange: (() -> Void)?
+    public var onChange: (@MainActor () -> Void)?
 
     /// `library` lists what the phone may send, without the assets it saved itself.
     public init(outbox: Outbox, indexDirectory: URL, stateURL: URL, outgoing: URL, library: @escaping @Sendable () async -> [GalleryItem]) {

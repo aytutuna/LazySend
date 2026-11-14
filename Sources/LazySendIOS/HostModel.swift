@@ -49,6 +49,8 @@ final class HostModel: ObservableObject {
     @Published private(set) var approval: HostApproval?
     @Published private(set) var devices: [PairedDevice] = []
     @Published private(set) var problem: String?
+    /// How far the photo library feed for each guest has got, by the guest's id.
+    @Published private(set) var feeds: [String: GalleryFeedProgress] = [:]
 
     var onDevicesChanged: (() -> Void)?
     /// The server side exists: what was left queued for the phones can be delivered.
@@ -59,6 +61,7 @@ final class HostModel: ObservableObject {
     private let timeline: Timeline
     private let saved: SavedAssets
     private var service: LinkService?
+    private var feed: GalleryFeed?
     private var foreground = false
     private var receiving = false
     private var reconciling: Task<Void, Never>?
@@ -137,6 +140,15 @@ final class HostModel: ObservableObject {
             wire(made)
             service = made
             devices = made.devices.devices
+            let photos = env.photos
+            let saved = self.saved
+            let feed = GalleryFeed(outbox: made.outbox, indexDirectory: root.appendingPathComponent("feed-index", isDirectory: true),
+                                   stateURL: root.appendingPathComponent("feeds.json"), outgoing: outgoing,
+                                   library: { await photos.items(saved.all) })
+            feed.onChange = { [weak self] in self?.feedChanged() }
+            self.feed = feed
+            feed.reconcile(paired: Set(devices.map(\.id)))
+            feedChanged()
             problem = nil
             settleSent()
             onDevicesChanged?()
@@ -204,6 +216,7 @@ final class HostModel: ObservableObject {
     /// Only a phone in front can listen: iOS suspends the app soon after it leaves the screen.
     func sceneChanged(active: Bool) {
         foreground = active
+        if active { resumeFeeds() }
         if !active {
             service?.closePairing()
             pairing = nil
@@ -344,6 +357,7 @@ final class HostModel: ObservableObject {
 
     private func devicesChanged() {
         devices = service?.devices.devices ?? []
+        feed?.reconcile(paired: Set(devices.map(\.id)))
         settleSent()
         reconcile()
         onDevicesChanged?()
@@ -506,7 +520,8 @@ final class HostModel: ObservableObject {
         let wanted = Set(service.outbox.all.compactMap(\.path).map { ($0 as NSString).deletingLastPathComponent }
             .map { ($0 as NSString).lastPathComponent })
         let folders = (try? FileManager.default.contentsOfDirectory(at: outgoing, includingPropertiesForKeys: nil)) ?? []
-        for folder in folders where !wanted.contains(folder.lastPathComponent) && !staging.contains(folder.lastPathComponent) {
+        for folder in folders where !wanted.contains(folder.lastPathComponent) && !staging.contains(folder.lastPathComponent)
+            && feed?.isStaging(folder.lastPathComponent) != true {
             try? FileManager.default.removeItem(at: folder)
         }
     }
@@ -533,6 +548,29 @@ final class HostModel: ObservableObject {
         } catch {
             return false
         }
+    }
+
+    func startFeed(_ id: String) async {
+        await feed?.start(id)
+    }
+
+    func stopFeed(_ id: String) {
+        feed?.stop(id)
+    }
+
+    /// Carries on the feeds that were going when the app was closed, now that the host is in front again.
+    private func resumeFeeds() {
+        Task { @MainActor in
+            await self.setup?.value
+            guard self.foreground, let feed = self.feed, !feed.running.isEmpty else { return }
+            guard await self.env.photos.access() != .denied else { return }
+            await feed.resume()
+        }
+    }
+
+    private func feedChanged() {
+        guard let feed = feed else { return }
+        feeds = Dictionary(uniqueKeysWithValues: devices.compactMap { device in feed.progress(device.id).map { (device.id, $0) } })
     }
 
     func isPairedOnDisk(_ id: String) -> Bool {

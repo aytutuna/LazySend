@@ -1,5 +1,6 @@
 #if os(iOS)
 import LazySendKit
+import LazySendServer
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -48,6 +49,8 @@ struct SendView: View {
                     Button("All photos and videos") { model.startGallerySync(for: pc) }
                         .disabled(model.galleryRunning)
                         .accessibilityIdentifier("send.gallery")
+                } else if target.phone, let id = HostedPhones.id(ofTarget: target.id) {
+                    feedRows(model.feeds[id], target)
                 }
                 if let notice = model.notice {
                     Text(notice).foregroundStyle(.red)
@@ -78,6 +81,27 @@ struct SendView: View {
                     if let media = try? await item.loadTransferable(type: PickedMedia.self) { urls.append(media.url) }
                 }
                 model.sendFiles(urls, to: target)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func feedRows(_ progress: GalleryFeedProgress?, _ target: AppModel.Target) -> some View {
+        let running = progress?.done == false
+        Button("All photos and videos") { model.startGalleryFeed(for: target) }
+            .disabled(running)
+            .accessibilityIdentifier("send.gallery")
+        if let progress {
+            if running {
+                Text("\(progress.sent) of \(progress.total) sent to \(target.name)")
+                    .accessibilityIdentifier("send.galleryProgress")
+                Text("Keep Lazy Send open until it is done.").foregroundStyle(.secondary)
+                Button("Stop", role: .destructive) { model.stopGalleryFeed(for: target) }
+                    .accessibilityIdentifier("send.galleryStop")
+            } else if progress.total == 0 {
+                Text("Nothing new to send to \(target.name)").foregroundStyle(.secondary)
+            } else {
+                Text("All \(progress.sent) photos and videos sent to \(target.name)").foregroundStyle(.secondary)
             }
         }
     }

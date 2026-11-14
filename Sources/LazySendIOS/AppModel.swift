@@ -73,6 +73,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var savesToPhotos: Bool
     @Published private(set) var photoNotice: PhotoNotice?
     @Published private(set) var galleryRunning = false
+    @Published private(set) var feeds: [String: GalleryFeedProgress] = [:]
 
     private var galleryTask: Task<Void, Never>?
     private var galleryRun = 0
@@ -103,6 +104,7 @@ final class AppModel: ObservableObject {
         host = HostModel(env: env, phoneId: { store.phoneId }, timeline: timeline, saved: saved)
         savesToPhotos = env.defaults.bool(forKey: Keys.photos)
         host.onDevicesChanged = { [weak self] in self?.refreshPcs() }
+        host.$feeds.assign(to: &$feeds)
         host.onReady = { [weak self] in self?.drainShareQueue() }
         if env.demo { seedDemo() }
         removeStrayCopies()
@@ -381,6 +383,28 @@ final class AppModel: ObservableObject {
         env.defaults.set(true, forKey: Keys.galleryPending)
         beginGrace()
         galleryTask = Task { await self.runGallery(pc) }
+    }
+
+    /// Sends the whole library to a phone that is this phone's guest, a few files at a time as it picks them up.
+    func startGalleryFeed(for target: Target) {
+        guard let id = HostedPhones.id(ofTarget: target.id), feeds[id]?.done != false else { return }
+        Task { @MainActor in
+            switch await env.photos.access() {
+            case .denied:
+                photoNotice = .denied
+                return
+            case .limited:
+                photoNotice = .limited
+            case .allowed:
+                photoNotice = nil
+            }
+            await host.startFeed(id)
+        }
+    }
+
+    func stopGalleryFeed(for target: Target) {
+        guard let id = HostedPhones.id(ofTarget: target.id) else { return }
+        host.stopFeed(id)
     }
 
     func stopGallery() {
