@@ -427,4 +427,25 @@ class HostServerTest {
         assertEquals("declined", failure.code)
         assertTrue(host.core.guests.guests.value.isEmpty())
     }
+
+    @Test
+    fun aHeadThatTricklesInIsCutOffAtTheTotalDeadline() {
+        host.close()
+        HostFixture(headMs = 1000).use { slow ->
+            val started = System.currentTimeMillis()
+            val answer = slow.raw("GET /v1/health HTTP/1.1\r\nHost: x\r\n") { socket ->
+                // One byte every 300 ms never lets a single read time out, and never ends the head.
+                try {
+                    repeat(40) {
+                        socket.outputStream.write('a'.code)
+                        socket.outputStream.flush()
+                        Thread.sleep(300)
+                    }
+                } catch (e: IOException) {
+                }
+            }
+            assertEquals("", answer)
+            assertTrue(System.currentTimeMillis() - started < 6000)
+        }
+    }
 }

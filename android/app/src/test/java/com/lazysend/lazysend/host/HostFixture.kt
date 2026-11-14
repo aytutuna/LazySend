@@ -18,14 +18,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 /** A host on loopback with the app's own TLS identity, its files in memory, and the app's own client to talk to it. */
-class HostFixture(networks: HostNetworks = HostNetworks({ emptyList() })) : AutoCloseable {
+class HostFixture(networks: HostNetworks = HostNetworks({ emptyList() }), headMs: Long = 10_000) : AutoCloseable {
     val dir = File.createTempFile("host", "").also { it.delete(); it.mkdirs() }
     val files = MemFiles(0)
     var free = 100L * 1024 * 1024 * 1024
     private val keys = KeyPairGenerator.getInstance("EC").apply { initialize(ECGenParameterSpec("secp256r1")) }.generateKeyPair()
     val identity = HostIdentity(File(dir, "cert.der"), keys.private, keys.public, { "Pixel" })
     val core = HostCore(File(dir, "host"), files, { "host-test-0001" }, { "Pixel host" }, { free })
-    val server = HostServer(identity.sslContext(), core.router, core.limiter, networks)
+    val server = HostServer(identity.sslContext(), core.router, core.limiter, networks, headMs = headMs)
     val port = server.start(0)
 
     init {

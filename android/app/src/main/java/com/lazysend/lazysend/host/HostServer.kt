@@ -27,6 +27,12 @@ class PeerGone : CancellationException("The guest hung up.")
 
 /** One accepted connection: the TLS socket, and what the router may do with it while a request is being served. */
 class HostConnection(val socket: SSLSocket, val peer: String, private val scope: CoroutineScope) {
+    val accepted = System.nanoTime()
+
+    /** The request line and headers are in, so the time allowed for them no longer counts. */
+    @Volatile
+    var headDone = false
+
     /** When the write in progress began, in nanoseconds; 0 while none is. */
     @Volatile
     var writeStarted = 0L
@@ -95,6 +101,7 @@ class HostServer(
     private val limiter: RateLimiter,
     private val networks: HostNetworks,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val headMs: Long = HEAD_MS,
 ) {
     private val connections = HashSet<HostConnection>()
     private val gate = Any()
@@ -212,14 +219,17 @@ class HostServer(
         }
     }
 
-    // A write into a stalled connection has no timeout of its own, so one that makes no progress is closed.
+    // A write into a stalled connection has no timeout of its own, so one that makes no progress is closed; so is one that
+    // has not sent its head in time.
     private suspend fun watchWrites() {
         while (true) {
-            delay(5000)
+            delay(500)
             val now = System.nanoTime()
             synchronized(gate) { connections.toList() }.forEach {
                 val started = it.writeStarted
                 if (started != 0L && now - started > IDLE_NS) it.abort()
+                // A client that trickles its handshake or head a byte at a time stays under each read's timeout, not under this one.
+                if (!it.headDone && now - it.accepted > headMs * 1_000_000L) it.abort()
             }
         }
     }
@@ -233,7 +243,7 @@ class HostServer(
         val buffer = ByteArray(HostHttp.MAX_HEAD + 4096)
         var filled = 0
         var parsed: Parsed
-        val deadline = System.currentTimeMillis() + HEAD_MS
+        val deadline = System.currentTimeMillis() + headMs
         while (true) {
             val left = deadline - System.currentTimeMillis()
             if (left <= 0) return
@@ -248,6 +258,7 @@ class HostServer(
                 break
             }
         }
+        connection.headDone = true
         if (parsed is Parsed.Invalid) {
             write(connection, HostResponse.error(HostError(parsed.status, "badRequest", HostError.badRequest.message.orEmpty())))
             return
