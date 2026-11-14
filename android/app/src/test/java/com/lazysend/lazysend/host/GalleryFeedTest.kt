@@ -38,6 +38,7 @@ class GalleryFeedTest {
     private var queueBytes = FEED_QUEUE_BYTES
     private var readMs = 0L
     private var photosAllowed = true
+    private var hosting = true
     private var outbox = newOutbox()
     private var feed = newFeed()
 
@@ -58,6 +59,7 @@ class GalleryFeedTest {
         },
         retryMs = 50,
         queueBytes = queueBytes,
+        hosting = { hosting },
     )
 
     // What a restart does: the same files, new objects.
@@ -279,6 +281,23 @@ class GalleryFeedTest {
         outbox.acknowledge(guest, busy.id)
         assertEquals(0, copies())
         assertNull(feed.progress.value[guest])
+    }
+
+    @Test
+    fun nothingIsCopiedWhileHostingIsOffAndTheFeedCarriesOnWhenItStarts() = runBlocking {
+        feed.start(guest).join()
+        hosting = false
+        outbox.acknowledge(guest, queued().first().id)
+        Thread.sleep(300)
+        assertEquals(19, queued().size)
+        assertEquals(20, opened.get())
+        feed.refresh()
+        assertEquals(FeedWait.NotHosting, feed.progress.value[guest]?.wait)
+        hosting = true
+        feed.resume().join()
+        assertEquals(20, queued().size)
+        assertEquals(21, opened.get())
+        assertNull(feed.progress.value[guest]?.wait)
     }
 
     @Test

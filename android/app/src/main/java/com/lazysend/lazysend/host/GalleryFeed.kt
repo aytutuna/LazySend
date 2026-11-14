@@ -18,7 +18,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 
 /** Why a running feed is not queuing anything for now. */
-enum class FeedWait { Storage, Outbox, Photos }
+enum class FeedWait { Storage, Outbox, Photos, NotHosting }
 
 /** [failed] counts assets that could not be read, also after a second try. */
 data class FeedProgress(val sent: Int, val total: Int, val done: Boolean, val failed: Int = 0, val wait: FeedWait? = null)
@@ -48,6 +48,7 @@ class GalleryFeed(
     private val open: (Asset) -> InputStream,
     private val retryMs: Long = 30_000,
     private val queueBytes: Long = FEED_QUEUE_BYTES,
+    private val hosting: () -> Boolean = { true },
 ) {
     private var runs = loadJson(file) { FeedFile() }.runs
     // What is left to queue for each running guest, in the library's order.
@@ -69,6 +70,9 @@ class GalleryFeed(
         outbox.onAcknowledged = ::acknowledged
         publish()
     }
+
+    /** The host started or stopped: the progress line follows, and nothing is copied while it is stopped. */
+    fun refresh() = publish()
 
     @Synchronized
     fun running(): Set<String> = runs.filterValues { !it.done }.keys
@@ -93,6 +97,7 @@ class GalleryFeed(
 
     /** Carries on the runs that were going when the app was closed. */
     fun resume(): Job = scope.launch {
+        publish()
         for (deviceId in running()) {
             launch {
                 if (synchronized(this@GalleryFeed) { lists[deviceId] } == null) {
@@ -152,6 +157,8 @@ class GalleryFeed(
     /** False when the phone is too full to copy another file. */
     private suspend fun topUp(deviceId: String): Boolean {
         while (active(deviceId)) {
+            // Nothing is copied while no guest can come and get it; the host starting again resumes the feed.
+            if (!hosting()) return true
             val waiting = outbox.pending(deviceId).filter { it.sourceId != null }
             if (waiting.size >= FEED_QUEUE_LIMIT) return true
             val asset = synchronized(this) { lists[deviceId]?.firstOrNull() }
@@ -245,7 +252,7 @@ class GalleryFeed(
         shown.value = synchronized(this) {
             runs.mapValues { (id, run) ->
                 val count = maxOf(sent.count(id) - run.base, 0)
-                FeedProgress(count, maxOf(run.total, count + run.failed), run.done, run.failed, if (run.done) null else if (noPhotos) FeedWait.Photos else waits[id])
+                FeedProgress(count, maxOf(run.total, count + run.failed), run.done, run.failed, if (run.done) null else if (noPhotos) FeedWait.Photos else if (!hosting()) FeedWait.NotHosting else waits[id])
             }
         }
     }

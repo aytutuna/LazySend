@@ -157,6 +157,7 @@ private fun Connection(state: MainState, actions: MainActions) {
                                     FeedWait.Storage -> " " + stringResource(R.string.feed_low_storage)
                                     FeedWait.Outbox -> " " + stringResource(R.string.feed_outbox_full, pc.name)
                                     FeedWait.Photos -> " " + stringResource(R.string.feed_no_photos)
+                                    FeedWait.NotHosting -> " " + stringResource(R.string.feed_not_hosting)
                                     null -> ""
                                 },
                             Modifier.weight(1f),

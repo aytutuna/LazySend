@@ -36,13 +36,14 @@ class HostCore(
     assets: () -> List<Asset>? = { null },
     openAsset: (Asset) -> InputStream = { throw java.io.IOException("No library.") },
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    hosting: () -> Boolean = { true },
 ) {
     val guests = GuestStore(File(root, "guests.json"))
     val gallery = GalleryIndex(File(root, "index"))
     val inbox = Inbox(File(root, "incoming"), files, gallery, freeSpace, clock)
     val outbox = Outbox(File(root, "outbox.json"), File(root, "outgoing"), clock, freeSpace)
     val sent = SendLog(File(root, "sent.json"), clock)
-    val feed = GalleryFeed(outbox, GalleryIndex(File(root, "feed-index")), File(root, "feeds.json"), scope, assets, openAsset)
+    val feed = GalleryFeed(outbox, GalleryIndex(File(root, "feed-index")), File(root, "feeds.json"), scope, assets, openAsset, hosting = hosting)
     val limiter = RateLimiter()
     val router = HostRouter(guests, inbox, outbox, gallery, sent, limiter, hostId, hostName, clock)
 

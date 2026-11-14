@@ -66,11 +66,11 @@ class HostController(
     assets: () -> List<Asset>? = { null },
     openAsset: (Asset) -> InputStream = { throw java.io.IOException("No library.") },
 ) {
-    val core = HostCore(root, files, hostId, hostName, freeSpace, clock, assets, openAsset, scope)
+    private val shown = MutableStateFlow(ReceiveState())
+    val core = HostCore(root, files, hostId, hostName, freeSpace, clock, assets, openAsset, scope) { shown.value.running }
     private val fingerprintFile = File(root, "fingerprint.txt")
     private val hostingFile = File(root, "hosting")
     private val loaded = CompletableDeferred<Unit>()
-    private val shown = MutableStateFlow(ReceiveState())
     private var supervisor: Job? = null
     @Volatile
     private var screenOpen = false
@@ -182,6 +182,7 @@ class HostController(
         core.closePairing()
         if (forget) hostingFile.delete()
         wanted.value = false
+        core.feed.refresh()
         supervisor?.cancel()
         retiring = supervisor
         supervisor = null
