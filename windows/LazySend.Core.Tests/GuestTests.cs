@@ -667,6 +667,22 @@ public class GuestReceiveTests
         Assert.Empty(Directory.GetFiles(Path.Combine(guest.Paths.DefaultReceiveRoot, "Test PC"), "*.part"));
     }
 
+    [Theory]
+    [InlineData("+10000-01-01T00:00:00Z")]
+    [InlineData("10000-01-01T00:00:00Z")]
+    [InlineData("garbage")]
+    [InlineData("1970-01-01T00:00:00Z")]
+    public void UnusableTakenFallsBackToTheArrivalDay(string taken)
+    {
+        var item = new OutboxEntry("a1b2c3d4", ItemKind.File, Name: "x.jpg", SourceId: "asset-9", Taken: taken);
+        var now = new DateTimeOffset(2026, 11, 14, 12, 0, 0, TimeSpan.Zero);
+
+        string folder = HostReceiver.FolderOf("host", item, now);
+
+        Assert.Equal(Path.Combine("host", "Gallery", now.ToLocalTime().ToString("yyyy-MM")), folder);
+        Assert.Null(HostReceiver.TakenOf(item));
+    }
+
     [Fact]
     public async Task GalleryFileWithoutADateIsFiledByTheDayItArrived()
     {

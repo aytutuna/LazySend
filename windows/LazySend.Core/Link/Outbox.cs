@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace LazySend.Core;
 
 /// <summary>Something the computer wants a phone to have. A file stays where it is on the computer and is read when the phone downloads it.</summary>
@@ -16,7 +18,7 @@ public sealed class OutboxItem
     public DateTimeOffset? Taken { get; set; }
     public DateTimeOffset Queued { get; set; }
 
-    public OutboxEntry ToEntry() => new(Id, Kind, Text, Url, Name, Size, Mime, SourceId, Taken);
+    public OutboxEntry ToEntry() => new(Id, Kind, Text, Url, Name, Size, Mime, SourceId, Taken is { Year: >= 1980 and <= 2100 } taken ? taken.ToString("o", CultureInfo.InvariantCulture) : null);
 }
 
 public sealed class OutboxFile

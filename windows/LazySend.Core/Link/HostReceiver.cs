@@ -102,7 +102,9 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
         return Path.Combine(hostDirectory, "Gallery", (TakenOf(item) ?? now).ToLocalTime().ToString("yyyy-MM", CultureInfo.InvariantCulture));
     }
 
-    private static DateTimeOffset? TakenOf(OutboxEntry item) => item.Taken is { Year: >= 1980 and <= 2100 } taken ? taken : null;
+    /// <summary>The host's date as text, so one that does not read costs only the date, not the whole reply.</summary>
+    internal static DateTimeOffset? TakenOf(OutboxEntry item) =>
+        DateTimeOffset.TryParse(item.Taken, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var taken) && taken is { Year: >= 1980 and <= 2100 } ? taken : null;
 
     /// <summary>What an item that is dropped from the host's queue leaves half-downloaded is of no use.</summary>
     private void DropPart(GuestHost host, OutboxEntry item)

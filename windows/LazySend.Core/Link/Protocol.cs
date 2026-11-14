@@ -228,7 +228,7 @@ public sealed record GalleryCheckResponse(List<string> Missing);
 
 /// <summary>An entry of <c>GET /v1/outbox</c>.</summary>
 public sealed record OutboxEntry(string Id, string Kind, string? Text = null, string? Url = null, string? Name = null,
-                                 long? Size = null, string? Mime = null, string? SourceId = null, DateTimeOffset? Taken = null);
+                                 long? Size = null, string? Mime = null, string? SourceId = null, string? Taken = null);
 
 /// <param name="More">True when more is pending than this answer holds; the phone acknowledges these and asks again.</param>
 public sealed record OutboxResponse(List<OutboxEntry> Items, bool? More = null);
