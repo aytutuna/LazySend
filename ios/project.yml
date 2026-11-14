@@ -79,6 +79,32 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         SKIP_INSTALL: YES
 
+  # Runs inside the app, which gives the tests a Keychain.
+  LazySendiOSUnitTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: LazySendiOSUnitTests
+    dependencies:
+      - target: LazySendiOS
+      - package: LazySend
+        product: LazySendIOS
+        link: false
+      - package: LazySend
+        product: LazySendServer
+        link: false
+      - package: LazySend
+        product: LazySendKit
+        link: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lazysend.lazysend.unittests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/LazySend.app/LazySend"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+
   LazySendiOSUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -99,8 +125,10 @@ schemes:
     build:
       targets:
         LazySendiOS: all
+        LazySendiOSUnitTests: [test]
         LazySendiOSUITests: [test]
     test:
       targets:
+        - LazySendiOSUnitTests
         - LazySendiOSUITests
       gatherCoverageData: false
