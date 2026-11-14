@@ -2,7 +2,6 @@ import LazySendKit
 import LazySendServer
 import Security
 import XCTest
-@testable import LazySendIOS
 
 // Run inside the app, which is what gives them a Keychain.
 final class HostCertificateTests: XCTestCase {

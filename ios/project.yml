@@ -86,10 +86,11 @@ targets:
     deploymentTarget: "18.0"
     sources:
       - path: LazySendiOSUnitTests
+      # The app's own module shares its name with the package target apart from the case, so the code under test is
+      # compiled in here instead of imported.
+      - path: ../Sources/LazySendIOS/HostCertificate.swift
     dependencies:
       - target: LazySendiOS
-      - package: LazySend
-        product: LazySendIOS
       - package: LazySend
         product: LazySendServer
       - package: LazySend
