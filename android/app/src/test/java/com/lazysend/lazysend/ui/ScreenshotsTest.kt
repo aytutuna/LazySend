@@ -98,10 +98,10 @@ class ScreenshotsTest {
     )
 
     @Test
-    fun receiveScreen() = capture("receive") { ReceiveScreen(receiving, { _, _ -> }, {}, {}, {}, {}) }
+    fun receiveScreen() = capture("receive") { ReceiveScreen(receiving, { _, _ -> }, {}, {}, {}, {}, {}) }
 
     @Test
     fun receiveApproval() = capture("receive-approve") {
-        ReceiveScreen(receiving.copy(approval = com.lazysend.lazysend.host.Approval("Pixel 9", "android", "987 292")), { _, _ -> }, {}, {}, {}, {})
+        ReceiveScreen(receiving.copy(approval = com.lazysend.lazysend.host.Approval("Pixel 9", "android", "987 292")), { _, _ -> }, {}, {}, {}, {}, {})
     }
 }

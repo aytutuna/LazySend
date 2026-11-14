@@ -31,7 +31,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** What the Receive screen shows of the pairing window open now. */
-data class PairingInfo(val link: String, val shortCode: String, val matchDigits: String, val checkDigits: String, val expires: Long)
+data class PairingInfo(val link: String, val shortCode: String, val matchDigits: String, val checkDigits: String, val expires: Long, val closed: Boolean = false)
 
 data class ReceiveState(
     val running: Boolean = false,
@@ -266,9 +266,16 @@ class HostController(
                 Fingerprint.spaced(Fingerprint.matchCode(key.fingerprint, it.shortCode)),
                 Fingerprint.spaced(Fingerprint.checkCode(key.fingerprint)),
                 it.expires,
+                it.stateAt(clock()) == SessionState.Closed,
             )
         }
         shown.value = current.copy(link = label, pairing = pairing)
+    }
+
+    /** The code was closed by too many wrong tries; the person asks for another. */
+    fun newCode() {
+        core.openPairing()
+        publish()
     }
 
     fun removeGuest(id: String) {

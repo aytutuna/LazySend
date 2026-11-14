@@ -71,6 +71,8 @@
     <string name="receive_copy_link">Copy link</string>
     <string name="receive_share_link">Share link</string>
     <string name="receive_stop">Stop receiving</string>
+    <string name="receive_closed">Too many wrong codes were tried, so this code was closed.</string>
+    <string name="receive_new_code">Get a new code</string>
     <string name="receive_no_network">Connect to Wi-Fi or plug in a USB tether, so other devices can reach this phone.</string>
     <string name="receive_paired_title">Paired with this phone</string>
     <string name="approve_title">Pair with %1$s?</string>

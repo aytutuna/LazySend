@@ -86,6 +86,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun stopReceiving() = graph.host.stop()
 
+    fun newCode() = graph.host.newCode()
+
     fun answer(approval: Approval, allow: Boolean) = approval.respond(allow)
 
     /** Asks every paired PC for what it has queued, for as long as the caller stays active. */

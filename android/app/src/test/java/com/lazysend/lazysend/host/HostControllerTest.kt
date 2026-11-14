@@ -238,4 +238,22 @@ class HostControllerTest {
         runBlocking { delay(300) }
         assertFalse(after.state.value.running)
     }
+
+    @Test
+    fun aCodeClosedByWrongTriesShowsAsClosedUntilAskedForAnother() = runBlocking {
+        val host = controller()
+        host.open()
+        waitFor { host.state.value.pairing != null }
+        val first = host.state.value.pairing!!.link
+        val session = host.core.pairing.value!!
+        repeat(PairingSession.MAX_TOTAL_FAILURES) { session.redeem("AAAAAAAA", clock(), "peer-$it") }
+        waitFor { host.state.value.pairing?.closed == true }
+        delay(2500)
+        assertTrue(host.state.value.pairing!!.closed)
+        host.newCode()
+        assertFalse(host.state.value.pairing!!.closed)
+        assertNotEquals(first, host.state.value.pairing!!.link)
+    }
+
+    private fun clock() = System.currentTimeMillis()
 }

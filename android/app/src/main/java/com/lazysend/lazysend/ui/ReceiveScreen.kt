@@ -48,6 +48,7 @@ fun ReceiveScreen(
     onAnswer: (Approval, Boolean) -> Unit,
     onCopy: (String) -> Unit,
     onShare: (String) -> Unit,
+    onNewCode: () -> Unit,
     onStop: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -69,6 +70,10 @@ fun ReceiveScreen(
             when {
                 host.error != null -> Text(host.error, color = MaterialTheme.colorScheme.error)
                 !host.running || pairing == null -> Text(stringResource(R.string.receive_starting))
+                pairing.closed -> {
+                    Text(stringResource(R.string.receive_closed), color = MaterialTheme.colorScheme.error)
+                    Button(onClick = onNewCode) { Text(stringResource(R.string.receive_new_code)) }
+                }
                 else -> {
                     Text(stringResource(R.string.receive_hint), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (host.link == null) Text(stringResource(R.string.receive_no_network), color = MaterialTheme.colorScheme.error)

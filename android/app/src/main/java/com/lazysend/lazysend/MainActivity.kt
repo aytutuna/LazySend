@@ -172,6 +172,7 @@ class MainActivity : ComponentActivity() {
                 onAnswer = model::answer,
                 onCopy = { copy(it) },
                 onShare = { share(it) },
+                onNewCode = model::newCode,
                 onStop = {
                     model.stopReceiving()
                     goMain()

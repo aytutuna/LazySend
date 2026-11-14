@@ -30,7 +30,7 @@ class ApprovalDialogTest {
         var shown by mutableStateOf<Approval?>(approval)
         compose.setContent {
             LazySendTheme(dark = false) {
-                ReceiveScreen(ReceiveUi(ReceiveState(), shown), { a, allow -> answer(a, allow); shown = null }, {}, {}, {}, {})
+                ReceiveScreen(ReceiveUi(ReceiveState(), shown), { a, allow -> answer(a, allow); shown = null }, {}, {}, {}, {}, {})
             }
         }
     }
