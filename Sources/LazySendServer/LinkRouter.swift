@@ -163,6 +163,13 @@ public final class LinkRouter: @unchecked Sendable {
     /// is only shown where someone can answer.
     public var approvePairing: (PairRequest) async -> Bool = { _ in false }
 
+    /// Like `approvePairing`, and used instead of it when set: the second argument is the check code both screens
+    /// should show.
+    public var approvePairingMatching: ((PairRequest, String) async -> Bool)?
+
+    /// The certificate's fingerprint, for the match code of a pairing by short code.
+    public var fingerprint: () -> Data = { Data() }
+
     public var approvalTimeout: TimeInterval = 120
 
     public var onDevicePaired: ((PairedDevice) -> Void)?
@@ -299,7 +306,13 @@ public final class LinkRouter: @unchecked Sendable {
         }
         let name = PairedDeviceStore.cleanName(pair.phoneName)
         pair.phoneName = name.isEmpty ? "Phone" : name
-        let response = await approveAndPair(pair)
+        let match: String
+        if let code = PairingSession.normalizeShortCode(pair.token) {
+            match = SpkiFingerprint.matchCode(fingerprint(), shortCode: code)
+        } else {
+            match = SpkiFingerprint.checkCode(fingerprint())
+        }
+        let response = await approveAndPair(pair, match: match)
         settleWhenWritten = response.written != nil
         return response
     }
@@ -309,8 +322,8 @@ public final class LinkRouter: @unchecked Sendable {
         onApprovalSettled?()
     }
 
-    private func approveAndPair(_ pair: PairRequest) async -> LinkResponse {
-        guard await approve(pair) else { return .error(403, .declined) }
+    private func approveAndPair(_ pair: PairRequest, match: String) async -> LinkResponse {
+        guard await approve(pair, match: match) else { return .error(403, .declined) }
         let secret: String
         do {
             secret = try devices.pair(id: pair.phoneId, name: pair.phoneName, platform: pair.platform, appVersion: pair.appVersion, now: clock())
@@ -335,8 +348,13 @@ public final class LinkRouter: @unchecked Sendable {
     }
 
     /// The user's answer; false when none came within `approvalTimeout` or the request was cut off.
-    private func approve(_ pair: PairRequest) async -> Bool {
-        let ask = approvePairing
+    private func approve(_ pair: PairRequest, match: String) async -> Bool {
+        let ask: (PairRequest) async -> Bool
+        if let matching = approvePairingMatching {
+            ask = { await matching($0, match) }
+        } else {
+            ask = approvePairing
+        }
         let timeout = approvalTimeout
         let (answers, answer) = AsyncStream.makeStream(of: Bool.self)
         let asking = Task {

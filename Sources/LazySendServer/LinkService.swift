@@ -47,6 +47,7 @@ public final class LinkService: @unchecked Sendable {
             outbox.clear(id)
             inbox.removeDevice(id)
         }
+        router.fingerprint = { fingerprint }
         self.clock = clock
         self.fingerprint = fingerprint
         self.settings = settings

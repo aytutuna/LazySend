@@ -161,7 +161,7 @@ public sealed class PairingSession
         foreach (char c in text)
         {
             if (c is '-' or ' ') continue;
-            char upper = char.ToUpperInvariant(c);
+            char upper = c is >= 'a' and <= 'z' ? (char)(c - 32) : c;
             if (CodeAlphabet.IndexOf(upper) < 0) return null;
             code.Append(upper);
         }

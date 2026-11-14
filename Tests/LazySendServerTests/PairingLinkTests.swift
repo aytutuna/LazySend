@@ -97,6 +97,62 @@ final class PairingLinkTests: XCTestCase {
         }
     }
 
+    func testShortCodePairsInAnyCaseWithOrWithoutTheDash() async throws {
+        _ = harness.service.openPairing(addresses: ["127.0.0.1"])
+        let typed = harness.service.pairing!.shortCodeText.lowercased().replacingOccurrences(of: "-", with: " ")
+        let client = LinkClient(endpoint: harness.endpoint, pin: harness.service.fingerprint)
+        let answer = try await client.pair(token: typed, phoneId: newId(), phoneName: "PC", appVersion: "1")
+        XCTAssertFalse(answer.deviceSecret.isEmpty)
+        XCTAssertEqual(harness.service.devices.devices.count, 1)
+    }
+
+    func testShortCodeAndTokenShareOneUse() async throws {
+        let code = harness.service.openPairing(addresses: ["127.0.0.1"])
+        let typed = harness.service.pairing!.shortCodeText
+        let client = LinkClient(endpoint: harness.endpoint, pin: harness.service.fingerprint)
+        _ = try await client.pair(token: typed, phoneId: newId(), phoneName: "One", appVersion: "1")
+        await expectRefused(403, "pairingClosed") {
+            _ = try await client.pair(token: code.token, phoneId: newId(), phoneName: "Two", appVersion: "1")
+        }
+        XCTAssertEqual(harness.service.devices.devices.count, 1)
+    }
+
+    func testWrongShortCodesCountAgainstThePeerLikeWrongTokens() async throws {
+        _ = harness.service.openPairing(addresses: ["127.0.0.1"])
+        let typed = harness.service.pairing!.shortCodeText
+        let client = LinkClient(endpoint: harness.endpoint, pin: harness.service.fingerprint)
+        for _ in 0..<PairingSession.maxFailedAttempts {
+            await expectRefused(403, "tokenInvalid") {
+                _ = try await client.pair(token: "0000-0000", phoneId: newId(), phoneName: "PC", appVersion: "1")
+            }
+        }
+        await expectRefused(403, "pairingClosed") {
+            _ = try await client.pair(token: typed, phoneId: newId(), phoneName: "PC", appVersion: "1")
+        }
+        XCTAssertTrue(harness.service.devices.devices.isEmpty)
+    }
+
+    func testApprovalGetsTheMatchCodeOfThePathUsed() async throws {
+        let matches = MatchLog()
+        harness.service.router.approvePairingMatching = { _, match in
+            matches.add(match)
+            return true
+        }
+        let fingerprint = harness.service.fingerprint
+        let client = LinkClient(endpoint: harness.endpoint, pin: fingerprint)
+        let code = harness.service.openPairing(addresses: ["127.0.0.1"])
+        _ = try await client.pair(token: code.token, phoneId: newId(), phoneName: "Scanner", appVersion: "1")
+        _ = harness.service.openPairing(addresses: ["127.0.0.1"])
+        let short = harness.service.pairing!.shortCode
+        _ = try await client.pair(token: short, phoneId: newId(), phoneName: "Typer", appVersion: "1")
+
+        let seen = matches.all
+        XCTAssertEqual(seen.count, 2)
+        XCTAssertEqual(seen[0], SpkiFingerprint.checkCode(fingerprint))
+        XCTAssertEqual(seen[1], SpkiFingerprint.matchCode(fingerprint, shortCode: short))
+        XCTAssertNotEqual(seen[0], seen[1])
+    }
+
     func testTokenWorksOnce() async throws {
         let code = harness.service.openPairing(addresses: ["127.0.0.1"])
         let client = LinkClient(endpoint: harness.endpoint, pin: harness.service.fingerprint)
@@ -206,5 +262,22 @@ final class PairingLinkTests: XCTestCase {
         XCTAssertEqual(parsed.port, harness.port)
         XCTAssertEqual(parsed.pin, harness.service.fingerprint)
         XCTAssertEqual(parsed.token, code.token)
+    }
+}
+
+private final class MatchLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var items: [String] = []
+
+    func add(_ item: String) {
+        lock.lock()
+        items.append(item)
+        lock.unlock()
+    }
+
+    var all: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return items
     }
 }

@@ -238,6 +238,31 @@ final class PairingSessionTests: XCTestCase {
         XCTAssertEqual(session.redeem(String(session.token.dropLast()), now: start), .wrongToken)
     }
 
+    func testTheShortCodeIsEightCharactersWithoutAmbiguousLetters() {
+        let session = PairingSession(opened: start)
+        XCTAssertEqual(session.shortCode.count, 8)
+        XCTAssertTrue(session.shortCode.allSatisfy { !"ILOU".contains($0) })
+        XCTAssertEqual(session.shortCodeText, "\(session.shortCode.prefix(4))-\(session.shortCode.suffix(4))")
+        XCTAssertEqual(PairingSession.normalizeShortCode(session.shortCodeText.lowercased()), session.shortCode)
+        XCTAssertNil(PairingSession.normalizeShortCode("ABCD-EFG"))
+        XCTAssertNil(PairingSession.normalizeShortCode("ABCD-EFGI"))
+        XCTAssertNil(PairingSession.normalizeShortCode(session.token))
+    }
+
+    func testTheShortCodeIsAcceptedOnceInAnyCaseAndFoldsDashAndSpaces() {
+        let session = PairingSession(opened: start)
+        let typed = session.shortCodeText.lowercased().replacingOccurrences(of: "-", with: " ")
+        XCTAssertEqual(session.redeem(typed, now: start), .accepted)
+        XCTAssertEqual(session.redeem(session.shortCodeText, now: start), .alreadyUsed)
+    }
+
+    func testWrongShortCodesAreCountedLikeWrongTokens() {
+        let session = PairingSession(opened: start)
+        for _ in 0..<5 { XCTAssertEqual(session.redeem("0000-0000", now: start, peer: [10, 0, 0, 1]), .wrongToken) }
+        XCTAssertEqual(session.redeem(session.shortCode, now: start, peer: [10, 0, 0, 1]), .closed)
+        XCTAssertEqual(session.redeem(session.shortCode, now: start, peer: [10, 0, 0, 2]), .accepted)
+    }
+
     func testTheTokenIsSixteenRandomBytes() {
         let a = PairingSession(opened: start)
         let b = PairingSession(opened: start)
