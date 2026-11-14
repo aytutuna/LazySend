@@ -168,6 +168,9 @@ public final class AppModel: ObservableObject {
         guest.onChange = { [weak self] in
             Task { @MainActor in self?.refreshPhones() }
         }
+        guest.onSendResumed = { [weak self] resumed in
+            Task { @MainActor in self?.showResumed(resumed) }
+        }
     }
 
     /// Starts the clock that keeps the window current, the server if a phone is paired and the watch on the computers this Mac is a guest of.
@@ -619,7 +622,17 @@ public final class AppModel: ObservableObject {
         }
     }
 
-    typealias SendWork = @Sendable (_ progress: @escaping @Sendable (Int64) -> Void) async throws -> Void
+    /// A file an earlier run left unfinished goes on as a row like a new send to the computer.
+    private func showResumed(_ resumed: ResumedSend) {
+        guard let host = guest?.hosts.get(resumed.send.hostId) else { return }
+        let url = URL(fileURLWithPath: resumed.send.path)
+        var row = TimelineRow(id: UUID().uuidString, kind: .file, sent: true, deviceId: host.id, deviceName: host.name, time: Date(),
+                              fileURL: url)
+        row.heading = url.lastPathComponent
+        startSend(row, size: resumed.send.size) { progress in try await resumed.run(progress) }
+    }
+
+    typealias SendWork =@Sendable (_ progress: @escaping @Sendable (Int64) -> Void) async throws -> Void
 
     /// Adds a row for what is being sent and runs `work`, two at a time; the row says how it went.
     private func startSend(_ row: TimelineRow, size: Int64, work: @escaping SendWork) {

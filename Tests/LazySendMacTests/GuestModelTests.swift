@@ -234,6 +234,45 @@ final class GuestModelTests: XCTestCase {
         XCTAssertNil(model.notice)
     }
 
+    // What an earlier run leaves: the computer has the first `sent` bytes and this Mac has the entry.
+    private func leaveUnfinished(_ pc: PairedPc, _ url: URL, size: Int64, sent: Int) async throws {
+        let content = try Data(contentsOf: url)
+        let modified = try XCTUnwrap(try FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date)
+        let sendId = newSendId()
+        let request = try ItemRequest.file(at: url, name: url.lastPathComponent, mime: nil, modified: modified, sendId: sendId)
+        let reached = await fixture.guest.connector.connect(pc, search: false).reached
+        let client = try XCTUnwrap(reached).client
+        let state = try await client.postItem(request)
+        _ = try await client.putChunk(id: state.id, offset: 0, data: content.prefix(sent), onBytes: { _ in })
+        fixture.guest.pending.add(PendingSend(hostId: pc.id, sendId: sendId, path: url.path, size: size,
+                                              modified: PendingSend.seconds(modified), sha256: request.sha256 ?? ""))
+    }
+
+    func testAnUnfinishedSendCarriesOnAsARowWhenTheAppStarts() async throws {
+        let pc = try await fixture.pairByLink()
+        let url = try fixture.file("left.bin", bytes: 300_000)
+        try await leaveUnfinished(pc, url, size: 300_000, sent: 100_000)
+        model.start()
+        await assertEventually { model.timeline.first?.heading == "left.bin" }
+        XCTAssertEqual(model.timeline.first?.deviceName, "Studio Mac")
+        await assertEventually { model.timeline.first?.canCancel == false }
+        XCTAssertTrue(model.timeline.first?.detail.contains("Sent to Studio Mac") == true, model.timeline.first?.detail ?? "")
+        let landed = fixture.root.appendingPathComponent("host-received/Test Mac/left.bin")
+        XCTAssertEqual(try Data(contentsOf: landed), try Data(contentsOf: url))
+        XCTAssertTrue(fixture.guest.pending.sends.isEmpty)
+    }
+
+    func testAnUnfinishedSendOfAChangedFileShowsAsNotSent() async throws {
+        let pc = try await fixture.pairByLink()
+        let url = try fixture.file("moved-on.bin", bytes: 10_000)
+        try await leaveUnfinished(pc, url, size: 9_999, sent: 1000)
+        model.start()
+        await assertEventually { model.timeline.first?.heading == "moved-on.bin" }
+        await assertEventually { model.timeline.first?.canCancel == false }
+        XCTAssertTrue(model.timeline.first?.detail.contains("Not sent") == true, model.timeline.first?.detail ?? "")
+        XCTAssertTrue(fixture.guest.pending.sends.isEmpty)
+    }
+
     func testFoldersAreRefusedForAComputerToo() async throws {
         try await fixture.pairByLink()
         _ = try fixture.file("inside.txt")
