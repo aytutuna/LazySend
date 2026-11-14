@@ -17,15 +17,22 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 
-data class FeedProgress(val sent: Int, val total: Int, val done: Boolean, val lowStorage: Boolean = false)
+/** Why a running feed is not queuing anything for now. */
+enum class FeedWait { Storage }
+
+/** [failed] counts assets that could not be read, also after a second try. */
+data class FeedProgress(val sent: Int, val total: Int, val done: Boolean, val failed: Int = 0, val wait: FeedWait? = null)
 
 @Serializable
-private data class FeedRun(val total: Int, val base: Int, val done: Boolean = false)
+private data class FeedRun(val total: Int, val base: Int, val done: Boolean = false, val failed: Int = 0)
 
 @Serializable
 private data class FeedFile(val runs: Map<String, FeedRun> = emptyMap())
 
 const val FEED_QUEUE_LIMIT = 20
+
+/** About this many bytes of copies wait at a time; one item always may, however large. */
+const val FEED_QUEUE_BYTES = 1024L * 1024 * 1024
 
 /**
  * Feeds this phone's photo library into a guest's outbox, a few files at a time: a file is copied into the outbox only
@@ -40,11 +47,15 @@ class GalleryFeed(
     private val assets: () -> List<Asset>?,
     private val open: (Asset) -> InputStream,
     private val retryMs: Long = 30_000,
+    private val queueBytes: Long = FEED_QUEUE_BYTES,
 ) {
     private var runs = loadJson(file) { FeedFile() }.runs
     // What is left to queue for each running guest, in the library's order.
     private val lists = HashMap<String, ArrayDeque<Asset>>()
-    private val low = HashSet<String>()
+    // Assets that failed once, tried again when the list is used up, and the ids already tried twice.
+    private val later = HashMap<String, ArrayList<Asset>>()
+    private val retried = HashMap<String, HashSet<String>>()
+    private val waits = HashMap<String, FeedWait>()
     private val locks = ConcurrentHashMap<String, Mutex>()
     private val shown = MutableStateFlow<Map<String, FeedProgress>>(emptyMap())
 
@@ -91,8 +102,7 @@ class GalleryFeed(
     fun stop(deviceId: String) {
         synchronized(this) {
             runs = runs - deviceId
-            lists.remove(deviceId)
-            low.remove(deviceId)
+            clearState(deviceId)
             save()
         }
         outbox.removeGalleryItems(deviceId)
@@ -134,15 +144,45 @@ class GalleryFeed(
         while (active(deviceId)) {
             val waiting = outbox.pending(deviceId).filter { it.sourceId != null }
             if (waiting.size >= FEED_QUEUE_LIMIT) return true
-            val asset = synchronized(this) { lists[deviceId]?.removeFirstOrNull() }
+            val asset = synchronized(this) { lists[deviceId]?.firstOrNull() }
             if (asset == null) {
+                val again = synchronized(this) {
+                    later.remove(deviceId)?.takeIf { it.isNotEmpty() }?.also { lists[deviceId] = ArrayDeque(it) }
+                }
+                if (again != null) continue
                 if (waiting.isEmpty()) finish(deviceId)
                 return true
             }
-            if (sent.contains(deviceId, asset.sourceId) || waiting.any { it.sourceId == asset.sourceId }) continue
+            if (sent.contains(deviceId, asset.sourceId) || waiting.any { it.sourceId == asset.sourceId }) {
+                synchronized(this) { lists[deviceId]?.removeFirstOrNull() }
+                continue
+            }
+            if (waiting.isNotEmpty() && waiting.sumOf { it.size ?: 0L } + asset.size > queueBytes) return true
+            synchronized(this) { lists[deviceId]?.removeFirstOrNull() }
             if (!queue(deviceId, asset)) return false
         }
         return true
+    }
+
+    // An asset that cannot be read is tried once more after the others, then counted as not sent.
+    private fun failed(deviceId: String, asset: Asset) {
+        synchronized(this) {
+            val run = runs[deviceId]?.takeIf { !it.done } ?: return
+            if (retried.getOrPut(deviceId) { HashSet() }.add(asset.sourceId)) {
+                later.getOrPut(deviceId) { ArrayList() }.add(asset)
+            } else {
+                runs = runs + (deviceId to run.copy(failed = run.failed + 1))
+                save()
+            }
+        }
+        publish()
+    }
+
+    private fun clearState(deviceId: String) {
+        lists.remove(deviceId)
+        later.remove(deviceId)
+        retried.remove(deviceId)
+        waits.remove(deviceId)
     }
 
     private suspend fun queue(deviceId: String, asset: Asset): Boolean {
@@ -155,16 +195,16 @@ class GalleryFeed(
         } catch (e: IllegalStateException) {
             synchronized(this) {
                 lists[deviceId]?.addFirst(asset)
-                low.add(deviceId)
+                waits[deviceId] = FeedWait.Storage
             }
             publish()
             return false
         } catch (e: Exception) {
-            // An asset that cannot be read is left out of this run.
+            failed(deviceId, asset)
             return true
         }
-        val wasLow = synchronized(this) { low.remove(deviceId) }
-        if (wasLow) publish()
+        val waited = synchronized(this) { waits.remove(deviceId) }
+        if (waited != null) publish()
         // The run was stopped while the copy was being made.
         if (!active(deviceId)) outbox.removeGalleryItems(deviceId)
         return true
@@ -175,7 +215,7 @@ class GalleryFeed(
             val run = runs[deviceId] ?: return
             if (run.done) return
             runs = runs + (deviceId to run.copy(done = true))
-            lists.remove(deviceId)
+            clearState(deviceId)
             save()
         }
         publish()
@@ -183,7 +223,10 @@ class GalleryFeed(
 
     private fun publish() {
         shown.value = synchronized(this) {
-            runs.mapValues { (id, run) -> FeedProgress(maxOf(sent.count(id) - run.base, 0), run.total, run.done, id in low) }
+            runs.mapValues { (id, run) ->
+                val count = maxOf(sent.count(id) - run.base, 0)
+                FeedProgress(count, maxOf(run.total, count + run.failed), run.done, run.failed, if (run.done) null else waits[id])
+            }
         }
     }
 

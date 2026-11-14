@@ -22,8 +22,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-fun libraryOf(count: Int, taken: Long = 1_615_809_600_000) =
-    (1..count).map { Asset("external_primary:image:$it", Uri.parse("content://media/$it"), "IMG_$it.jpg", 3, "image/jpeg", taken + it * 1000L) }
+fun libraryOf(count: Int, taken: Long = 1_615_809_600_000, sizes: Map<Int, Long> = emptyMap()) =
+    (1..count).map { Asset("external_primary:image:$it", Uri.parse("content://media/$it"), "IMG_$it.jpg", sizes[it] ?: 3, "image/jpeg", taken + it * 1000L) }
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], application = Application::class)
@@ -34,7 +34,8 @@ class GalleryFeedTest {
     private val opened = AtomicInteger()
     private var library = libraryOf(50)
     private var free = Long.MAX_VALUE
-    private var unreadable = emptySet<String>()
+    private val failures = HashMap<String, Int>()
+    private var queueBytes = FEED_QUEUE_BYTES
     private var outbox = newOutbox()
     private var feed = newFeed()
 
@@ -46,10 +47,15 @@ class GalleryFeedTest {
         outbox, GalleryIndex(File(dir, "feed-index")), File(dir, "feeds.json"), scope, { library },
         { asset ->
             opened.incrementAndGet()
-            if (asset.sourceId in unreadable) throw IOException("gone")
-            ByteArrayInputStream(byteArrayOf(1, 2, 3))
+            val failing = failures[asset.sourceId] ?: 0
+            if (failing > 0) {
+                failures[asset.sourceId] = failing - 1
+                throw IOException("gone")
+            }
+            ByteArrayInputStream(ByteArray(asset.size.toInt()) { 1 })
         },
         retryMs = 50,
+        queueBytes = queueBytes,
     )
 
     // What a restart does: the same files, new objects.
@@ -177,11 +183,53 @@ class GalleryFeedTest {
     }
 
     @Test
-    fun anAssetThatCannotBeReadIsLeftOut() = runBlocking {
-        unreadable = setOf("external_primary:image:2")
+    fun anAssetThatFailsToOpenIsTriedOnceMoreAtTheEnd() = runBlocking {
+        library = libraryOf(3)
+        failures["external_primary:image:2"] = 1
         feed.start(guest).join()
-        assertEquals(20, queued().size)
-        assertTrue(queued().none { it.sourceId == "external_primary:image:2" })
+        assertEquals(listOf(1, 3, 2).map { "external_primary:image:$it" }, queued().map { it.sourceId })
+        queued().forEach { outbox.acknowledge(guest, it.id) }
+        waitFor("done") { feed.progress.value[guest]?.done == true }
+        assertEquals(FeedProgress(3, 3, true), feed.progress.value[guest])
+    }
+
+    @Test
+    fun anAssetThatFailsTwiceIsCountedAsNotSent() = runBlocking {
+        library = libraryOf(3)
+        failures["external_primary:image:2"] = 5
+        feed.start(guest).join()
+        assertEquals(2, queued().size)
+        assertEquals(4, opened.get())
+        queued().forEach { outbox.acknowledge(guest, it.id) }
+        waitFor("done") { feed.progress.value[guest]?.done == true }
+        assertEquals(FeedProgress(2, 3, true, failed = 1), feed.progress.value[guest])
+        restart()
+        assertEquals(1, feed.progress.value[guest]?.failed)
+    }
+
+    @Test
+    fun oneOversizeItemStillGoesAndTheRestWaitForTheByteCap() = runBlocking {
+        library = libraryOf(4, sizes = mapOf(1 to 150L, 2 to 60L, 3 to 60L))
+        queueBytes = 100
+        restart()
+        feed.start(guest).join()
+        assertEquals(listOf("external_primary:image:1"), queued().map { it.sourceId })
+        outbox.acknowledge(guest, queued()[0].id)
+        // 60 bytes fit under the cap of 100 once, 120 do not.
+        waitFor("next") { queued().map { it.sourceId } == listOf("external_primary:image:2") }
+        Thread.sleep(200)
+        assertEquals(listOf("external_primary:image:2"), queued().map { it.sourceId })
+    }
+
+    @Test
+    fun theTotalNeverFallsBehindWhatWasSent() = runBlocking {
+        library = libraryOf(2)
+        feed.start(guest).join()
+        library = libraryOf(3)
+        queued().forEach { outbox.acknowledge(guest, it.id) }
+        waitFor("done") { feed.progress.value[guest]?.done == true }
+        val p = feed.progress.value[guest]!!
+        assertTrue(p.total >= p.sent)
     }
 
     @Test
@@ -189,11 +237,11 @@ class GalleryFeedTest {
         free = 0
         feed.start(guest)
         assertTrue(queued().isEmpty())
-        waitFor("shown") { feed.progress.value[guest]?.lowStorage == true }
+        waitFor("shown") { feed.progress.value[guest]?.wait == FeedWait.Storage }
         free = Long.MAX_VALUE
         waitFor("queued") { queued().size == 20 }
         assertEquals("external_primary:image:1", queued().first().sourceId)
-        assertEquals(false, feed.progress.value[guest]?.lowStorage)
+        assertNull(feed.progress.value[guest]?.wait)
     }
 
     @Test

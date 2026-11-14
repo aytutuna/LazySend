@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lazysend.lazysend.R
 import com.lazysend.lazysend.host.FeedProgress
+import com.lazysend.lazysend.host.FeedWait
 import com.lazysend.lazysend.data.Direction
 import com.lazysend.lazysend.data.EntryKind
 import com.lazysend.lazysend.data.EntryState
@@ -141,14 +142,18 @@ private fun Connection(state: MainState, actions: MainActions) {
             if (feed != null) {
                 if (feed.done) {
                     Text(
-                        if (feed.total == 0) stringResource(R.string.feed_nothing_new, pc.name) else stringResource(R.string.feed_done, feed.sent, pc.name),
+                        when {
+                            feed.total == 0 -> stringResource(R.string.feed_nothing_new, pc.name)
+                            feed.failed > 0 -> stringResource(R.string.feed_done_some, feed.sent, pc.name, feed.failed)
+                            else -> stringResource(R.string.feed_done, feed.sent, pc.name)
+                        },
                         style = MaterialTheme.typography.bodySmall,
                     )
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             stringResource(R.string.feed_progress, feed.sent, feed.total, pc.name) +
-                                if (feed.lowStorage) " " + stringResource(R.string.feed_low_storage) else "",
+                                if (feed.wait == FeedWait.Storage) " " + stringResource(R.string.feed_low_storage) else "",
                             Modifier.weight(1f),
                             style = MaterialTheme.typography.bodySmall,
                         )
