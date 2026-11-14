@@ -99,6 +99,14 @@ final class OutboxLinkTests: XCTestCase {
         XCTAssertLessThan(Date().timeIntervalSince(started), 5)
     }
 
+    func testAnItemIsServedOnlyWhileItsDownloadRuns() async throws {
+        let item = try XCTUnwrap(outbox.queueFiles(phone.id, [(try makeFile("served.bin", bytes(50_000)), nil, nil)]).first)
+        XCTAssertFalse(outbox.isServing(item.id))
+        try await phone.client.download(id: item.id, from: 0, onStart: { _, _ in }, sink: { _ in })
+        let ended = await waitUntil { !self.outbox.isServing(item.id) }
+        XCTAssertTrue(ended)
+    }
+
     func testFileDownloadsWholeAndByRange() async throws {
         let content = bytes(100_000)
         let item = try XCTUnwrap(outbox.queueFiles(phone.id, [(try makeFile("data.bin", content), nil, "application/x-test")]).first)

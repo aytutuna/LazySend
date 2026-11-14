@@ -505,11 +505,17 @@ public final class LinkRouter: @unchecked Sendable {
             return .error(500, .serverError)
         }
         var headers = [HttpHeader("Content-Type", item.mime ?? "application/octet-stream"), HttpHeader("Accept-Ranges", "bytes")]
+        var response: LinkResponse
         if !partial {
-            return LinkResponse(status: 200, headers: headers, payload: .file(handle, length: size))
+            response = LinkResponse(status: 200, headers: headers, payload: .file(handle, length: size))
+        } else {
+            headers.append(HttpHeader("Content-Range", "bytes \(start)-\(size - 1)/\(size)"))
+            response = LinkResponse(status: 206, headers: headers, payload: .file(handle, length: size - start))
         }
-        headers.append(HttpHeader("Content-Range", "bytes \(start)-\(size - 1)/\(size)"))
-        return LinkResponse(status: 206, headers: headers, payload: .file(handle, length: size - start))
+        outbox.beginServing(id)
+        let outbox = self.outbox
+        response.written = { _ in outbox.endServing(id) }
+        return response
     }
 
     private func acknowledge(_ request: LinkRequest, id: String, now: Date) -> LinkResponse {

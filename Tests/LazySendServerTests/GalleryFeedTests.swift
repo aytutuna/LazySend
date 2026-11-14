@@ -289,6 +289,21 @@ final class GalleryFeedTests: XCTestCase {
         XCTAssertNil(feed.progress(guest)?.wait)
     }
 
+    func testStopLeavesTheItemBeingDownloadedAndTheGuestAcknowledgesItAsUsual() async {
+        await feed.start(guest)
+        let busy = queued()[3]
+        outbox.beginServing(busy.id)
+        feed.stop(guest)
+        XCTAssertEqual(queued().map(\.id), [busy.id])
+        XCTAssertEqual(copies().count, 1)
+        outbox.endServing(busy.id)
+        outbox.acknowledge(guest, busy.id)
+        let cleaned = await waitUntil { self.copies().isEmpty }
+        XCTAssertTrue(cleaned)
+        XCTAssertTrue(queued().isEmpty)
+        XCTAssertNil(feed.progress(guest))
+    }
+
     func testTheTotalGrowsWhenTheLibraryDoes() async {
         library = FakeLibrary(folder: root, count: 2)
         makeFeed()

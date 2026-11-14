@@ -52,6 +52,8 @@ public final class Outbox: @unchecked Sendable {
     private let lock = NSLock()
     private var file: OutboxFile
     private var waiters: [UUID: (deviceId: String, signal: AsyncStream<Void>.Continuation)] = [:]
+    // Items whose file is being sent right now, by how many downloads.
+    private var serving: [String: Int] = [:]
 
     public var onChange: (() -> Void)?
     /// Called with the item the phone just acknowledged, while the queue is still locked so that nothing sees the item
@@ -164,13 +166,34 @@ public final class Outbox: @unchecked Sendable {
         return true
     }
 
-    /// Takes the gallery items back out for the phone without acknowledging them; returns what was removed.
+    /// The router is about to send the item's file; the item stays through `removeGalleryItems` until `endServing`.
+    func beginServing(_ id: String) {
+        lock.lock()
+        serving[id, default: 0] += 1
+        lock.unlock()
+    }
+
+    func endServing(_ id: String) {
+        lock.lock()
+        serving[id] = (serving[id] ?? 1) > 1 ? serving[id]! - 1 : nil
+        lock.unlock()
+    }
+
+    public func isServing(_ id: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return serving[id] != nil
+    }
+
+    /// Takes the gallery items back out for the phone without acknowledging them, except the ones being downloaded
+    /// right now, which the phone acknowledges as usual; returns what was removed.
     @discardableResult
     public func removeGalleryItems(_ deviceId: String) -> [OutboxItem] {
         lock.lock()
-        let gone = file.items.filter { $0.deviceId == deviceId && $0.sourceId != nil }
+        let gone = file.items.filter { $0.deviceId == deviceId && $0.sourceId != nil && serving[$0.id] == nil }
         if !gone.isEmpty {
-            file.items.removeAll { $0.deviceId == deviceId && $0.sourceId != nil }
+            let ids = Set(gone.map(\.id))
+            file.items.removeAll { ids.contains($0.id) }
             JsonFile.save(file, to: url)
         }
         lock.unlock()
