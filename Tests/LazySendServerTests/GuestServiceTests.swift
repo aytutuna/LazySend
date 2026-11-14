@@ -604,6 +604,27 @@ final class GuestServiceTests: XCTestCase {
         XCTAssertEqual(fixture.files.all.count, 1)
         XCTAssertTrue(FileManager.default.fileExists(atPath: hostFolder.appendingPathComponent("Gallery").path))
     }
+
+    @MainActor
+    func testAGalleryItemFromARealHostIsFiledByMonthAndAcknowledged() async throws {
+        _ = try await pairGuest()
+        fixture.guest.start()
+        let library = FakeLibrary(folder: harness.root, count: 3)
+        let feed = GalleryFeed(outbox: outbox, indexDirectory: harness.root.appendingPathComponent("feed-index"),
+                               stateURL: harness.root.appendingPathComponent("feeds.json"),
+                               outgoing: harness.root.appendingPathComponent("feed-out"), library: { library.items() })
+        await feed.start(guestId)
+        let month = Inbox.month(Date(timeIntervalSince1970: 1_615_809_601))
+        let landed = await waitUntil { feed.progress(self.guestId)?.done == true }
+        XCTAssertTrue(landed)
+        for number in 1...3 {
+            let placed = hostFolder.appendingPathComponent("Gallery/\(month)/IMG_\(number).jpg")
+            XCTAssertEqual(try Data(contentsOf: placed), Data([1, 2, 3]))
+        }
+        XCTAssertEqual(fixture.files.all.compactMap(\.sourceId).sorted(), ["asset-1#photo", "asset-2#photo", "asset-3#photo"])
+        XCTAssertTrue(outbox.pending(guestId).isEmpty)
+        XCTAssertEqual(feed.progress(guestId), GalleryFeedProgress(sent: 3, total: 3, done: true))
+    }
 }
 
 private final class ScriptedOutbox: OutboxAPI, @unchecked Sendable {
