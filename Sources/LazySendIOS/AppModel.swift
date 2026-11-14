@@ -62,9 +62,12 @@ final class AppModel: ObservableObject {
     let connector: PcConnector
     let timeline: Timeline
     let queue: ShareQueue
+    let host: HostModel
 
     @Published private(set) var pcs: [PairedPc] = []
+    @Published private(set) var phones: [PairedDevice] = []
     @Published private(set) var selectedId: String?
+    @Published var notice: String?
     @Published private(set) var links: [String: LinkKind] = [:]
     @Published private(set) var savesToPhotos: Bool
     @Published private(set) var photoNotice: PhotoNotice?
@@ -86,12 +89,17 @@ final class AppModel: ObservableObject {
 
     init(env: AppEnvironment) {
         self.env = env
-        store = PcStore(file: env.folder.appendingPathComponent("pcs.json"), secrets: env.secrets)
+        let store = PcStore(file: env.folder.appendingPathComponent("pcs.json"), secrets: env.secrets)
+        let timeline = Timeline(file: env.support.appendingPathComponent("timeline.json"))
+        let saved = SavedAssets(file: env.support.appendingPathComponent("saved-assets.json"))
+        self.store = store
+        self.timeline = timeline
+        self.saved = saved
         connector = PcConnector(store: store, discovery: env.discovery)
-        timeline = Timeline(file: env.support.appendingPathComponent("timeline.json"))
         queue = ShareQueue(root: env.folder)
-        saved = SavedAssets(file: env.support.appendingPathComponent("saved-assets.json"))
+        host = HostModel(env: env, phoneId: { store.phoneId }, timeline: timeline, saved: saved)
         savesToPhotos = env.defaults.bool(forKey: Keys.photos)
+        host.onDevicesChanged = { [weak self] in self?.refreshPcs() }
         if env.demo { seedDemo() }
         removeStrayCopies()
         refreshPcs()
@@ -119,10 +127,32 @@ final class AppModel: ObservableObject {
         env.documents.appendingPathComponent(name)
     }
 
+    /// Who a send can go to: the computers this phone is a guest of, then the phones that are its guests. A phone's id
+    /// starts with `HostedPhones.prefix`, so a device that is both has two entries.
+    struct Target: Identifiable, Equatable {
+        var id: String
+        var name: String
+        var phone: Bool
+    }
+
+    var targets: [Target] {
+        pcs.map { Target(id: $0.id, name: $0.name, phone: false) }
+            + phones.map { Target(id: HostedPhones.target($0.id), name: $0.name, phone: true) }
+    }
+
+    var selectedTarget: Target? {
+        targets.first { $0.id == selectedId }
+    }
+
     func refreshPcs() {
         pcs = store.pcs
+        phones = host.devices
         let saved = selectedId ?? env.defaults.string(forKey: Keys.selected)
-        selectedId = pcs.contains { $0.id == saved } ? saved : pcs.first?.id
+        selectedId = targets.contains { $0.id == saved } ? saved : targets.first?.id
+    }
+
+    func remove(phone: PairedDevice) {
+        host.remove(phone.id)
     }
 
     func select(_ id: String) {
@@ -133,8 +163,10 @@ final class AppModel: ObservableObject {
     func sceneChanged(_ phase: ScenePhase) {
         switch phase {
         case .active:
+            host.sceneChanged(active: true)
             start()
         case .background:
+            host.sceneChanged(active: false)
             stopWatching()
             scheduleCheck()
         default:
@@ -261,6 +293,29 @@ final class AppModel: ObservableObject {
             let id = "out-" + UUID().uuidString
             timeline.add(TimelineEntry(id: id, direction: .sent, kind: .file, pcName: pc.name, title: url.lastPathComponent, pcId: pc.id))
             enqueue(id) { await self.deliverFile(url, scoped: scoped, to: pc, entryId: id) }
+        }
+    }
+
+    func sendNote(_ text: String, to target: Target) throws {
+        if let phone = HostedPhones.id(ofTarget: target.id) {
+            try host.sendNote(text, to: phone)
+        } else if let pc = pcs.first(where: { $0.id == target.id }) {
+            try sendNote(text, to: pc)
+        }
+    }
+
+    func sendFiles(_ urls: [URL], to target: Target, scoped: Bool = false) {
+        notice = nil
+        if let phone = HostedPhones.id(ofTarget: target.id) {
+            Task {
+                do {
+                    try await host.sendFiles(urls, to: phone, scoped: scoped)
+                } catch {
+                    notice = error.localizedDescription
+                }
+            }
+        } else if let pc = pcs.first(where: { $0.id == target.id }) {
+            sendFiles(urls, to: pc, scoped: scoped)
         }
     }
 
@@ -543,9 +598,9 @@ final class AppModel: ObservableObject {
     }
 
     // A picked file is ours already and is moved; one from the document picker is copied while access to it lasts.
-    nonisolated private static func stage(_ url: URL, scoped: Bool, into folder: URL) throws -> URL {
+    nonisolated static func stage(_ url: URL, scoped: Bool, into folder: URL, name: String? = nil) throws -> URL {
         let fm = FileManager.default
-        let target = folder.appendingPathComponent(url.lastPathComponent)
+        let target = folder.appendingPathComponent(name ?? url.lastPathComponent)
         do {
             try fm.createDirectory(at: folder, withIntermediateDirectories: true)
             if scoped {
@@ -638,6 +693,18 @@ final class AppModel: ObservableObject {
 
     func drainShareQueue() {
         for item in queue.items() where !queued.contains(item.id) {
+            if let phone = HostedPhones.id(ofTarget: item.pcId) {
+                guard host.devices.contains(where: { $0.id == phone }) else {
+                    queue.remove(item.id)
+                    continue
+                }
+                queued.insert(item.id)
+                Task {
+                    if await host.deliver(item, dataURL: queue.dataURL(item.id), to: phone) { queue.remove(item.id) }
+                    queued.remove(item.id)
+                }
+                continue
+            }
             guard let pc = store.get(item.pcId) else {
                 queue.remove(item.id)
                 continue

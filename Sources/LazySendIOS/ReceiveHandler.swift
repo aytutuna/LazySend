@@ -126,7 +126,7 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
             timeline.save()
         }
         notifier.post(pcName, name)
-        saveToPhotos(target, mime: item.mime)
+        ReceiveHandler.saveToPhotos(target, mime: item.mime, defaults: defaults, saved: saved)
     }
 
     func pause(_ item: OutboxEntry) async {
@@ -179,13 +179,12 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
         try? handle?.close()
     }
 
-    private func saveToPhotos(_ url: URL, mime: String?) {
+    static func saveToPhotos(_ url: URL, mime: String?, defaults: UserDefaults, saved: SavedAssets) {
         guard defaults.bool(forKey: Keys.photos) else { return }
         let type = UTType(filenameExtension: url.pathExtension)
         let isVideo = mime?.hasPrefix("video/") == true || type?.conforms(to: .movie) == true
         let isImage = mime?.hasPrefix("image/") == true || type?.conforms(to: .image) == true
         guard isVideo || isImage else { return }
-        let saved = self.saved
         PHPhotoLibrary.shared().performChanges({
             let request = isVideo ? PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
                                   : PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: url)
