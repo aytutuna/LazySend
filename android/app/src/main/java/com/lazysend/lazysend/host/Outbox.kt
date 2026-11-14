@@ -43,6 +43,10 @@ class Outbox(
     private var items = loadJson(file) { OutboxFile() }.items
     private val changes = MutableStateFlow(0)
 
+    /** Called with each item the guest acknowledges, after it is removed and before anything else can see it gone; it must not call back into the outbox. */
+    @Volatile
+    var onAcknowledged: (OutboxItem) -> Unit = {}
+
     init {
         // A copy no entry points to is left from a process that died while copying.
         val kept = items.mapNotNull { it.path }.toSet()
@@ -68,8 +72,19 @@ class Outbox(
         return add(OutboxItem(newId(), deviceId, "link", url = url, queued = clock()))
     }
 
-    /** Copies what [open] reads (about [size] bytes, when known) into the app's storage and queues it; the copy is deleted once the guest has it. */
-    fun queueFile(deviceId: String, name: String, mime: String?, size: Long? = null, open: () -> InputStream): OutboxItem {
+    /**
+     * Copies what [open] reads (about [size] bytes, when known) into the app's storage and queues it; the copy is deleted once
+     * the guest has it. A file from this phone's library carries its [sourceId] and when it was [taken].
+     */
+    fun queueFile(
+        deviceId: String,
+        name: String,
+        mime: String?,
+        size: Long? = null,
+        sourceId: String? = null,
+        taken: Long? = null,
+        open: () -> InputStream,
+    ): OutboxItem {
         check(pending(deviceId).size < MAX_QUEUED) { "Too many items wait for this device." }
         // The copy is made here, so the 1 GiB floor holds for it as it does for what arrives.
         check(freeSpace() - (size ?: 0) >= MIN_FREE_BYTES) { "This phone is almost out of storage." }
@@ -78,7 +93,7 @@ class Outbox(
         copies.mkdirs()
         try {
             open().use { input -> copy.outputStream().use { input.copyTo(it) } }
-            return add(OutboxItem(id, deviceId, "file", path = copy.path, name = cleanFileName(name), size = copy.length(), mime = mime, queued = clock()))
+            return add(OutboxItem(id, deviceId, "file", path = copy.path, name = cleanFileName(name), size = copy.length(), mime = mime, sourceId = sourceId, taken = taken, queued = clock()))
         } catch (e: Exception) {
             copy.delete()
             throw e
@@ -99,11 +114,26 @@ class Outbox(
             val item = items.firstOrNull { it.deviceId == deviceId && it.id == id } ?: return null
             items = items - item
             save()
+            onAcknowledged(item)
             item
         }
         removed.path?.let { File(it).delete() }
         changes.value++
         return removed
+    }
+
+    /** Takes the gallery items back out for the guest without acknowledging them, with their copies; returns how many. */
+    fun removeGalleryItems(deviceId: String): Int {
+        val gone = synchronized(this) {
+            val mine = items.filter { it.deviceId == deviceId && it.sourceId != null }
+            if (mine.isEmpty()) return 0
+            items = items - mine.toSet()
+            save()
+            mine
+        }
+        gone.forEach { item -> item.path?.let { File(it).delete() } }
+        changes.value++
+        return gone.size
     }
 
     /** Drops everything waiting for the guest (it was removed). */

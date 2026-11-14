@@ -12,6 +12,9 @@ class GalleryIndex(private val directory: File) {
     @Synchronized
     fun contains(deviceId: String, sourceId: String) = load(deviceId).contains(sourceId)
 
+    @Synchronized
+    fun count(deviceId: String) = load(deviceId).size
+
     /** The ids not received from [deviceId] yet, in the order given, each once. */
     @Synchronized
     fun missing(deviceId: String, ids: List<String>): List<String> {
