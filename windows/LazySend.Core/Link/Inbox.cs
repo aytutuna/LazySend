@@ -25,6 +25,7 @@ public sealed class IncomingFile
     public DateTimeOffset? Modified { get; set; }
     public string? SourceId { get; set; }
     public string? Sha256 { get; set; }
+    public string? SendId { get; set; }
     /// <summary>The folder the file ends up in; fixed when the transfer starts, so changing the receive folder later strands nothing.</summary>
     public string Directory { get; set; } = "";
     public DateTimeOffset Started { get; set; }
@@ -55,6 +56,8 @@ public sealed class Inbox
     private readonly Dictionary<string, IncomingFile> _files = [];
     /// <summary>The unfinished file of each (phone, source id), so a gallery sync of tens of thousands of photos does not scan every record.</summary>
     private readonly Dictionary<(string Device, string Source), IncomingFile> _bySource = [];
+    /// <summary>Every record by (phone, send id), finished ones too until they are pruned.</summary>
+    private readonly Dictionary<(string Device, string Send), IncomingFile> _bySend = [];
     private DateTimeOffset _lastPrune;
     private readonly ConcurrentDictionary<string, Writer> _writers = new();
 
@@ -86,8 +89,12 @@ public sealed class Inbox
     /// Starts a file, or finds the one already started for the same source id. A source id that was
     /// received before answers done. Throws <see cref="InboxException"/>.
     /// </summary>
-    public ItemState Begin(PairedDevice device, ItemRequest request)
+    public ItemState Begin(PairedDevice device, ItemRequest request) => Begin(device, request, out _);
+
+    /// <param name="repeat">True when the answer is the record of an earlier post with the same send id.</param>
+    public ItemState Begin(PairedDevice device, ItemRequest request, out bool repeat)
     {
+        repeat = false;
         if (request.Size is not { } size || size < 0) throw new InboxException(400, LinkError.BadRequest);
         if (request.SourceId is not null && !GalleryIndex.IsValidSourceId(request.SourceId)) throw new InboxException(400, LinkError.BadRequest);
         string? sha256 = null;
@@ -95,6 +102,12 @@ public sealed class Inbox
         {
             if (request.Sha256.Length != 64 || !request.Sha256.All(Uri.IsHexDigit)) throw new InboxException(400, LinkError.BadRequest);
             sha256 = request.Sha256.ToLowerInvariant();
+        }
+        if (request.SendId is not null && !Protocol.IsValidSendId(request.SendId)) throw new InboxException(400, LinkError.BadRequest);
+        if (FindSend(device.Id, request.SendId, size, sha256) is { } sent)
+        {
+            repeat = true;
+            return Resume(sent);
         }
         if (request.SourceId is { } source && _index.Contains(device.Id, source)) return new ItemState("", size, true, Duplicate: true);
 
@@ -116,6 +129,7 @@ public sealed class Inbox
             Modified = modified,
             SourceId = request.SourceId,
             Sha256 = sha256,
+            SendId = request.SendId,
             Directory = folder,
             Started = now,
         };
@@ -125,7 +139,12 @@ public sealed class Inbox
         bool duplicate = false;
         lock (_gate)
         {
-            if (request.SourceId is { } asset)
+            if (FindSend(device.Id, request.SendId, size, sha256) is { } again)
+            {
+                repeat = true;
+                existing = again;
+            }
+            if (existing is null && request.SourceId is { } asset)
             {
                 _bySource.TryGetValue((device.Id, asset), out var known);
                 if (known is { Done: true }) duplicate = true;
@@ -135,11 +154,7 @@ public sealed class Inbox
             if (existing is null && !duplicate) Track(file);
         }
         if (duplicate) return new ItemState("", size, true, Duplicate: true);
-        if (existing is not null)
-        {
-            FinishIfFull(existing);
-            return StateOf(existing);
-        }
+        if (existing is not null) return Resume(existing);
         try
         {
             Directory.CreateDirectory(folder);
@@ -153,6 +168,28 @@ public sealed class Inbox
             throw Failed(e);
         }
         return StateOf(file);
+    }
+
+    private ItemState Resume(IncomingFile file)
+    {
+        FinishIfFull(file);
+        return StateOf(file);
+    }
+
+    /// <summary>The record a device made under <paramref name="sendId"/>; throws when this post does not match it.</summary>
+    private IncomingFile? FindSend(string deviceId, string? sendId, long size, string? sha256)
+    {
+        if (sendId is null) return null;
+        IncomingFile? known;
+        lock (_gate) _bySend.TryGetValue((deviceId, sendId), out known);
+        if (known is not null && (known.Size != size || known.Sha256 != sha256)) throw new InboxException(400, LinkError.BadRequest);
+        return known;
+    }
+
+    /// <summary>True when a device has a file under <paramref name="sendId"/>.</summary>
+    public bool HasSend(string deviceId, string sendId)
+    {
+        lock (_gate) return _bySend.ContainsKey((deviceId, sendId));
     }
 
     /// <summary>Where a file of <paramref name="deviceId"/> stands; null when there is no such file.</summary>
@@ -423,6 +460,7 @@ public sealed class Inbox
         lock (_gate)
         {
             _files[file.Id] = file;
+            if (file.SendId is { } send) _bySend[(file.DeviceId, send)] = file;
             if (!file.Done && file.SourceId is { } source) _bySource[(file.DeviceId, source)] = file;
         }
     }
@@ -432,6 +470,7 @@ public sealed class Inbox
         lock (_gate)
         {
             _files.Remove(file.Id);
+            if (file.SendId is { } send && _bySend.TryGetValue((file.DeviceId, send), out var current) && ReferenceEquals(current, file)) _bySend.Remove((file.DeviceId, send));
             Untrack(file);
         }
     }

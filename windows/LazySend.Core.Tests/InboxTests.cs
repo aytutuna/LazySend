@@ -215,3 +215,129 @@ public class ZoneTests
         Assert.Contains("ZoneId=3", mark);
     }
 }
+
+public class SendIdTests
+{
+    private const string SendId = "AbCdEfGhIjKlMnOpQrStUv";
+
+    private static ItemRequest FileRequest(byte[] content, string sendId = SendId) =>
+        new(ItemKind.File, Name: "a.bin", Size: content.Length, SendId: sendId);
+
+    [Fact]
+    public async Task RepeatInProgressGivesTheCurrentOffset()
+    {
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+        var content = new byte[5000];
+        using var first = await phone.PostAsync(Protocol.ItemsPath, FileRequest(content));
+        var begun = await Harness.ReadAsync<ItemState>(first);
+        (await phone.PutChunkAsync(begun.Id, 0, content[..2000])).EnsureSuccessStatusCode();
+
+        using var again = await phone.PostAsync(Protocol.ItemsPath, FileRequest(content));
+
+        Assert.Equal(System.Net.HttpStatusCode.OK, again.StatusCode);
+        Assert.Equal(new ItemState(begun.Id, 2000, false), await Harness.ReadAsync<ItemState>(again));
+        Assert.Single(h.Service.Inbox.InProgress);
+    }
+
+    [Fact]
+    public async Task RepeatFinishedIsDoneAndAddsNothing()
+    {
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+        var content = new byte[5000];
+        using var first = await phone.PostAsync(Protocol.ItemsPath, FileRequest(content));
+        var begun = await Harness.ReadAsync<ItemState>(first);
+        (await phone.PutChunkAsync(begun.Id, 0, content)).EnsureSuccessStatusCode();
+        int received = 0;
+        h.Service.Inbox.FileReceived += (_, _) => received++;
+
+        await h.RestartAsync();
+        h.Service.Inbox.FileReceived += (_, _) => received++;
+        using var again = await phone.PostAsync(Protocol.ItemsPath, FileRequest(content));
+
+        Assert.Equal(System.Net.HttpStatusCode.OK, again.StatusCode);
+        Assert.Equal(new ItemState(begun.Id, 5000, true), await Harness.ReadAsync<ItemState>(again));
+        Assert.Equal(0, received);
+        Assert.Single(Directory.GetFiles(Path.Combine(h.ReceivedRoot, "Test iPhone")));
+    }
+
+    [Fact]
+    public async Task RepeatInProgressSurvivesARestart()
+    {
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+        var content = new byte[5000];
+        using var first = await phone.PostAsync(Protocol.ItemsPath, FileRequest(content));
+        var begun = await Harness.ReadAsync<ItemState>(first);
+        (await phone.PutChunkAsync(begun.Id, 0, content[..1500])).EnsureSuccessStatusCode();
+
+        await h.RestartAsync();
+        using var again = await phone.PostAsync(Protocol.ItemsPath, FileRequest(content));
+
+        Assert.Equal(new ItemState(begun.Id, 1500, false), await Harness.ReadAsync<ItemState>(again));
+    }
+
+    [Fact]
+    public async Task OtherSizeOrKindWithTheSameSendIdIsRefused()
+    {
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+        (await phone.PostAsync(Protocol.ItemsPath, FileRequest(new byte[100]))).EnsureSuccessStatusCode();
+
+        using var size = await phone.PostAsync(Protocol.ItemsPath, FileRequest(new byte[101]));
+        using var kind = await phone.PostAsync(Protocol.ItemsPath, new ItemRequest(ItemKind.Text, Text: "hi", SendId: SendId));
+
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, size.StatusCode);
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, kind.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("short")]
+    [InlineData("0123456789abcde")]
+    [InlineData("0123456789abcdef!")]
+    [InlineData("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0")]
+    public async Task MalformedSendIdIsRefused(string sendId)
+    {
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+
+        using var file = await phone.PostAsync(Protocol.ItemsPath, FileRequest(new byte[10], sendId));
+        using var text = await phone.PostAsync(Protocol.ItemsPath, new ItemRequest(ItemKind.Text, Text: "hi", SendId: sendId));
+
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, file.StatusCode);
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, text.StatusCode);
+    }
+
+    [Fact]
+    public async Task RepeatedTextAndLinkAddNoSecondHistoryEntry()
+    {
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+        var text = new ItemRequest(ItemKind.Text, Text: "hello", SendId: SendId);
+        var link = new ItemRequest(ItemKind.Link, Url: "https://alazy.app/", SendId: "ZyXwVuTsRqPoNmLkJiHgFe");
+        var firstText = await Harness.ReadAsync<ItemState>(await phone.PostAsync(Protocol.ItemsPath, text));
+        await phone.PostAsync(Protocol.ItemsPath, link);
+
+        await h.RestartAsync();
+        using var again = await phone.PostAsync(Protocol.ItemsPath, text);
+        await phone.PostAsync(Protocol.ItemsPath, link);
+
+        Assert.Equal(System.Net.HttpStatusCode.OK, again.StatusCode);
+        Assert.Equal(firstText, await Harness.ReadAsync<ItemState>(again));
+        Assert.Equal(2, h.Service.History.Items.Count);
+    }
+
+    [Fact]
+    public async Task SendIdIsScopedToTheDevice()
+    {
+        await using var h = new Harness();
+        using var one = await h.PairAsync("One");
+        using var two = await h.PairAsync("Two");
+
+        var a = await Harness.ReadAsync<ItemState>(await one.PostAsync(Protocol.ItemsPath, FileRequest(new byte[10])));
+        var b = await Harness.ReadAsync<ItemState>(await two.PostAsync(Protocol.ItemsPath, FileRequest(new byte[10])));
+
+        Assert.NotEqual(a.Id, b.Id);
+    }
+}

@@ -59,6 +59,9 @@ public static class Protocol
         PropertyNameCaseInsensitive = true,
     };
 
+    /// <summary>A sender's id for one send: 16 to 64 of the characters an id has.</summary>
+    public static bool IsValidSendId(string sendId) => sendId.Length >= 16 && IsValidId(sendId);
+
     /// <summary>A phone's, desktop's or item's id: 8 to 64 letters, digits, '-' and '_', so it is safe as a file name.</summary>
     public static bool IsValidId(string? id)
     {
@@ -210,7 +213,7 @@ public static class ItemKind
 
 /// <summary>The body of <c>POST /v1/items</c>.</summary>
 public sealed record ItemRequest(string Kind = "", string? Text = null, string? Url = null, string? Name = null, long? Size = null,
-                                 string? Mime = null, DateTimeOffset? Modified = null, string? SourceId = null, string? Sha256 = null);
+                                 string? Mime = null, DateTimeOffset? Modified = null, string? SourceId = null, string? Sha256 = null, string? SendId = null);
 
 /// <summary>The answer to a file's <c>POST /v1/items</c> and to <c>GET /v1/items/{id}</c>.</summary>
 public sealed record ItemState(string Id, long Offset, bool Done, bool? Duplicate = null);

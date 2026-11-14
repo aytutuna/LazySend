@@ -2,7 +2,8 @@ using System.Text;
 
 namespace LazySend.Core;
 
-public sealed record ReceivedItem(string Id, string DeviceId, string DeviceName, string Kind, string? Text, string? Url, DateTimeOffset Received);
+public sealed record ReceivedItem(string Id, string DeviceId, string DeviceName, string Kind, string? Text, string? Url, DateTimeOffset Received,
+                           string? SendId = null);
 
 public sealed class HistoryFile
 {
@@ -40,9 +41,10 @@ public sealed class ReceivedHistory
     }
 
     /// <param name="id">The item's id; new when null. A host's outbox items keep theirs, so one that arrives twice is noticed.</param>
-    public ReceivedItem Add(PairedDevice device, string kind, string? text, string? url, DateTimeOffset now, string? id = null)
+    public ReceivedItem Add(PairedDevice device, string kind, string? text, string? url, DateTimeOffset now, string? id = null,
+                            string? sendId = null)
     {
-        var item = new ReceivedItem(id ?? Protocol.NewId(), device.Id, device.Name, kind, text, url, now);
+        var item = new ReceivedItem(id ?? Protocol.NewId(), device.Id, device.Name, kind, text, url, now, sendId);
         lock (_gate)
         {
             _file.Items.Insert(0, item);
@@ -59,6 +61,15 @@ public sealed class ReceivedHistory
         }
         Changed?.Invoke(this, EventArgs.Empty);
         return item;
+    }
+
+    /// <summary>The item a device sent under <paramref name="sendId"/> within the last day, if it is still in the list.</summary>
+    public ReceivedItem? FindSend(string deviceId, string sendId, DateTimeOffset now)
+    {
+        lock (_gate)
+        {
+            return _file.Items.FirstOrDefault(i => i.SendId == sendId && i.DeviceId == deviceId && now - i.Received <= Inbox.DoneKept);
+        }
     }
 
     public bool Remove(string id)

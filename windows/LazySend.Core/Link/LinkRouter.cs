@@ -260,20 +260,24 @@ public sealed class LinkRouter
         {
             return LinkResponse.Error(400, LinkError.BadRequest);
         }
+        if (item.SendId is not null && !Protocol.IsValidSendId(item.SendId)) return LinkResponse.Error(400, LinkError.BadRequest);
         switch (item.Kind)
         {
             case ItemKind.Text:
                 if (string.IsNullOrEmpty(item.Text)) return LinkResponse.Error(400, LinkError.BadRequest);
                 if (Encoding.UTF8.GetByteCount(item.Text) > Protocol.MaxTextBytes) return LinkResponse.Error(413, LinkError.TooLarge);
-                return Stored(_history.Add(device, ItemKind.Text, item.Text, null, now));
+                if (RepeatedSend(ItemKind.Text) is { } repeatedText) return repeatedText;
+                return Stored(_history.Add(device, ItemKind.Text, item.Text, null, now, sendId: item.SendId));
             case ItemKind.Link:
                 if (!ReceivedLinks.IsAcceptable(item.Url)) return LinkResponse.Error(400, LinkError.BadRequest);
-                return Stored(_history.Add(device, ItemKind.Link, null, item.Url, now));
+                if (RepeatedSend(ItemKind.Link) is { } repeatedLink) return repeatedLink;
+                return Stored(_history.Add(device, ItemKind.Link, null, item.Url, now, sendId: item.SendId));
             case ItemKind.File:
                 try
                 {
-                    var state = _inbox.Begin(device, item);
-                    return LinkResponse.Json(state.Done ? 200 : 201, state);
+                    if (item.SendId is { } fileSend && _history.FindSend(device.Id, fileSend, now) is not null) return LinkResponse.Error(400, LinkError.BadRequest);
+                    var state = _inbox.Begin(device, item, out bool repeat);
+                    return LinkResponse.Json(repeat || state.Done ? 200 : 201, state);
                 }
                 catch (InboxException e)
                 {
@@ -281,6 +285,17 @@ public sealed class LinkRouter
                 }
             default:
                 return LinkResponse.Error(400, LinkError.BadRequest);
+        }
+
+        // A text or link keeps no size or hash, so only its kind can disagree with an earlier post.
+        LinkResponse? RepeatedSend(string kind)
+        {
+            if (item.SendId is not { } sendId) return null;
+            if (_history.FindSend(device.Id, sendId, now) is { } known)
+            {
+                return known.Kind == kind ? LinkResponse.Json(200, new ItemState(known.Id, 0, true)) : LinkResponse.Error(400, LinkError.BadRequest);
+            }
+            return _inbox.HasSend(device.Id, sendId) ? LinkResponse.Error(400, LinkError.BadRequest) : null;
         }
 
         LinkResponse Stored(ReceivedItem stored)
