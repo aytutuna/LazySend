@@ -27,6 +27,13 @@ class GalleryIndex(private val directory: File) {
         File(directory, "$deviceId.txt").appendText(sourceId + "\n")
     }
 
+    /** Forgets what was received from [deviceId], as when that device is removed. */
+    @Synchronized
+    fun clear(deviceId: String) {
+        byDevice.remove(deviceId)
+        File(directory, "$deviceId.txt").delete()
+    }
+
     private fun load(deviceId: String): HashSet<String> = byDevice.getOrPut(deviceId) {
         val file = File(directory, "$deviceId.txt")
         if (file.exists()) file.readLines().filterTo(HashSet()) { it.isNotEmpty() } else HashSet()

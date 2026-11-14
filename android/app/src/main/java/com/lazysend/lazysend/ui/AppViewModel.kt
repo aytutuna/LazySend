@@ -160,6 +160,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val pc = graph.pcs.get(id) ?: return
         graph.pcs.remove(id)
         viewModelScope.launch(Dispatchers.IO) {
+            graph.receiver.forget(id)
             val reached = graph.connector.connect(pc, search = false) as? com.lazysend.lazysend.transfer.Reach.Reached
             try {
                 reached?.client?.forgetSelf()

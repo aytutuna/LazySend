@@ -7,11 +7,13 @@ import android.provider.Settings
 import com.lazysend.lazysend.data.PcStore
 import com.lazysend.lazysend.data.SecretBox
 import com.lazysend.lazysend.data.Timeline
+import com.lazysend.lazysend.host.GalleryIndex
 import com.lazysend.lazysend.host.HostAdvertiser
 import com.lazysend.lazysend.host.HostController
 import com.lazysend.lazysend.host.HostIdentity
 import com.lazysend.lazysend.transfer.MediaAssets
 import com.lazysend.lazysend.transfer.NsdFinder
+import com.lazysend.lazysend.transfer.GalleryParts
 import com.lazysend.lazysend.transfer.Notifications
 import com.lazysend.lazysend.transfer.PcCheckWorker
 import com.lazysend.lazysend.transfer.PcConnector
@@ -29,7 +31,10 @@ class AppGraph(private val app: Application) {
     val notifications = Notifications(app)
     val connector = PcConnector(pcs, NsdFinder(app), OkHttpClient())
     val sender = Sender(app, connector, timeline, MediaAssets(app))
-    val receiver = Receiver(connector, timeline, files, notifications::received)
+    val receiver = Receiver(
+        connector, timeline, files, GalleryIndex(File(app.filesDir, "guest-index")), GalleryParts(File(app.filesDir, "gallery-parts.json")),
+        notifications::received,
+    )
 
     private fun deviceName() = Settings.Global.getString(app.contentResolver, "device_name")?.takeIf { it.isNotBlank() } ?: Build.MODEL
 

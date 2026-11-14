@@ -7,6 +7,7 @@ import com.lazysend.lazysend.data.Pc
 import com.lazysend.lazysend.data.PcStore
 import com.lazysend.lazysend.data.Timeline
 import com.lazysend.lazysend.data.TimelineEntry
+import com.lazysend.lazysend.host.GalleryIndex
 import com.lazysend.lazysend.host.MONTH
 import com.lazysend.lazysend.link.FakePc
 import com.lazysend.lazysend.link.OutboxEntry
@@ -37,7 +38,9 @@ class ReceiverTest {
     private val timeline = Timeline(File(dir, "timeline.json"))
     private val files = MemFiles()
     private val paired = Pc("desktop-test-01", "Test PC", encodeBase64Url(pc.pin), listOf(pc.endpoint.host), pc.endpoint.port, TEST_SECRET)
-    private val receiver = Receiver(PcConnector(store, null), timeline, files, { _, _, _ -> })
+    private val index = GalleryIndex(File(dir, "guest-index"))
+    private val partsFile = File(dir, "gallery-parts.json")
+    private val receiver = Receiver(PcConnector(store, null), timeline, files, index, GalleryParts(partsFile), { _, _, _ -> })
 
     @After
     fun stop() {
@@ -136,9 +139,50 @@ class ReceiverTest {
     }
 
     @Test
+    fun aGalleryAssetReceivedBeforeIsOnlyAcknowledgedAndForgottenWithItsPc() = runBlocking {
+        pc.outboxFile = bytes(100)
+        pc.outbox += OutboxEntry("out1", "file", name = "IMG_1.jpg", size = 100, mime = "image/jpeg", sourceId = "local:image:1")
+        receiver.collect(paired, pc.client(), 0)
+        pc.outbox += OutboxEntry("out9", "file", name = "IMG_1.jpg", size = 100, mime = "image/jpeg", sourceId = "local:image:1")
+
+        receiver.collect(paired, pc.client(), 0)
+
+        assertEquals(1, files.created.get())
+        assertEquals(listOf("out1", "out9"), pc.acknowledged)
+        receiver.forget(paired.id)
+        assertTrue(!index.contains(paired.id, "local:image:1"))
+    }
+
+    @Test
+    fun aGalleryPartLeftByADeadProcessCarriesOnFromItsSize() = runBlocking {
+        pc.outboxFile = bytes(5_000)
+        pc.outbox += OutboxEntry("out1", "file", name = "IMG_1.jpg", size = 5_000, mime = "image/jpeg", sourceId = "local:image:1")
+        val left = files.seed(3_000)
+        GalleryParts(partsFile).put("${paired.id}/out1", left.uri)
+
+        Receiver(PcConnector(store, null), timeline, files, index, GalleryParts(partsFile), { _, _, _ -> }).collect(paired, pc.client(), 0)
+
+        assertEquals(1, files.created.get())
+        val data = files.bytes(left.uri)
+        assertEquals(5_000, data.size)
+        assertArrayEquals(ByteArray(3_000), data.copyOfRange(0, 3_000))
+        assertArrayEquals(pc.outboxFile.copyOfRange(3_000, 5_000), data.copyOfRange(3_000, 5_000))
+    }
+
+    @Test
+    fun aNameThatClimbsOutOfTheFolderIsMadeSafe() = runBlocking {
+        pc.outboxFile = bytes(10)
+        pc.outbox += OutboxEntry("out1", "file", name = "../../evil.bin", size = 10)
+
+        receiver.collect(paired, pc.client(), 0)
+
+        assertEquals("_.._evil.bin", files.names["mem://1"])
+    }
+
+    @Test
     fun aFullDiskLeavesTheItemQueuedAndTellsTheUserOnce() = runBlocking {
         val told = mutableListOf<String>()
-        val full = Receiver(PcConnector(store, null), timeline, FullFiles(files), { _, _, text -> told += text })
+        val full = Receiver(PcConnector(store, null), timeline, FullFiles(files), index, GalleryParts(partsFile), { _, _, text -> told += text })
         pc.outboxFile = bytes(1_000)
         pc.outbox += OutboxEntry("out1", "file", name = "x.bin", size = 1_000)
         pc.outbox += OutboxEntry("out2", "file", name = "IMG.jpg", size = 1_000, mime = "image/jpeg", sourceId = "local:image:3")
