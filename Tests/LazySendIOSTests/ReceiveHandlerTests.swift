@@ -9,7 +9,7 @@ final class ReceiveHandlerTests: XCTestCase {
     private func fixture() -> (handler: ReceiveHandler, timeline: Timeline, folder: URL, env: AppEnvironment) {
         let env = AppEnvironment.temporary()
         let timeline = Timeline(file: env.support.appendingPathComponent("timeline.json"))
-        let handler = ReceiveHandler(pcName: "Office PC", timeline: timeline, folder: env.documents, notifier: .silent, defaults: env.defaults,
+        let handler = ReceiveHandler(pcId: "office-pc-0001", pcName: "Office PC", timeline: timeline, folder: env.documents, notifier: .silent, defaults: env.defaults,
                                      saved: SavedAssets(file: env.support.appendingPathComponent("saved-assets.json")))
         return (handler, timeline, env.documents, env)
     }
@@ -85,7 +85,7 @@ final class ReceiveHandlerTests: XCTestCase {
         await first.pause(item)
         XCTAssertEqual(timeline.get("in-item-0001")?.state, .paused)
 
-        let second = ReceiveHandler(pcName: "Office PC", timeline: timeline, folder: folder, notifier: .silent, defaults: env.defaults,
+        let second = ReceiveHandler(pcId: "office-pc-0001", pcName: "Office PC", timeline: timeline, folder: folder, notifier: .silent, defaults: env.defaults,
                                       saved: SavedAssets(file: env.support.appendingPathComponent("saved-assets.json")))
         let have = try await second.prepareFile(item)
         XCTAssertEqual(have, 5)
@@ -166,6 +166,7 @@ final class ReceiveHandlerTests: XCTestCase {
         let rows = timeline.entries.filter { $0.kind == .gallery }
         XCTAssertEqual(rows.count, 1)
         XCTAssertEqual(rows.first?.count, 3)
+        XCTAssertEqual(rows.first?.id, "in-gallery-office-pc-0001")
         XCTAssertEqual(rows.first?.direction, .received)
         XCTAssertFalse(timeline.entries.contains { $0.kind == .file })
     }
@@ -176,7 +177,7 @@ final class ReceiveHandlerTests: XCTestCase {
         _ = try await first.prepareFile(item)
         try first.write(Data("hello".utf8), for: item)
         await first.pause(item)
-        let second = ReceiveHandler(pcName: "Office PC", timeline: timeline, folder: folder, notifier: .silent, defaults: env.defaults,
+        let second = ReceiveHandler(pcId: "office-pc-0001", pcName: "Office PC", timeline: timeline, folder: folder, notifier: .silent, defaults: env.defaults,
                                     saved: SavedAssets(file: env.support.appendingPathComponent("saved-assets.json")))
         let have = try await second.prepareFile(item)
         XCTAssertEqual(have, 5)

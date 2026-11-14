@@ -9,6 +9,7 @@ import UniformTypeIdentifiers
 /// `<name>.part` until it is whole, so a later try can carry on from its size. Files from the computer's photo
 /// library are filed under `<computer name>/Gallery/YYYY-MM/` and show as one row for the computer.
 final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
+    private let pcId: String
     private let pcName: String
     private let timeline: Timeline
     private let folder: URL
@@ -22,7 +23,8 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
     // The gallery files finished lately: they have no timeline entry to say so.
     private var finishedGallery: [String] = []
 
-    init(pcName: String, timeline: Timeline, folder: URL, notifier: Notifier, defaults: UserDefaults, saved: SavedAssets) {
+    init(pcId: String, pcName: String, timeline: Timeline, folder: URL, notifier: Notifier, defaults: UserDefaults, saved: SavedAssets) {
+        self.pcId = pcId
         self.pcName = pcName
         self.timeline = timeline
         self.folder = folder
@@ -40,7 +42,7 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
     }
 
     private var galleryRowId: String {
-        "in-gallery-" + pcName
+        "in-gallery-" + pcId
     }
 
     func isDone(_ item: OutboxEntry) async -> Bool {

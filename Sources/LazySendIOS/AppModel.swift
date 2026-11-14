@@ -226,7 +226,7 @@ final class AppModel: ObservableObject {
     private func outboxCollector(for id: String) -> OutboxCollector? {
         if let existing = collectors[id] { return existing }
         guard let pc = store.get(id) else { return nil }
-        let handler = ReceiveHandler(pcName: pc.name, timeline: timeline, folder: env.documents, notifier: env.notifier, defaults: env.defaults, saved: saved)
+        let handler = ReceiveHandler(pcId: pc.id, pcName: pc.name, timeline: timeline, folder: env.documents, notifier: env.notifier, defaults: env.defaults, saved: saved)
         let made = OutboxCollector(handler: handler)
         collectors[id] = made
         return made
