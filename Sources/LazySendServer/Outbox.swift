@@ -105,13 +105,13 @@ public final class Outbox: @unchecked Sendable {
     }
 
     /// Queues one file from the phone's own library for the phone to file as a gallery item. Nil when the file is not
-    /// there, the id is not usable or the device already has all it may.
+    /// there or the id is not usable; throws `tooMany` when the device already has all it may.
     @discardableResult
-    public func queueGalleryFile(_ deviceId: String, url: URL, mime: String?, sourceId: String, taken: Date?) -> OutboxItem? {
+    public func queueGalleryFile(_ deviceId: String, url: URL, mime: String?, sourceId: String, taken: Date?) throws -> OutboxItem? {
         guard GalleryIndex.isValidSourceId(sourceId), var item = fileItem(url, bookmark: nil, mime: mime) else { return nil }
         item.sourceId = sourceId
         item.taken = taken
-        return (try? add([item], deviceId, atMost: true))?.first
+        return try add([item], deviceId, atMost: false).first
     }
 
     private func fileItem(_ url: URL, bookmark: Data?, mime: String?) -> OutboxItem? {

@@ -243,6 +243,21 @@ final class GalleryFeedTests: XCTestCase {
         XCTAssertNil(feed.progress(guest)?.wait)
     }
 
+    func testAFullOutboxMakesTheFeedWaitInsteadOfDroppingAssets() async throws {
+        for number in 1...Limits.maxOutboxItemsPerDevice { try outbox.queueText(guest, "note \(number)") }
+        await feed.start(guest)
+        XCTAssertEqual(feed.progress(guest)?.wait, .outbox)
+        XCTAssertEqual(library.exports, 0)
+        XCTAssertTrue(queued().isEmpty)
+        let first = try XCTUnwrap(outbox.pending(guest).first)
+        outbox.acknowledge(guest, first.id)
+        let queuedOne = await waitUntil { self.queued().count == 1 }
+        XCTAssertTrue(queuedOne)
+        XCTAssertEqual(queued().first?.sourceId, "asset-1#photo")
+        XCTAssertEqual(feed.progress(guest)?.wait, .outbox)
+        XCTAssertEqual(library.exports, 1)
+    }
+
     func testTheTotalGrowsWhenTheLibraryDoes() async {
         library = FakeLibrary(folder: root, count: 2)
         makeFeed()

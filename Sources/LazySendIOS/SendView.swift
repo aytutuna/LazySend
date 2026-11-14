@@ -97,6 +97,8 @@ struct SendView: View {
                     .accessibilityIdentifier("send.galleryProgress")
                 if progress.wait == .storage {
                     Text("Waiting for free storage").foregroundStyle(.secondary)
+                } else if progress.wait == .outbox {
+                    Text("Waiting for \(target.name) to take what is queued").foregroundStyle(.secondary)
                 }
                 Text("Keep Lazy Send open until it is done.").foregroundStyle(.secondary)
                 Button("Stop", role: .destructive) { model.stopGalleryFeed(for: target) }

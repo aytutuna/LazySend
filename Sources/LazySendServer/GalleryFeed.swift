@@ -4,6 +4,8 @@ import LazySendKit
 /// Why a running feed is not queuing anything for now.
 public enum GalleryFeedWait: Equatable, Sendable {
     case storage
+    /// The guest has as many items waiting as the outbox holds.
+    case outbox
 }
 
 public struct GalleryFeedProgress: Equatable, Sendable {
@@ -186,6 +188,10 @@ public final class GalleryFeed {
                 lists[deviceId]?.removeLast()
                 continue
             }
+            if outbox.pending(deviceId).count >= Limits.maxOutboxItemsPerDevice {
+                setWait(.outbox, for: deviceId)
+                return true
+            }
             let queuedBytes = waiting.reduce(Int64(0)) { $0 + ($1.size ?? 0) }
             if !waiting.isEmpty, queuedBytes + item.sizeHint > queueBytes { return true }
             if freeSpace() - item.sizeHint < Limits.minFree {
@@ -239,8 +245,15 @@ public final class GalleryFeed {
             try? FileManager.default.removeItem(at: directory)
             return
         }
-        if outbox.queueGalleryFile(deviceId, url: file, mime: item.mime, sourceId: item.sourceId, taken: item.modified) == nil {
+        do {
+            if try outbox.queueGalleryFile(deviceId, url: file, mime: item.mime, sourceId: item.sourceId, taken: item.modified) == nil {
+                try? FileManager.default.removeItem(at: directory)
+            }
+        } catch {
+            // Someone else filled the outbox meanwhile: the asset waits for the next acknowledgement.
             try? FileManager.default.removeItem(at: directory)
+            lists[deviceId]?.append(item)
+            setWait(.outbox, for: deviceId)
         }
     }
 
