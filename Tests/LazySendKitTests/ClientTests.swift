@@ -120,6 +120,29 @@ final class ClientTests: XCTestCase {
         XCTAssertEqual(pc.uploads["item1"]?.data, file.data)
     }
 
+    func testTheSameSendIdIsOneUpload() async throws {
+        let pc = try FakePc()
+        let folder = try temporaryFolder()
+        let file = try randomFile(in: folder, bytes: 10_000)
+        let request = try ItemRequest.file(at: file.url, name: "payload.bin", mime: nil, modified: nil, sendId: newSendId())
+        let client = LinkClient(endpoint: pc.endpoint, pin: pc.pin, credentials: pc.credentials)
+        _ = try await Uploader(sleep: { _ in }, connect: { client }).send(request, source: FileDataSource(url: file.url))
+        var ids: [String] = []
+        _ = try await Uploader(sleep: { _ in }, connect: { client })
+            .send(request, source: FileDataSource(url: file.url), onItem: { ids.append($0) })
+        XCTAssertEqual(pc.uploads.count, 1)
+        XCTAssertEqual(ids, ["item1"])
+        XCTAssertEqual(pc.uploads["item1"]?.sendId, request.sendId)
+        XCTAssertEqual(pc.chunkOffsets, [0])
+    }
+
+    func testASendIdIsTwentyTwoUrlSafeCharacters() {
+        let id = newSendId()
+        XCTAssertEqual(id.count, 22)
+        XCTAssertTrue(id.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") })
+        XCTAssertNotEqual(id, newSendId())
+    }
+
     func testPausesWhileTheComputerIsBusy() async throws {
         let pc = try FakePc()
         let folder = try temporaryFolder()

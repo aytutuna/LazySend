@@ -20,6 +20,28 @@ final class ShareQueueTests: XCTestCase {
         XCTAssertEqual(queue.items().first?.itemId, "item7")
         XCTAssertEqual(queue.items().first?.text, "hi")
     }
+
+    func testEveryItemKeepsOneSendId() throws {
+        let queue = ShareQueue(root: try temporaryFolder())
+        try queue.add(QueuedItem(id: "a", pcId: "pc", kind: "text", text: "hi"))
+        try queue.add(QueuedItem(id: "b", pcId: "pc", kind: "text", text: "yo", sendId: "AbCdEfGhIjKlMnOpQrStUv"))
+        let first = queue.items()
+        XCTAssertEqual(first.first { $0.id == "a" }?.sendId?.count, 22)
+        XCTAssertEqual(first.first { $0.id == "b" }?.sendId, "AbCdEfGhIjKlMnOpQrStUv")
+        XCTAssertEqual(queue.items().map(\.sendId), first.map(\.sendId))
+    }
+
+    func testAnItemQueuedBeforeSendIdsGetsOneOnLoad() throws {
+        let root = try temporaryFolder()
+        let folder = root.appendingPathComponent("Queue/old", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let json = #"{"id":"old","pcId":"pc","kind":"text","text":"hi","created":0}"#
+        try Data(json.utf8).write(to: folder.appendingPathComponent("item.json"))
+        let queue = ShareQueue(root: root)
+        let sendId = try XCTUnwrap(queue.items().first?.sendId)
+        XCTAssertEqual(queue.items().first?.sendId, sendId)
+        XCTAssertEqual(ShareQueue(root: root).items().first?.sendId, sendId)
+    }
 }
 
 final class HostedPhonesTests: XCTestCase {

@@ -36,6 +36,7 @@ private struct Piece {
     var mime: String?
     var modified: Date?
     var size: Int64 = 0
+    var sendId = newSendId()
 }
 
 /// A computer to send to, or a phone paired with this one as its host (its id starts with `HostedPhones.prefix`).
@@ -241,7 +242,8 @@ final class ShareModel: ObservableObject {
         var finished = 0.0
         // What went is dropped from the list, so trying again sends only the rest.
         while let piece = pieces.first {
-            if let request = piece.request {
+            if var request = piece.request {
+                request.sendId = piece.sendId
                 _ = try await reached.client.postItem(request)
             } else if let file = piece.file {
                 let base = finished
@@ -258,7 +260,7 @@ final class ShareModel: ObservableObject {
 
     private func upload(_ piece: Piece, file: URL, using reached: Reached, pc: PairedPc, onBytes: @escaping @Sendable (Int64) -> Void) async throws {
         let request = try await Task.detached {
-            try ItemRequest.file(at: file, name: piece.name, mime: piece.mime, modified: piece.modified)
+            try ItemRequest.file(at: file, name: piece.name, mime: piece.mime, modified: piece.modified, sendId: piece.sendId)
         }.value
         let connector = self.connector
         var used = false
@@ -278,9 +280,9 @@ final class ShareModel: ObservableObject {
             while let piece = pieces.first {
                 let id = UUID().uuidString.lowercased()
                 if let request = piece.request {
-                    try queue.add(QueuedItem(id: id, pcId: target, kind: request.kind, text: request.text, url: request.url))
+                    try queue.add(QueuedItem(id: id, pcId: target, kind: request.kind, text: request.text, url: request.url, sendId: piece.sendId))
                 } else if let file = piece.file {
-                    try queue.add(QueuedItem(id: id, pcId: target, kind: "file", name: piece.name, mime: piece.mime, modified: piece.modified),
+                    try queue.add(QueuedItem(id: id, pcId: target, kind: "file", name: piece.name, mime: piece.mime, modified: piece.modified, sendId: piece.sendId),
                                   file: file, move: true)
                     try? FileManager.default.removeItem(at: file.deletingLastPathComponent())
                 }

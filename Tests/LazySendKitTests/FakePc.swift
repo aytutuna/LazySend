@@ -10,6 +10,7 @@ final class FakePc: @unchecked Sendable {
         var size: Int64
         var sha256: String?
         var sourceId: String?
+        var sendId: String?
         var data = Data()
         var done = false
     }
@@ -133,8 +134,13 @@ final class FakePc: @unchecked Sendable {
             if let sourceId = sourceId, let existing = uploads.first(where: { $0.value.sourceId == sourceId && !$0.value.done && $0.value.size == size }) {
                 return .json(201, "{\"id\":\"\(existing.key)\",\"offset\":\(existing.value.data.count),\"done\":false}")
             }
+            let sendId = body["sendId"] as? String
+            if let sendId = sendId, let existing = uploads.first(where: { $0.value.sendId == sendId }) {
+                return .json(200, "{\"id\":\"\(existing.key)\",\"offset\":\(existing.value.data.count),\"done\":\(existing.value.done)}")
+            }
             let id = "item\(uploads.count + 1)"
-            uploads[id] = Upload(name: body["name"] as? String ?? "", size: size, sha256: body["sha256"] as? String, sourceId: sourceId)
+            uploads[id] = Upload(name: body["name"] as? String ?? "", size: size, sha256: body["sha256"] as? String, sourceId: sourceId,
+                                 sendId: sendId)
             return .json(201, "{\"id\":\"\(id)\",\"offset\":0,\"done\":\(size == 0)}")
         default:
             return .error(400, "badRequest")

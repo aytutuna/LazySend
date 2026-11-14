@@ -42,10 +42,13 @@ public struct TimelineEntry: Codable, Identifiable, Equatable, Sendable {
     public var pcId: String?
     public var itemId: String?
     public var localFile: String?
+    /// The id this send carries to the computer, kept across retries and restarts.
+    public var sendId: String?
 
     public init(id: String, time: Date = Date(), direction: Direction, kind: EntryKind, pcName: String, title: String, detail: String = "",
                 state: EntryState = .active, bytes: Int64 = 0, totalBytes: Int64 = 0, count: Int = 0, totalCount: Int = 0,
-                fileName: String? = nil, mime: String? = nil, pcId: String? = nil, itemId: String? = nil, localFile: String? = nil) {
+                fileName: String? = nil, mime: String? = nil, pcId: String? = nil, itemId: String? = nil, localFile: String? = nil,
+                sendId: String? = nil) {
         self.id = id
         self.time = time
         self.direction = direction
@@ -63,6 +66,7 @@ public struct TimelineEntry: Codable, Identifiable, Equatable, Sendable {
         self.pcId = pcId
         self.itemId = itemId
         self.localFile = localFile
+        self.sendId = sendId
     }
 }
 
@@ -80,6 +84,8 @@ public final class Timeline: ObservableObject {
         entries = saved.map { entry in
             var entry = entry
             if entry.state == .active { entry.state = .paused }
+            // A file still waiting to go from before send ids existed gets one, which every later try reuses.
+            if entry.direction == .sent, entry.kind == .file, entry.localFile != nil, entry.sendId == nil { entry.sendId = newSendId() }
             return entry
         }
     }

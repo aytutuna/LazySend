@@ -32,9 +32,11 @@ public struct QueuedItem: Codable, Equatable, Identifiable, Sendable {
     public var modified: Date?
     public var created: Date
     public var itemId: String?
+    /// Marks the send for the computer, so a retry after a lost answer or a restart does not send it twice.
+    public var sendId: String?
 
     public init(id: String, pcId: String, kind: String, text: String? = nil, url: String? = nil, name: String? = nil,
-                mime: String? = nil, modified: Date? = nil, created: Date = Date(), itemId: String? = nil) {
+                mime: String? = nil, modified: Date? = nil, created: Date = Date(), itemId: String? = nil, sendId: String? = nil) {
         self.id = id
         self.pcId = pcId
         self.kind = kind
@@ -45,6 +47,7 @@ public struct QueuedItem: Codable, Equatable, Identifiable, Sendable {
         self.modified = modified
         self.created = created
         self.itemId = itemId
+        self.sendId = sendId
     }
 }
 
@@ -63,6 +66,8 @@ public struct ShareQueue: Sendable {
 
     /// Queues `item`, copying `file` next to it when it is a file, or moving it when the caller has no more use for it.
     public func add(_ item: QueuedItem, file: URL? = nil, move: Bool = false) throws {
+        var item = item
+        if item.sendId == nil { item.sendId = newSendId() }
         let fm = FileManager.default
         let folder = staging.appendingPathComponent(item.id, isDirectory: true)
         try fm.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -89,7 +94,15 @@ public struct ShareQueue: Sendable {
         let found = folders.compactMap { folder in
             (try? Data(contentsOf: folder.appendingPathComponent("item.json"))).flatMap { try? JSONDecoder().decode(QueuedItem.self, from: $0) }
         }
-        return found.sorted { $0.created < $1.created }
+        // Items queued before send ids existed get one now, kept for every later try.
+        let marked = found.map { item -> QueuedItem in
+            guard item.sendId == nil else { return item }
+            var item = item
+            item.sendId = newSendId()
+            update(item.id) { $0.sendId = item.sendId }
+            return item
+        }
+        return marked.sorted { $0.created < $1.created }
     }
 
     public func update(_ id: String, _ change: (inout QueuedItem) -> Void) {

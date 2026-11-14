@@ -12,6 +12,15 @@ public enum NoteError: Error, LocalizedError, Equatable {
     }
 }
 
+/// A random id for one send, 22 characters of base64url, so a retry of it can be told from a new send.
+public func newSendId() -> String {
+    let bytes = (0..<16).map { _ in UInt8.random(in: .min ... .max) }
+    return Data(bytes).base64EncodedString()
+        .replacingOccurrences(of: "+", with: "-")
+        .replacingOccurrences(of: "/", with: "_")
+        .replacingOccurrences(of: "=", with: "")
+}
+
 extension ItemRequest {
     /// A note: a lone http or https address goes as a link, anything else as text.
     public static func note(_ text: String) throws -> ItemRequest {
@@ -24,9 +33,9 @@ extension ItemRequest {
         return ItemRequest(kind: "text", text: text)
     }
 
-    public static func file(at url: URL, name: String, mime: String?, modified: Date?) throws -> ItemRequest {
+    public static func file(at url: URL, name: String, mime: String?, modified: Date?, sendId: String? = nil) throws -> ItemRequest {
         let size = (try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.int64Value ?? 0
         return ItemRequest(kind: "file", name: name, size: size, mime: mime,
-                           modified: modified.map { ISO8601DateFormatter().string(from: $0) }, sha256: try sha256Hex(of: url))
+                           modified: modified.map { ISO8601DateFormatter().string(from: $0) }, sha256: try sha256Hex(of: url), sendId: sendId)
     }
 }

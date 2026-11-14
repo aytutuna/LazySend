@@ -280,7 +280,8 @@ final class AppModel: ObservableObject {
 
 
     func sendNote(_ text: String, to pc: PairedPc) throws {
-        let request = try ItemRequest.note(text)
+        var request = try ItemRequest.note(text)
+        request.sendId = newSendId()
         drainShareQueue()
         let id = "out-" + UUID().uuidString
         timeline.add(TimelineEntry(id: id, direction: .sent, kind: request.kind == "link" ? .link : .text, pcName: pc.name,
@@ -293,7 +294,8 @@ final class AppModel: ObservableObject {
         drainShareQueue()
         for url in urls {
             let id = "out-" + UUID().uuidString
-            timeline.add(TimelineEntry(id: id, direction: .sent, kind: .file, pcName: pc.name, title: url.lastPathComponent, pcId: pc.id))
+            timeline.add(TimelineEntry(id: id, direction: .sent, kind: .file, pcName: pc.name, title: url.lastPathComponent, pcId: pc.id,
+                                       sendId: newSendId()))
             enqueue(id) { await self.deliverFile(url, scoped: scoped, to: pc, entryId: id) }
         }
     }
@@ -624,7 +626,7 @@ final class AppModel: ObservableObject {
         let mime = UTType(filenameExtension: file.pathExtension)?.preferredMIMEType
         let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
         let outcome = await upload(file, name: file.lastPathComponent, mime: mime, modified: modified, to: pc, entryId: entryId,
-                                   resumeItemId: resumeItemId) { [weak self] id in
+                                   resumeItemId: resumeItemId, sendId: timeline.get(entryId)?.sendId) { [weak self] id in
             self?.timeline.update(entryId) { $0.itemId = id }
             self?.timeline.save()
         }
@@ -642,10 +644,10 @@ final class AppModel: ObservableObject {
 
     // `remember` gets the computer's id for the file as soon as it is known, so a later run can carry on with it.
     private func upload(_ file: URL, name: String, mime: String?, modified: Date?, to pc: PairedPc, entryId: String,
-                        resumeItemId: String? = nil, remember: @escaping @MainActor (String) -> Void) async -> Sent {
+                        resumeItemId: String? = nil, sendId: String? = nil, remember: @escaping @MainActor (String) -> Void) async -> Sent {
         let request: ItemRequest
         do {
-            request = try await Task.detached { try ItemRequest.file(at: file, name: name, mime: mime, modified: modified) }.value
+            request = try await Task.detached { try ItemRequest.file(at: file, name: name, mime: mime, modified: modified, sendId: sendId) }.value
         } catch {
             finish(entryId, .failed, error.localizedDescription)
             return .failed
@@ -724,11 +726,11 @@ final class AppModel: ObservableObject {
         if item.kind == "file" {
             let queue = self.queue
             outcome = await upload(queue.dataURL(item.id), name: item.name ?? "file", mime: item.mime, modified: item.modified, to: pc,
-                                   entryId: entryId, resumeItemId: item.itemId) { id in
+                                   entryId: entryId, resumeItemId: item.itemId, sendId: item.sendId) { id in
                 queue.update(item.id) { $0.itemId = id }
             }
         } else {
-            outcome = await post(ItemRequest(kind: item.kind, text: item.text, url: item.url), to: pc, entryId: entryId)
+            outcome = await post(ItemRequest(kind: item.kind, text: item.text, url: item.url, sendId: item.sendId), to: pc, entryId: entryId)
         }
         queued.remove(item.id)
         if outcome != .waiting { queue.remove(item.id) }
