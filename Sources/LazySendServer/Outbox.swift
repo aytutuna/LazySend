@@ -54,6 +54,8 @@ public final class Outbox: @unchecked Sendable {
     private var waiters: [UUID: (deviceId: String, signal: AsyncStream<Void>.Continuation)] = [:]
 
     public var onChange: (() -> Void)?
+    /// Called with the item the phone just acknowledged, after `onChange`.
+    public var onAcknowledged: ((OutboxItem) -> Void)?
 
     /// Where an item's file is now; the stored path unless the app resolves a bookmark.
     public var locate: (OutboxItem) -> URL? = { item in item.path.map { URL(fileURLWithPath: $0) } }
@@ -97,17 +99,28 @@ public final class Outbox: @unchecked Sendable {
     /// Queues the existing files among `files` with one save, as many as fit under the limit; returns the items queued.
     @discardableResult
     public func queueFiles(_ deviceId: String, _ files: [(url: URL, bookmark: Data?, mime: String?)]) -> [OutboxItem] {
-        var items: [OutboxItem] = []
-        for file in files {
-            var isDirectory: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: file.url.path, isDirectory: &isDirectory), !isDirectory.boolValue,
-                  let size = (try? FileManager.default.attributesOfItem(atPath: file.url.path)[.size] as? NSNumber)?.int64Value
-            else { continue }
-            var item = OutboxItem(kind: ItemKind.file, path: file.url.path, bookmark: file.bookmark, name: file.url.lastPathComponent, size: size)
-            item.mime = file.mime
-            items.append(item)
-        }
+        let items = files.compactMap { fileItem($0.url, bookmark: $0.bookmark, mime: $0.mime) }
         return (try? add(items, deviceId, atMost: true)) ?? []
+    }
+
+    /// Queues one file from the phone's own library for the phone to file as a gallery item. Nil when the file is not
+    /// there, the id is not usable or the device already has all it may.
+    @discardableResult
+    public func queueGalleryFile(_ deviceId: String, url: URL, mime: String?, sourceId: String, taken: Date?) -> OutboxItem? {
+        guard GalleryIndex.isValidSourceId(sourceId), var item = fileItem(url, bookmark: nil, mime: mime) else { return nil }
+        item.sourceId = sourceId
+        item.taken = taken
+        return (try? add([item], deviceId, atMost: true))?.first
+    }
+
+    private func fileItem(_ url: URL, bookmark: Data?, mime: String?) -> OutboxItem? {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), !isDirectory.boolValue,
+              let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.int64Value
+        else { return nil }
+        var item = OutboxItem(kind: ItemKind.file, path: url.path, bookmark: bookmark, name: url.lastPathComponent, size: size)
+        item.mime = mime
+        return item
     }
 
     /// The phone's pending items; when there are none, waits up to `seconds` for one to be queued.
@@ -138,13 +151,30 @@ public final class Outbox: @unchecked Sendable {
     @discardableResult
     public func acknowledge(_ deviceId: String, _ id: String) -> Bool {
         lock.lock()
-        let before = file.items.count
-        file.items.removeAll { $0.deviceId == deviceId && $0.id == id }
-        let removed = file.items.count != before
-        if removed { JsonFile.save(file, to: url) }
+        let found = file.items.first { $0.deviceId == deviceId && $0.id == id }
+        if found != nil {
+            file.items.removeAll { $0.deviceId == deviceId && $0.id == id }
+            JsonFile.save(file, to: url)
+        }
         lock.unlock()
-        if removed { onChange?() }
-        return removed
+        guard let item = found else { return false }
+        onChange?()
+        onAcknowledged?(item)
+        return true
+    }
+
+    /// Takes the gallery items back out for the phone without acknowledging them; returns what was removed.
+    @discardableResult
+    public func removeGalleryItems(_ deviceId: String) -> [OutboxItem] {
+        lock.lock()
+        let gone = file.items.filter { $0.deviceId == deviceId && $0.sourceId != nil }
+        if !gone.isEmpty {
+            file.items.removeAll { $0.deviceId == deviceId && $0.sourceId != nil }
+            JsonFile.save(file, to: url)
+        }
+        lock.unlock()
+        if !gone.isEmpty { onChange?() }
+        return gone
     }
 
     /// Drops everything waiting for the phone (it was removed, or the user cleared the queue).

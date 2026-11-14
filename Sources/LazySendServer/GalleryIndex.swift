@@ -23,6 +23,12 @@ public final class GalleryIndex: @unchecked Sendable {
         return load(deviceId).contains(sourceId)
     }
 
+    public func count(_ deviceId: String) -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return load(deviceId).count
+    }
+
     /// The ids of `ids` not received from `deviceId` yet, in the order given, each once.
     public func missing(_ deviceId: String, _ ids: [String]) -> [String] {
         lock.lock()
