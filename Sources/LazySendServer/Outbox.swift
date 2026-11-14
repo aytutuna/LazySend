@@ -14,10 +14,13 @@ public struct OutboxItem: Codable, Equatable, Identifiable, Sendable {
     public var name: String?
     public var size: Int64?
     public var mime: String?
+    public var sourceId: String?
+    public var taken: Date?
     public var queued = Date()
 
     var entry: OutboxEntry {
-        OutboxEntry(id: id, kind: kind, text: text, url: url, name: name, size: size, mime: mime)
+        OutboxEntry(id: id, kind: kind, text: text, url: url, name: name, size: size, mime: mime, sourceId: sourceId,
+                    taken: taken.map { ISO8601DateFormatter().string(from: $0) })
     }
 
     var inlineBytes: Int {

@@ -25,6 +25,17 @@ final class OutboxLinkTests: XCTestCase {
         return url
     }
 
+    func testAnOutboxFileWrittenBeforeTheGalleryFieldsStillLoads() throws {
+        let url = harness.root.appendingPathComponent("old-outbox.json")
+        let old = #"{"items":[{"id":"a1","deviceId":"d1","kind":"file","path":"/tmp/x.jpg","name":"x.jpg","size":3,"queued":"2026-11-01T10:00:00Z"}]}"#
+        try Data(old.utf8).write(to: url)
+        let item = try XCTUnwrap(Outbox(url: url).find("d1", "a1"))
+        XCTAssertNil(item.sourceId)
+        XCTAssertNil(item.taken)
+        XCTAssertNil(item.entry.sourceId)
+        XCTAssertNil(item.entry.taken)
+    }
+
     func testPollReturnsPendingItemsAtOnce() async throws {
         try outbox.queueText(phone.id, "first")
         try outbox.queueLink(phone.id, "https://example.com/")

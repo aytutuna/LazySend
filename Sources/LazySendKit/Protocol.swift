@@ -151,8 +151,12 @@ public struct OutboxEntry: Codable, Equatable {
     public var name: String?
     public var size: Int64?
     public var mime: String?
+    /// For a file from the host's photo library: the asset's stable id, and when it was taken (ISO 8601).
+    public var sourceId: String?
+    public var taken: String?
 
-    public init(id: String, kind: String, text: String? = nil, url: String? = nil, name: String? = nil, size: Int64? = nil, mime: String? = nil) {
+    public init(id: String, kind: String, text: String? = nil, url: String? = nil, name: String? = nil, size: Int64? = nil, mime: String? = nil,
+                sourceId: String? = nil, taken: String? = nil) {
         self.id = id
         self.kind = kind
         self.text = text
@@ -160,6 +164,8 @@ public struct OutboxEntry: Codable, Equatable {
         self.name = name
         self.size = size
         self.mime = mime
+        self.sourceId = sourceId
+        self.taken = taken
     }
 }
 
