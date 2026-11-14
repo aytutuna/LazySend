@@ -429,6 +429,19 @@ final class GuestServiceTests: XCTestCase {
         XCTAssertTrue(fixture.pending.sends.isEmpty)
     }
 
+    func testAResumedSendWaitsForTheHostAndDropForgetsItsEntry() async throws {
+        let pc = try await pairGuest()
+        _ = try await leaveUnfinished(pc, "waiting.bin", bytes(10_000), sent: 1000)
+        restartGuest()
+        fixture.guest.start()
+        let resumed = try XCTUnwrap(fixture.resumed.all.first)
+        try await resumed.wait()
+        XCTAssertTrue(fixture.guest.isReachable(pc.id))
+        XCTAssertEqual(fixture.pending.sends.count, 1)
+        resumed.drop()
+        XCTAssertTrue(fixture.pending.sends.isEmpty)
+    }
+
     func testForgettingAHostDropsItsPendingSends() async throws {
         let pc = try await pairGuest()
         _ = try await leaveUnfinished(pc, "left.bin", bytes(10_000), sent: 1000)

@@ -482,7 +482,6 @@ public final class AppModel: ObservableObject {
             var files: [(url: URL, bookmark: Data?, mime: String?)] = []
             for url in readable {
                 let scoped = url.startAccessingSecurityScopedResource()
-                let bookmark = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
                 if scoped { url.stopAccessingSecurityScopedResource() }
                 files.append((url, bookmark, AppModel.mime(of: url)))
             }
@@ -629,25 +628,47 @@ public final class AppModel: ObservableObject {
         var row = TimelineRow(id: UUID().uuidString, kind: .file, sent: true, deviceId: host.id, deviceName: host.name, time: Date(),
                               fileURL: url)
         row.heading = url.lastPathComponent
-        startSend(row, size: resumed.send.size) { progress in try await resumed.run(progress) }
+        startSend(row, size: resumed.send.size, wait: resumed.wait, dropped: resumed.drop) { progress in try await resumed.run(progress) }
     }
 
+    typealias SendStep = @Sendable () async throws -> Void
     typealias SendWork = @Sendable (_ progress: @escaping @Sendable (Int64) -> Void) async throws -> Void
 
-    /// Adds a row for what is being sent and runs `work`, two at a time; the row says how it went.
-    private func startSend(_ row: TimelineRow, size: Int64, work: @escaping SendWork) {
+    /// Adds a row for what is being sent and runs `work`, two at a time; the row says how it went. `wait` runs before
+    /// a lane is taken, so a computer that is off does not hold one; `dropped` is called when the user cancels before
+    /// `work` began.
+    private func startSend(_ row: TimelineRow, size: Int64, wait: SendStep? = nil, dropped: (@Sendable () -> Void)? = nil,
+                           work: @escaping SendWork) {
         var row = row
         row.canCancel = true
-        describeSent(&row, "Waiting to send")
+        describeSent(&row, wait == nil ? "Waiting to send" : "Waiting for \(row.deviceName)")
         push(row)
         let rowId = row.id
         let name = row.deviceName
         let lanes = sendLanes
         sends[rowId] = Task { [weak self] in
+            let finish = { (outcome: String) in
+                self?.sends[rowId] = nil
+                self?.updateRow(rowId) {
+                    $0.canCancel = false
+                    self?.describeSent(&$0, outcome)
+                }
+            }
+            if let wait = wait {
+                do {
+                    try await wait()
+                } catch {
+                    if Task.isCancelled { dropped?() }
+                    finish(Task.isCancelled || error is CancellationError ? "Cancelled" : "Not sent: \(error.localizedDescription)")
+                    return
+                }
+                self?.updateRow(rowId) { self?.describeSent(&$0, "Waiting to send") }
+            }
             await lanes.acquire()
             var outcome = "Sent to \(name)"
             if Task.isCancelled {
                 outcome = "Cancelled"
+                dropped?()
             } else {
                 self?.updateRow(rowId) { self?.describeSent(&$0, "Sending") }
                 do {
@@ -662,11 +683,7 @@ public final class AppModel: ObservableObject {
                 }
             }
             await lanes.release()
-            self?.sends[rowId] = nil
-            self?.updateRow(rowId) {
-                $0.canCancel = false
-                self?.describeSent(&$0, outcome)
-            }
+            finish(outcome)
         }
     }
 
@@ -702,7 +719,6 @@ public final class AppModel: ObservableObject {
 
     /// Takes a folder the user chose as the receive folder, kept across launches by a bookmark.
     public func chooseReceiveFolder(_ url: URL) {
-        let bookmark = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
         openReceiveScope(url)
         service.settings.setReceiveRoot(url, bookmark: bookmark)
         receiveFolder = url.path

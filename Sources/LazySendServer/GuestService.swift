@@ -10,11 +10,14 @@ public struct HostKeyUnreadable: Error, LocalizedError {
     public var errorDescription: String? { "The key for \(hostName) cannot be read. Connect to it again." }
 }
 
-/// A file left unfinished by an earlier run of the app; `run` sends the rest once the host answers, and throws when the
-/// file is gone or changed.
+/// A file left unfinished by an earlier run of the app. `wait` returns once the host answers, `run` checks the file and
+/// sends the rest (it throws when the file is gone or changed), and `drop` forgets the entry when the user cancels
+/// before `run`.
 public struct ResumedSend: Sendable {
     public let send: PendingSend
+    public let wait: @Sendable () async throws -> Void
     public let run: @Sendable (@escaping @Sendable (Int64) -> Void) async throws -> Void
+    public let drop: @Sendable () -> Void
 }
 
 enum ResumeError: Error, LocalizedError {
@@ -95,7 +98,10 @@ public final class GuestService: @unchecked Sendable {
             if hosts.get(send.hostId) == nil {
                 pending.remove(send.sendId)
             } else {
-                onSendResumed?(ResumedSend(send: send, run: { [self] progress in try await resume(send, onProgress: progress) }))
+                onSendResumed?(ResumedSend(send: send,
+                                           wait: { [self] in try await waitForHost(send.hostId) },
+                                           run: { [self] progress in try await resume(send, onProgress: progress) },
+                                           drop: { [self] in pending.remove(send.sendId) }))
             }
         }
     }
@@ -216,7 +222,14 @@ public final class GuestService: @unchecked Sendable {
         try await sendPending(send, request: request, onProgress: onProgress)
     }
 
-    /// Carries on with a file the host may already have part of, once the host answers.
+    private func waitForHost(_ hostId: String) async throws {
+        while !isReachable(hostId) {
+            guard hosts.get(hostId) != nil else { throw ResumeError.hostRemoved }
+            try await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+    }
+
+    /// Carries on with a file the host may already have part of; the caller has waited for the host.
     private func resume(_ send: PendingSend, onProgress: @escaping @Sendable (Int64) -> Void) async throws {
         let url = URL(fileURLWithPath: send.path)
         let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentTypeKey, .contentModificationDateKey])
@@ -224,15 +237,6 @@ public final class GuestService: @unchecked Sendable {
               Int64(size) == send.size, PendingSend.seconds(modified) == send.modified else {
             pending.remove(send.sendId)
             throw ResumeError.changed(url.lastPathComponent)
-        }
-        do {
-            while !isReachable(send.hostId) {
-                guard hosts.get(send.hostId) != nil else { throw ResumeError.hostRemoved }
-                try await Task.sleep(nanoseconds: 1_000_000_000)
-            }
-        } catch {
-            settle(send)
-            throw error
         }
         let request = ItemRequest(kind: "file", name: url.lastPathComponent, size: send.size, mime: values?.contentType?.preferredMIMEType,
                                   modified: ISO8601DateFormatter().string(from: modified), sha256: send.sha256, sendId: send.sendId)
