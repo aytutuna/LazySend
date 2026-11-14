@@ -7,9 +7,6 @@ import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
 import java.time.Instant
-import java.time.OffsetDateTime
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
@@ -434,17 +431,5 @@ class Inbox(
         const val HOUR_MS = 60 * 60 * 1000L
         const val DONE_KEPT_MS = 24 * HOUR_MS
         const val PART_KEPT_MS = 7 * DONE_KEPT_MS
-        val MONTH: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM").withZone(ZoneId.systemDefault())
-
-        // A guest can send any date; only plausible ones are kept.
-        fun parseModified(text: String?): Long? {
-            val instant = try {
-                OffsetDateTime.parse(text ?: return null).toInstant()
-            } catch (e: java.time.format.DateTimeParseException) {
-                return null
-            }
-            val year = instant.atZone(ZoneId.of("UTC")).year
-            return if (year in 1980..2100) instant.toEpochMilli() else null
-        }
     }
 }

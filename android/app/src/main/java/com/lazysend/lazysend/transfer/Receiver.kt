@@ -6,11 +6,16 @@ import com.lazysend.lazysend.data.EntryState
 import com.lazysend.lazysend.data.Pc
 import com.lazysend.lazysend.data.Timeline
 import com.lazysend.lazysend.data.TimelineEntry
+import com.lazysend.lazysend.host.MONTH
+import com.lazysend.lazysend.host.cleanFileName
+import com.lazysend.lazysend.host.isValidSourceId
+import com.lazysend.lazysend.host.parseModified
 import com.lazysend.lazysend.link.LinkClient
 import com.lazysend.lazysend.link.LinkException
 import com.lazysend.lazysend.link.MAX_OUTBOX_WAIT
 import com.lazysend.lazysend.link.OutboxEntry
 import java.io.IOException
+import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -20,6 +25,8 @@ import kotlinx.coroutines.sync.withLock
 import kotlin.coroutines.coroutineContext
 
 /** Takes what the PC has queued for this phone: text and links into the timeline, files into the media store. */
+private const val GALLERY_DONE_KEPT = 200
+
 class Receiver(
     private val connector: PcConnector,
     private val timeline: Timeline,
@@ -29,6 +36,11 @@ class Receiver(
 ) {
     // The foreground watch and the periodic check can both ask for the same item; one at a time per PC keeps them off each other's file.
     private val locks = ConcurrentHashMap<String, Mutex>()
+
+    // Gallery files have no timeline entry of their own, so a download that dropped carries on from the part kept here
+    // (lost on a restart, when the file starts again), and the ones finished lately are remembered so a repeat is only acknowledged.
+    private val galleryParts = ConcurrentHashMap<String, ReceivedFiles.Part>()
+    private val galleryDone = LinkedHashSet<String>()
 
     /** Takes everything pending on [pc] once; with [wait] above 0 it holds the request open until something comes. */
     suspend fun collect(pc: Pc, client: LinkClient, wait: Int): Int {
@@ -83,6 +95,7 @@ class Receiver(
     private fun fail(pc: Pc, item: OutboxEntry, reason: String?) {
         val id = "in-${item.id}"
         timeline.get(id)?.uri?.let(files::discard)
+        galleryParts.remove(item.id)?.let { files.discard(it.uri) }
         val entry = TimelineEntry(
             id, clock(), Direction.Received, if (item.kind == "file") EntryKind.File else EntryKind.Text, pc.name,
             item.name ?: item.text ?: item.url ?: "", state = EntryState.Failed, detail = reason.orEmpty(),
@@ -101,8 +114,40 @@ class Receiver(
                 timeline.add(TimelineEntry(id, clock(), Direction.Received, kind, pc.name, body, state = EntryState.Done))
                 notify(id.hashCode(), pc.name, body)
             }
-            "file" -> downloadFile(pc, client, item, id)
+            "file" -> if (isValidSourceId(item.sourceId)) downloadGalleryFile(pc, client, item) else downloadFile(pc, client, item, id)
         }
+    }
+
+    /** A file from the host's photo library: filed by the month it was taken, and counted in one row for the host. */
+    private suspend fun downloadGalleryFile(pc: Pc, client: LinkClient, item: OutboxEntry) {
+        if (synchronized(galleryDone) { item.id in galleryDone }) return
+        val name = item.name ?: "file"
+        val size = item.size ?: 0
+        val taken = parseModified(item.taken)
+        val folder = cleanFileName(pc.name, "Computer") + "/Gallery/" + MONTH.format(Instant.ofEpochMilli(taken ?: clock()))
+        var part = galleryParts[item.id]?.let { files.existing(it.uri) } ?: files.create(name, item.mime, folder)
+        if (part.size > size) {
+            files.discard(part.uri)
+            part = files.create(name, item.mime, folder)
+        }
+        galleryParts[item.id] = part
+        // A half-saved file that already holds every byte only needs putting in place.
+        if (part.size < size) part = download(client, item, folder, part) { moved, _ -> galleryParts[item.id] = moved }
+        files.finish(part, taken)
+        galleryParts.remove(item.id)
+        synchronized(galleryDone) {
+            galleryDone.add(item.id)
+            if (galleryDone.size > GALLERY_DONE_KEPT) galleryDone.remove(galleryDone.first())
+        }
+        val row = "gallery-from-${pc.id}"
+        val before = timeline.get(row)
+        timeline.add(
+            TimelineEntry(
+                row, clock(), Direction.Received, EntryKind.Gallery, pc.name, "Photos and videos", state = EntryState.Done,
+                count = (before?.count ?: 0) + 1, bytes = (before?.bytes ?: 0) + size,
+            ),
+        )
+        timeline.save()
     }
 
     private suspend fun downloadFile(pc: Pc, client: LinkClient, item: OutboxEntry, id: String) {
@@ -122,7 +167,7 @@ class Receiver(
         )
         try {
             // A half-saved file that already holds every byte only needs putting in place.
-            if (part.size < size) part = download(client, item, id, part)
+            if (part.size < size) part = download(client, item, "", part) { moved, bytes -> timeline.update(id) { it.copy(uri = moved.uri, bytes = bytes) } }
         } catch (e: IOException) {
             timeline.update(id) { it.copy(state = EntryState.Paused) }
             timeline.save()
@@ -134,13 +179,19 @@ class Receiver(
         notify(id.hashCode(), pc.name, name)
     }
 
-    private suspend fun download(client: LinkClient, item: OutboxEntry, id: String, start: ReceivedFiles.Part): ReceivedFiles.Part {
+    private suspend fun download(
+        client: LinkClient,
+        item: OutboxEntry,
+        folder: String,
+        start: ReceivedFiles.Part,
+        track: (part: ReceivedFiles.Part, bytes: Long) -> Unit,
+    ): ReceivedFiles.Part {
         var part = start
         client.download(item.id, part.size).use { download ->
             if (download.status == 200 && part.size > 0) {
                 files.discard(part.uri)
-                part = files.create(item.name ?: "file", item.mime)
-                timeline.update(id) { it.copy(uri = part.uri, bytes = 0) }
+                part = files.create(item.name ?: "file", item.mime, folder)
+                track(part, 0)
             }
             var written = part.size
             var lastReport = 0L
@@ -154,7 +205,7 @@ class Receiver(
                     val now = System.nanoTime()
                     if (now - lastReport > 250_000_000L) {
                         lastReport = now
-                        timeline.update(id) { it.copy(bytes = written) }
+                        track(part, written)
                     }
                 }
             }

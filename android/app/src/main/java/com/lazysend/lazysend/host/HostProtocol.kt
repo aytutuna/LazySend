@@ -5,6 +5,9 @@ import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
 import java.security.SecureRandom
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -26,6 +29,20 @@ const val MAX_NAME_BYTES = 128
 const val SERVICE_TYPE = "_lazysend._tcp"
 
 val random = SecureRandom()
+
+/** The folder name for a gallery file's month, in the phone's time zone. */
+val MONTH: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM").withZone(ZoneId.systemDefault())
+
+/** A date from a guest or host (ISO 8601) as epoch milliseconds; only plausible ones are kept. */
+fun parseModified(text: String?): Long? {
+    val instant = try {
+        OffsetDateTime.parse(text ?: return null).toInstant()
+    } catch (e: java.time.format.DateTimeParseException) {
+        return null
+    }
+    val year = instant.atZone(ZoneId.of("UTC")).year
+    return if (year in 1980..2100) instant.toEpochMilli() else null
+}
 
 /** A phone's, host's or item's id: 8 to 64 letters, digits, '-' and '_', so it is safe as a file name. */
 fun isValidId(id: String?): Boolean =
