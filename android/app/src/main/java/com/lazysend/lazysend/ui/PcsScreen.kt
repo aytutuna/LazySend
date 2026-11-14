@@ -43,7 +43,8 @@ fun PcsScreen(pcs: List<PcRow>, onRemove: (String) -> Unit, onPair: () -> Unit, 
                         Column(Modifier.weight(1f)) {
                             Text(pc.name, style = MaterialTheme.typography.titleMedium)
                             Text(
-                                pc.link?.let { stringResource(R.string.connected_over, it) } ?: stringResource(R.string.not_reachable, pc.name),
+                                if (pc.guest) stringResource(R.string.guest_row)
+                                else pc.link?.let { stringResource(R.string.connected_over, it) } ?: stringResource(R.string.not_reachable, pc.name),
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }
@@ -58,7 +59,7 @@ fun PcsScreen(pcs: List<PcRow>, onRemove: (String) -> Unit, onPair: () -> Unit, 
         AlertDialog(
             onDismissRequest = { removing = null },
             title = { Text(stringResource(R.string.remove_pc_title, pc.name)) },
-            text = { Text(stringResource(R.string.remove_pc_body)) },
+            text = { Text(if (pc.guest) stringResource(R.string.remove_guest_body, pc.name) else stringResource(R.string.remove_pc_body)) },
             confirmButton = {
                 TextButton(onClick = {
                     removing = null

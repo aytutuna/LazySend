@@ -8,6 +8,8 @@ import com.lazysend.lazysend.BuildConfig
 import com.lazysend.lazysend.LazySendApp
 import com.lazysend.lazysend.R
 import com.lazysend.lazysend.data.Pc
+import com.lazysend.lazysend.host.Approval
+import com.lazysend.lazysend.host.Guest
 import com.lazysend.lazysend.link.LinkException
 import com.lazysend.lazysend.link.PairingCode
 import com.lazysend.lazysend.link.PairingCodeException
@@ -26,6 +28,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+/** Rows of the devices that are guests of this phone have this in front of their id, so a device that is both has two rows. */
+private const val GUEST = "guest:"
+
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val graph = (app as LazySendApp).graph
     private val selected = MutableStateFlow<String?>(null)
@@ -35,14 +40,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val pair = MutableStateFlow<PairUi>(PairUi.Scanning)
     val notice = MutableStateFlow<String?>(null)
 
-    val state: StateFlow<MainState> = combine(graph.pcs.pcs, graph.timeline.entries, graph.connector.current, selected, photoAccess) { pcs, entries, links, pick, access ->
+    val state: StateFlow<MainState> = combine(
+        combine(graph.pcs.pcs, graph.host.core.guests.guests) { pcs, guests -> pcs to guests },
+        graph.timeline.entries, graph.connector.current, selected, photoAccess,
+    ) { (pcs, guests), entries, links, pick, access ->
+        val rows = pcs.map { PcRow(it.id, it.name, links[it.id]?.label) } + guests.map { PcRow(GUEST + it.id, it.name, null, guest = true) }
         MainState(
-            pcs = pcs.map { PcRow(it.id, it.name, links[it.id]?.label) },
-            selected = pick?.takeIf { id -> pcs.any { it.id == id } } ?: pcs.firstOrNull()?.id,
+            pcs = rows,
+            selected = pick?.takeIf { id -> rows.any { it.id == id } } ?: rows.firstOrNull()?.id,
             entries = entries,
             photoAccess = access,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MainState(emptyList(), null, emptyList()))
+
+    val receive: StateFlow<ReceiveUi> = combine(graph.host.state, graph.host.core.approval, graph.host.core.guests.guests) { host, approval, guests ->
+        ReceiveUi(host, approval, guests.map { it.name })
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ReceiveUi())
+
+    /** True while this phone hosts with a guest paired: the screen that sees it asks for the service that keeps it going. */
+    val keepHosting: StateFlow<Boolean> get() = graph.host.keepAlive
 
     fun select(id: String) {
         selected.value = id
@@ -52,7 +68,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         photoAccess.value = access
     }
 
-    fun selectedPc(): Pc? = state.value.selected?.let(graph.pcs::get)
+    fun selectedPc(): Pc? = state.value.selected?.takeIf { !it.startsWith(GUEST) }?.let(graph.pcs::get)
+
+    fun selectedGuest(): Guest? = state.value.selected?.takeIf { it.startsWith(GUEST) }?.let { graph.host.core.guests.get(it.removePrefix(GUEST)) }
+
+    fun openReceive() = graph.host.open()
+
+    fun leaveReceive() = graph.host.leave()
+
+    fun stopReceiving() = graph.host.stop()
+
+    fun answer(approval: Approval, allow: Boolean) = approval.respond(allow)
 
     /** Asks every paired PC for what it has queued, for as long as the caller stays active. */
     suspend fun watch() = withContext(Dispatchers.IO) {
@@ -64,9 +90,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun sendText(text: String) {
-        val pc = selectedPc() ?: return
+        val guest = selectedGuest()
+        val pc = selectedPc()
         viewModelScope.launch(Dispatchers.IO) {
-            notice.value = graph.sender.sendText(pc, text) ?: getApplication<Application>().getString(R.string.note_sent)
+            notice.value = when {
+                guest != null -> graph.host.queueText(guest, text) ?: getApplication<Application>().getString(R.string.note_sent)
+                pc != null -> graph.sender.sendText(pc, text) ?: getApplication<Application>().getString(R.string.note_sent)
+                else -> return@launch
+            }
         }
     }
 
@@ -110,8 +141,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Forgets the PC here and, when it can be reached, there too. */
+    /** Forgets the PC here and, when it can be reached, there too; a guest of this phone is forgotten here and finds out when it asks. */
     fun remove(id: String) {
+        if (id.startsWith(GUEST)) {
+            viewModelScope.launch(Dispatchers.IO) { graph.host.removeGuest(id.removePrefix(GUEST)) }
+            return
+        }
         val pc = graph.pcs.get(id) ?: return
         graph.pcs.remove(id)
         viewModelScope.launch(Dispatchers.IO) {

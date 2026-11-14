@@ -85,4 +85,23 @@ class ScreenshotsTest {
 
     @Test
     fun pcsScreen() = capture("pcs") { PcsScreen(pcs, {}, {}, {}) }
+
+    private val receiving = ReceiveUi(
+        com.lazysend.lazysend.host.ReceiveState(
+            running = true, port = 52734, link = "Wi-Fi",
+            pairing = com.lazysend.lazysend.host.PairingInfo(
+                "lazysend://pair?v=1&id=host-test-0001&n=Pixel%209&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.20&p=52734&t=dG9rZW4tdG9rZW4tdG9r",
+                "7KQ2-M9XD", "987 292", "066 051", noon + 300_000,
+            ),
+        ),
+        guests = listOf("Aytu's iPhone"),
+    )
+
+    @Test
+    fun receiveScreen() = capture("receive") { ReceiveScreen(receiving, { _, _ -> }, {}, {}, {}, {}) }
+
+    @Test
+    fun receiveApproval() = capture("receive-approve") {
+        ReceiveScreen(receiving.copy(approval = com.lazysend.lazysend.host.Approval("Pixel 9", "android", "987 292")), { _, _ -> }, {}, {}, {}, {})
+    }
 }

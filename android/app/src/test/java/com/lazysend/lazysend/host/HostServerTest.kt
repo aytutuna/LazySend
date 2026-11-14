@@ -416,4 +416,15 @@ class HostServerTest {
         assertTrue(refused, refused.startsWith("HTTP/1.1 401"))
         assertFalse(refused.contains("100 Continue"))
     }
+
+    @Test
+    fun leavingTheScreenDeclinesAPairingThatWaits() = runBlocking<Unit> {
+        val session = host.core.openPairing()
+        val call = async { runCatching { host.client().pair(session.tokenText, "phone-test-0001", "x", "1") } }
+        host.core.approval.filterNotNull().first()
+        host.core.closePairing()
+        val failure = call.await().exceptionOrNull() as LinkException
+        assertEquals("declined", failure.code)
+        assertTrue(host.core.guests.guests.value.isEmpty())
+    }
 }

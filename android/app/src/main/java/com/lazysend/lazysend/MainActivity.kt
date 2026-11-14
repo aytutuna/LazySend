@@ -39,10 +39,12 @@ import com.lazysend.lazysend.ui.MainScreen
 import com.lazysend.lazysend.ui.PairScreen
 import com.lazysend.lazysend.ui.PcsScreen
 import com.lazysend.lazysend.ui.PhotoAccess
+import com.lazysend.lazysend.ui.ReceiveScreen
 import com.lazysend.lazysend.ui.SendScreen
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 
-private enum class Screen { Main, Pair, Send, Pcs }
+private enum class Screen { Main, Pair, Send, Pcs, Receive }
 
 class MainActivity : ComponentActivity() {
     private val model: AppViewModel by viewModels()
@@ -51,6 +53,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         lifecycleScope.launch { repeatOnLifecycle(Lifecycle.State.STARTED) { model.watch() } }
+        // The service that keeps hosting going with the screen off can only be started from the front.
+        lifecycleScope.launch { repeatOnLifecycle(Lifecycle.State.STARTED) { model.keepHosting.collect { if (it) SendService.keepHosting(this@MainActivity) } } }
         setContent { LazySendTheme { App() } }
     }
 
@@ -89,6 +93,21 @@ class MainActivity : ComponentActivity() {
         val files = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris -> send(uris) }
         val photos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris -> send(uris) }
 
+        // Receiving runs while this screen is in front; going back or leaving the app closes the code and declines what waits.
+        LaunchedEffect(screen) {
+            if (screen == Screen.Receive) {
+                repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    model.openReceive()
+                    try {
+                        awaitCancellation()
+                    } finally {
+                        model.leaveReceive()
+                    }
+                }
+            }
+        }
+        val receive by model.receive.collectAsState()
+
         if (screen != Screen.Main) BackHandler { screen = Screen.Main }
         when (screen) {
             Screen.Main -> MainScreen(
@@ -99,6 +118,7 @@ class MainActivity : ComponentActivity() {
                         screen = Screen.Pair
                     },
                     onPcs = { screen = Screen.Pcs },
+                    onReceive = { screen = Screen.Receive },
                     onSend = { screen = Screen.Send },
                     onSelect = model::select,
                     onGallery = {
@@ -138,6 +158,17 @@ class MainActivity : ComponentActivity() {
                     screen = Screen.Main
                 },
             )
+            Screen.Receive -> ReceiveScreen(
+                receive,
+                onAnswer = model::answer,
+                onCopy = { copy(it) },
+                onShare = { share(it) },
+                onStop = {
+                    model.stopReceiving()
+                    screen = Screen.Main
+                },
+                onBack = { screen = Screen.Main },
+            )
             Screen.Pcs -> PcsScreen(
                 state.pcs,
                 onRemove = model::remove,
@@ -153,8 +184,13 @@ class MainActivity : ComponentActivity() {
     private var pendingGallery = false
 
     private fun send(uris: List<Uri>) {
+        model.selectedGuest()?.let { return SendService.queueFiles(this, it.id, uris) }
         val pc = model.selectedPc() ?: return
         SendService.sendFiles(this, pc.id, uris)
+    }
+
+    private fun share(text: String) {
+        startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), null))
     }
 
     private fun copy(text: String) {

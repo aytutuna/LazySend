@@ -6,11 +6,12 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
-import com.lazysend.lazysend.data.Pc
 import com.lazysend.lazysend.transfer.SendService
 
-/** The Android share sheet entry: sends what was shared to a paired PC and closes. */
+/** The Android share sheet entry: sends what was shared to a paired PC, or queues it for a phone paired with this one, and closes. */
 class ShareActivity : androidx.activity.ComponentActivity() {
+    private class Target(val name: String, val send: (List<Uri>, String?) -> Unit)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // A rotation recreates this activity with the same intent; what was shared has been handled already.
@@ -19,31 +20,34 @@ class ShareActivity : androidx.activity.ComponentActivity() {
             return
         }
         val graph = (application as LazySendApp).graph
-        val pcs = graph.pcs.pcs.value
+        val targets = graph.pcs.pcs.value.map { pc ->
+            Target(pc.name) { uris, text -> if (text != null) SendService.sendText(this, pc.id, text) else SendService.sendFiles(this, pc.id, uris) }
+        } + graph.host.core.guests.guests.value.map { guest ->
+            Target(guest.name) { uris, text -> if (text != null) SendService.queueText(this, guest.id, text) else SendService.queueFiles(this, guest.id, uris) }
+        }
         when {
-            pcs.isEmpty() -> {
+            targets.isEmpty() -> {
                 Toast.makeText(this, R.string.share_no_pc, Toast.LENGTH_LONG).show()
                 startActivity(Intent(this, MainActivity::class.java))
                 finish()
             }
-            pcs.size == 1 -> deliver(pcs.first())
+            targets.size == 1 -> deliver(targets.first())
             else -> {
-                val names = pcs.map { it.name }.toTypedArray()
                 AlertDialog.Builder(this)
                     .setTitle(R.string.share_choose_pc)
-                    .setItems(names) { _, which -> deliver(pcs[which]) }
+                    .setItems(targets.map { it.name }.toTypedArray()) { _, which -> deliver(targets[which]) }
                     .setOnCancelListener { finish() }
                     .show()
             }
         }
     }
 
-    private fun deliver(pc: Pc) {
+    private fun deliver(target: Target) {
         val uris = sharedUris()
         val text = if (uris.isEmpty()) intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString() else null
         // The service keeps going after this activity is gone, which a coroutine of this activity would not.
-        if (text != null) SendService.sendText(this, pc.id, text) else SendService.sendFiles(this, pc.id, uris)
-        Toast.makeText(this, getString(R.string.share_sending, pc.name), Toast.LENGTH_SHORT).show()
+        target.send(uris, text)
+        Toast.makeText(this, getString(R.string.share_sending, target.name), Toast.LENGTH_SHORT).show()
         finish()
     }
 

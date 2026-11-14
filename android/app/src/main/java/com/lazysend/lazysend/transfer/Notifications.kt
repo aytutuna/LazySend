@@ -55,6 +55,16 @@ class Notifications(private val context: Context) {
             .also { if (stop != null) it.addAction(0, context.getString(R.string.stop), stop) }
             .build()
 
+    fun hosting(link: String?, stop: PendingIntent): Notification =
+        NotificationCompat.Builder(context, TRANSFERS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(if (link != null) context.getString(R.string.receiving_on, link) else context.getString(R.string.receiving))
+            .setOnlyAlertOnce(true)
+            .setOngoing(true)
+            .setContentIntent(openApp())
+            .addAction(0, context.getString(R.string.stop), stop)
+            .build()
+
     private companion object {
         const val TRANSFERS = "transfers"
         const val RECEIVED = "received"

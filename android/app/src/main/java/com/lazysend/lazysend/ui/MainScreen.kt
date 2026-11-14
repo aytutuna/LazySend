@@ -36,7 +36,8 @@ import com.lazysend.lazysend.data.EntryState
 import com.lazysend.lazysend.data.TimelineEntry
 import com.lazysend.lazysend.transfer.formatBytes
 
-data class PcRow(val id: String, val name: String, val link: String?)
+/** A PC this phone is a guest of, or a guest of this phone ([guest], with an id of its own so one device can be both). */
+data class PcRow(val id: String, val name: String, val link: String?, val guest: Boolean = false)
 
 enum class PhotoAccess { Full, Partial, None }
 
@@ -50,6 +51,7 @@ data class MainState(
 class MainActions(
     val onPair: () -> Unit = {},
     val onPcs: () -> Unit = {},
+    val onReceive: () -> Unit = {},
     val onSend: () -> Unit = {},
     val onSelect: (String) -> Unit = {},
     val onGallery: () -> Unit = {},
@@ -67,13 +69,14 @@ fun MainScreen(state: MainState, actions: MainActions) {
             TopAppBar(
                 title = { Text(stringResource(R.string.app_name)) },
                 actions = {
+                    TextButton(onClick = actions.onReceive) { Text(stringResource(R.string.receive)) }
                     if (state.pcs.isNotEmpty()) TextButton(onClick = actions.onPcs) { Text(stringResource(R.string.paired_pcs)) }
                 },
             )
         },
     ) { padding ->
         if (state.pcs.isEmpty()) {
-            Empty(Modifier.padding(padding), actions.onPair)
+            Empty(Modifier.padding(padding), actions.onPair, actions.onReceive)
             return@Scaffold
         }
         LazyColumn(
@@ -91,7 +94,7 @@ fun MainScreen(state: MainState, actions: MainActions) {
 }
 
 @Composable
-private fun Empty(modifier: Modifier, onPair: () -> Unit) {
+private fun Empty(modifier: Modifier, onPair: () -> Unit, onReceive: () -> Unit) {
     Column(modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(stringResource(R.string.empty_title), style = MaterialTheme.typography.headlineSmall)
         Text(
@@ -100,6 +103,7 @@ private fun Empty(modifier: Modifier, onPair: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Button(onClick = onPair) { Text(stringResource(R.string.pair_a_pc)) }
+        OutlinedButton(onClick = onReceive, Modifier.padding(top = 8.dp)) { Text(stringResource(R.string.receive)) }
     }
 }
 
@@ -115,14 +119,18 @@ private fun Connection(state: MainState, actions: MainActions) {
             }
             Text(pc.name, style = MaterialTheme.typography.titleMedium)
             Text(
-                if (pc.link != null) stringResource(R.string.connected_over, pc.link) else stringResource(R.string.not_reachable, pc.name),
+                when {
+                    pc.guest -> stringResource(R.string.guest_delivery)
+                    pc.link != null -> stringResource(R.string.connected_over, pc.link)
+                    else -> stringResource(R.string.not_reachable, pc.name)
+                },
                 style = MaterialTheme.typography.bodyMedium,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = actions.onSend) { Text(stringResource(R.string.send)) }
-                OutlinedButton(onClick = actions.onGallery) { Text(stringResource(R.string.send_all_photos)) }
+                if (!pc.guest) OutlinedButton(onClick = actions.onGallery) { Text(stringResource(R.string.send_all_photos)) }
             }
-            if (state.photoAccess == PhotoAccess.Partial) {
+            if (state.photoAccess == PhotoAccess.Partial && !pc.guest) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.photo_access_partial), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                     TextButton(onClick = actions.onAllowPhotos) { Text(stringResource(R.string.allow_all_photos)) }
@@ -180,7 +188,9 @@ private fun Entry(entry: TimelineEntry, actions: MainActions) {
 private fun Status(entry: TimelineEntry) {
     if (entry.kind == EntryKind.Gallery) {
         val line = when (entry.state) {
-            EntryState.Done -> stringResource(R.string.gallery_done, entry.count) + entry.detail.let { if (it.isEmpty()) "" else " · $it" }
+            EntryState.Done ->
+                stringResource(if (entry.direction == Direction.Received) R.string.gallery_received else R.string.gallery_done, entry.count) +
+                    entry.detail.let { if (it.isEmpty()) "" else " · $it" }
             else -> stringResource(R.string.gallery_progress, entry.count, entry.totalCount, formatBytes(entry.bytes), formatBytes(entry.totalBytes)) +
                 entry.detail.let { if (it.isEmpty()) "" else " · $it" }
         }
@@ -191,9 +201,14 @@ private fun Status(entry: TimelineEntry) {
         return
     }
     when (entry.state) {
-        EntryState.Active -> if (entry.kind == EntryKind.File) {
-            LinearProgressIndicator(progress = { fraction(entry.bytes, entry.totalBytes) }, Modifier.fillMaxWidth())
-            Text("${formatBytes(entry.bytes)} of ${formatBytes(entry.totalBytes)}", style = MaterialTheme.typography.bodySmall)
+        EntryState.Active -> {
+            // Something queued for a guest has no progress to show until the guest asks for it.
+            if (entry.detail.isNotEmpty()) {
+                Text(entry.detail, style = MaterialTheme.typography.bodySmall)
+            } else if (entry.kind == EntryKind.File) {
+                LinearProgressIndicator(progress = { fraction(entry.bytes, entry.totalBytes) }, Modifier.fillMaxWidth())
+                Text("${formatBytes(entry.bytes)} of ${formatBytes(entry.totalBytes)}", style = MaterialTheme.typography.bodySmall)
+            }
         }
         EntryState.Paused -> Text(stringResource(R.string.state_paused), style = MaterialTheme.typography.bodySmall)
         EntryState.Failed -> Text(
