@@ -64,7 +64,8 @@ public enum Pairing {
             }
         }
         guard answer.desktopId == desktopId, Base64Url.decode(answer.deviceSecret)?.count == 32 else { throw LinkError.badResponse }
-        let pc = PairedPc(id: answer.desktopId, name: answer.desktopName.isEmpty ? name : answer.desktopName, fingerprint: Base64Url.encode(pin),
+        let shown = DisplayName.clean(answer.desktopName)
+        let pc = PairedPc(id: answer.desktopId, name: shown.isEmpty ? name : shown, fingerprint: Base64Url.encode(pin),
                           addresses: AddressBook.merged(hello: [host], known: known), port: port, lastAddress: host)
         do {
             try store.put(pc, secret: answer.deviceSecret)
