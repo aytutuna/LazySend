@@ -336,6 +336,43 @@ final class ModelTests: XCTestCase {
         XCTAssertNil(fixture.service.pairing)
     }
 
+    func testThePairingSheetHasTheShortCodeAndItsMatchDigits() async throws {
+        await model.beginPairing()
+        let state = try XCTUnwrap(model.pairing)
+        let session = try XCTUnwrap(fixture.service.pairing)
+        XCTAssertEqual(state.shortCode, session.shortCodeText)
+        XCTAssertEqual(state.shortCode.count, 9)
+        XCTAssertEqual(state.match, SpkiFingerprint.matchCode(fixture.service.fingerprint, shortCode: session.shortCode))
+        XCTAssertNotEqual(state.match, state.code.checkCode)
+        model.closePairing()
+    }
+
+    func testTheApprovalShowsTheDigitsOfTheWayThePairingCameIn() async throws {
+        await model.beginPairing()
+        let state = try XCTUnwrap(model.pairing)
+        let client = LinkClient(endpoint: Endpoint(host: "127.0.0.1", port: state.code.port), pin: fixture.service.fingerprint)
+        let scanned = Task { try await client.pair(token: state.code.token, phoneId: newId(), phoneName: "Pixel 9", appVersion: "1") }
+        await assertEventually { model.approval != nil }
+        XCTAssertEqual(model.approval?.match, state.code.checkCode)
+        model.answerApproval(true)
+        _ = try await scanned.value
+
+        await model.renewPairing()
+        let typed = try XCTUnwrap(model.pairing)
+        let pairing = Task { try await client.pair(token: typed.shortCode, phoneId: newId(), phoneName: "Studio", appVersion: "1", platform: "windows") }
+        await assertEventually { model.approval != nil }
+        XCTAssertEqual(model.approval?.match, typed.match)
+        XCTAssertEqual(model.approval?.platform, "windows")
+        model.answerApproval(false)
+        do {
+            _ = try await pairing.value
+            XCTFail("Expected a refusal")
+        } catch {
+            XCTAssertEqual((error as? LinkError)?.code, "declined")
+        }
+        model.closePairing()
+    }
+
     func testAPhonePairsThroughTheModelsPrompt() async throws {
         await model.beginPairing()
         let state = try XCTUnwrap(model.pairing)

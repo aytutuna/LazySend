@@ -18,7 +18,7 @@ struct PairSheet: View {
             if let state = model.pairing {
                 codeCard(state)
                 Text("Cannot scan the code?").font(.headline).padding(.top, 4)
-                Text("Get this pairing text onto the phone (a message to yourself, say) and paste it in Lazy Send there, then compare the check code.")
+                Text("On another computer, choose Connect to a computer in Lazy Send and type the code above. On a phone, get this link onto it (a message to yourself, say) and paste it in Lazy Send there. Then compare the check code.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(state.code.uri)
@@ -31,9 +31,9 @@ struct PairSheet: View {
                 Button {
                     model.copy(state.code.uri)
                 } label: {
-                    Label("Copy", systemImage: "doc.on.doc")
+                    Label("Copy link", systemImage: "doc.on.doc")
                 }
-                .accessibilityLabel("Copy the pairing text")
+                .accessibilityLabel("Copy the pairing link")
             }
             if !model.status.isEmpty {
                 Text("Connection").font(.headline).padding(.top, 4)
@@ -57,7 +57,8 @@ struct PairSheet: View {
     private func approvalCard(_ approval: PairApproval) -> some View {
         let kind = approval.platform.isEmpty ? "" : " (\(approval.platform))"
         return VStack(alignment: .leading, spacing: 8) {
-            Text("\"\(approval.name)\"\(kind) wants to pair with this Mac. Allow it only if you just scanned the code yourself.")
+            Text("\"\(approval.name)\"\(kind) wants to pair with this Mac. Allow it only if you just started it yourself"
+                + (approval.match.isEmpty ? "." : " and \(approval.match) is the code it shows too."))
                 .fontWeight(.semibold)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
@@ -89,7 +90,13 @@ struct PairSheet: View {
                 if state.finished && state.pairedName == nil {
                     Button("New code") { Task { await model.renewPairing() } }
                 }
-                Text("Check code").font(.caption).foregroundStyle(.secondary).padding(.top, 8)
+                if !state.shortCode.isEmpty {
+                    Text("Code to type on a computer").font(.caption).foregroundStyle(.secondary).padding(.top, 8)
+                    Text(state.shortCode).font(.system(size: 20, weight: .semibold, design: .monospaced)).textSelection(.enabled)
+                    Text("The other computer then shows").font(.caption).foregroundStyle(.secondary).padding(.top, 4)
+                    Text(state.match).font(.system(size: 14, design: .monospaced)).textSelection(.enabled)
+                }
+                Text("Check code for a phone").font(.caption).foregroundStyle(.secondary).padding(.top, 4)
                 Text(state.code.checkCode).font(.system(size: 14, design: .monospaced)).textSelection(.enabled)
                 Text("This Mac is reachable at").font(.caption).foregroundStyle(.secondary).padding(.top, 4)
                 Text(state.code.addresses.isEmpty ? "No network address found" : state.code.addresses.joined(separator: "  "))

@@ -36,6 +36,11 @@ struct MainView: View {
         .sheet(isPresented: Binding(get: { model.pairing != nil }, set: { if !$0 { model.closePairing() } })) {
             PairSheet(model: model)
         }
+        .sheet(isPresented: Binding(get: { model.connecting != nil }, set: { if !$0 { model.closeConnecting() } })) {
+            if let connecting = model.connecting {
+                ConnectSheet(model: connecting) { model.closeConnecting() }
+            }
+        }
     }
 
     private var header: some View {
@@ -118,9 +123,9 @@ private struct Sidebar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Lazy Send").font(.title3.weight(.semibold))
-            Text("Phones").font(.subheadline.weight(.semibold)).padding(.top, 20).padding(.bottom, 8)
+            Text("Devices").font(.subheadline.weight(.semibold)).padding(.top, 20).padding(.bottom, 8)
             if model.phones.isEmpty {
-                Text("No phone is paired yet. Pair one to send things between it and this Mac.")
+                Text("Nothing is paired yet. Pair a phone, or connect to another computer, to send things between it and this Mac.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -139,6 +144,13 @@ private struct Sidebar: View {
                 Label("Pair a phone", systemImage: "qrcode").frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .padding(.bottom, 8)
+            Button {
+                model.beginConnecting()
+            } label: {
+                Label("Connect to a computer", systemImage: "desktopcomputer").frame(maxWidth: .infinity)
+            }
             .controlSize(.large)
             .padding(.bottom, 12)
             if !model.status.isEmpty {
@@ -170,8 +182,8 @@ private struct PhoneButton: View {
             Spacer()
             Button(action: remove) { Image(systemName: "xmark") }
                 .buttonStyle(.borderless)
-                .help("Remove this phone")
-                .accessibilityLabel("Remove this phone")
+                .help(phone.computer ? "Remove this computer" : "Remove this phone")
+                .accessibilityLabel(phone.computer ? "Remove this computer" : "Remove this phone")
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)

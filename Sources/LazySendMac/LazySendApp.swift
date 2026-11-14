@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import LazySendKit
 import LazySendServer
 import SwiftUI
 
@@ -14,9 +15,16 @@ final class AppHost {
     private init() {
         do {
             let identity = try CertificateStore(hostName: AppHost.computerName()).current(now: Date())
-            let service = try LinkService(paths: MacPaths.standard(), identity: identity)
+            let paths = MacPaths.standard()
+            let service = try LinkService(paths: paths, identity: identity)
             service.router.desktopName = { AppHost.computerName() }
-            model = AppModel(service: service, advertiser: Advertiser(), notify: { Notifications.post($0, $1) })
+            // This Mac's own id is the id it gives the computers it connects to, as the Windows app does.
+            let hosts = PcStore(file: paths.root.appendingPathComponent("hosts.json"), secrets: KeychainSecrets(),
+                                phoneId: service.devices.desktopId)
+            let guest = GuestService(hosts: hosts, connector: PcConnector(store: hosts), history: service.history, settings: service.settings,
+                                     guestName: AppHost.computerName(),
+                                     appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0")
+            model = AppModel(service: service, advertiser: Advertiser(), guest: guest, notify: { Notifications.post($0, $1) })
             failure = nil
         } catch {
             model = nil
@@ -70,6 +78,10 @@ public struct LazySendApp: App {
                     if let model = AppHost.shared.model { Task { await model.beginPairing() } }
                 }
                 .keyboardShortcut("p", modifiers: [.command, .shift])
+                Button("Connect to a Computer...") {
+                    AppHost.shared.model?.beginConnecting()
+                }
+                .keyboardShortcut("k", modifiers: [.command, .shift])
             }
         }
         Settings {
@@ -97,8 +109,13 @@ private struct MenuBarContent: View {
             NSApp.activate(ignoringOtherApps: true)
             Task { await model.beginPairing() }
         }
+        Button("Connect to a Computer...") {
+            openWindow(id: "main")
+            NSApp.activate(ignoringOtherApps: true)
+            model.beginConnecting()
+        }
         Divider()
-        Text(model.phones.isEmpty ? "No phone is paired" : "\(model.phones.count) phone(s) paired")
+        Text(model.phones.isEmpty ? "Nothing is paired" : "\(model.phones.count) device(s) paired")
         if !model.status.isEmpty { Text(model.status) }
         Divider()
         Button("Quit Lazy Send") { NSApp.terminate(nil) }

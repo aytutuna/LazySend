@@ -9,6 +9,8 @@ public struct PhoneRow: Identifiable, Equatable {
     public var name: String
     public var platform: String
     public var lastSeen: String
+    /// A computer this Mac is a guest of, not a phone paired with it.
+    public var computer = false
 }
 
 public enum TimelineKind: Equatable {
@@ -45,12 +47,17 @@ public struct PairingState: Equatable {
     public var code: PairingCode
     public var remaining: Int
     public var pairedName: String?
+    /// What a guest that cannot scan types, `XXXX-XXXX`, and the digits it then shows next to it.
+    public var shortCode = ""
+    public var match = ""
     public var finished: Bool { pairedName != nil || remaining <= 0 }
 }
 
 public struct PairApproval: Equatable {
     public var name: String
     public var platform: String
+    /// The digits the other device shows too; both screens must agree before this one allows it.
+    public var match = ""
 }
 
 // TODO: import the camera roll of a phone on a cable (ImageCaptureCore), as the Windows app does through WPD.
@@ -68,6 +75,7 @@ public final class AppModel: ObservableObject {
     @Published public var notice: String?
     @Published public private(set) var pairing: PairingState?
     @Published public private(set) var approval: PairApproval?
+    @Published public private(set) var connecting: ConnectModel?
     @Published public private(set) var status = ""
     @Published public private(set) var receiveFolder = ""
     @Published public var copyReceivedText: Bool {
@@ -76,6 +84,9 @@ public final class AppModel: ObservableObject {
 
     public let service: LinkService
     private let advertiser: Advertiser?
+    private let guest: GuestService?
+    private let sendLanes = SendLanes(2)
+    private var sends: [String: Task<Void, Never>] = [:]
     private let pasteboard: NSPasteboard
     private let notify: (String, String) -> Void
     private let scratch: URL
@@ -87,10 +98,11 @@ public final class AppModel: ObservableObject {
     private let locator = FileLocator()
     private var receiveScope: URL?
 
-    init(service: LinkService, advertiser: Advertiser? = nil, pasteboard: NSPasteboard = .general, scratch: URL? = nil,
-         notify: @escaping (String, String) -> Void = { _, _ in }) {
+    init(service: LinkService, advertiser: Advertiser? = nil, guest: GuestService? = nil, pasteboard: NSPasteboard = .general,
+         scratch: URL? = nil, notify: @escaping (String, String) -> Void = { _, _ in }) {
         self.service = service
         self.advertiser = advertiser
+        self.guest = guest
         self.pasteboard = pasteboard
         self.notify = notify
         self.scratch = scratch ?? FileManager.default.temporaryDirectory.appendingPathComponent("lazysend-clipboard", isDirectory: true)
@@ -129,26 +141,44 @@ public final class AppModel: ObservableObject {
         service.router.onApprovalSettled = { [weak self] in
             Task { @MainActor in self?.reconcileServer() }
         }
-        service.router.approvePairing = { [weak self] request in
-            await self?.ask(request) ?? false
+        service.router.approvePairingMatching = { [weak self] request, match in
+            await self?.ask(request, match: match) ?? false
         }
         service.server.onFailure = { [weak self] in
             Task { @MainActor in await self?.restartServer() }
         }
+        guard let guest = guest else { return }
+        guest.onTextReceived = { [weak self] item in
+            Task { @MainActor in self?.addText(item, arrived: true) }
+        }
+        guest.onFileReceived = { [weak self] file in
+            Task { @MainActor in self?.addFile(file) }
+        }
+        guest.onFailed = { [weak self] text in
+            Task { @MainActor in self?.notice = text }
+        }
+        guest.onForgotten = { [weak self] name in
+            Task { @MainActor in self?.notice = "\(name) no longer recognizes this Mac. Connect to it again to send to it." }
+        }
+        guest.onChange = { [weak self] in
+            Task { @MainActor in self?.refreshPhones() }
+        }
     }
 
-    /// Starts the clock that keeps the window current and the server if a phone is paired.
+    /// Starts the clock that keeps the window current, the server if a phone is paired and the watch on the computers this Mac is a guest of.
     public func start() {
         guard tick == nil else { return }
         tick = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.second() }
         }
         reconcileServer()
+        guest?.start()
     }
 
     public func stop() async {
         tick?.invalidate()
         tick = nil
+        guest?.stop()
         advertiser?.unregister()
         await service.stop()
     }
@@ -178,7 +208,7 @@ public final class AppModel: ObservableObject {
             do {
                 let port = try await service.start()
                 startError = nil
-                advertiser?.register(port: port, desktopId: service.devices.desktopId)
+                advertiser?.register(port: port, desktopId: service.devices.desktopId, name: service.router.desktopName())
             } catch {
                 startError = "Lazy Send could not start listening: \(error.localizedDescription)"
             }
@@ -206,10 +236,15 @@ public final class AppModel: ObservableObject {
     }
 
     private func refreshPhones() {
-        let devices = service.devices.devices
-        phones = devices.map { PhoneRow(id: $0.id, name: $0.name, platform: $0.platform, lastSeen: AppModel.lastSeen($0.lastSeen, now: Date())) }
-        if selectedPhoneId == nil || !devices.contains(where: { $0.id == selectedPhoneId }) { selectedPhoneId = devices.first?.id }
+        var rows = service.devices.devices.map { PhoneRow(id: $0.id, name: $0.name, platform: $0.platform, lastSeen: AppModel.lastSeen($0.lastSeen, now: Date())) }
+        rows += (guest?.hosts.pcs ?? []).map { PhoneRow(id: $0.id, name: $0.name, platform: "computer", lastSeen: computerStatus($0.id), computer: true) }
+        phones = rows
+        if selectedPhoneId == nil || !rows.contains(where: { $0.id == selectedPhoneId }) { selectedPhoneId = rows.first?.id }
         refreshSent()
+    }
+
+    private func computerStatus(_ id: String) -> String {
+        guest?.isReachable(id) == true ? "Connected" : "Not reachable right now"
     }
 
     static func lastSeen(_ seen: Date?, now: Date) -> String {
@@ -221,7 +256,11 @@ public final class AppModel: ObservableObject {
     }
 
     public func remove(phone id: String) {
-        service.devices.remove(id)
+        if let guest = guest, guest.hosts.get(id) != nil {
+            Task { await guest.forget(id) }
+        } else {
+            service.devices.remove(id)
+        }
     }
 
     private var selectedPhone: PhoneRow? {
@@ -238,7 +277,7 @@ public final class AppModel: ObservableObject {
             do {
                 let port = try await service.start()
                 startError = nil
-                advertiser?.register(port: port, desktopId: service.devices.desktopId)
+                advertiser?.register(port: port, desktopId: service.devices.desktopId, name: service.router.desktopName())
             } catch {
                 startError = "Lazy Send could not start listening: \(error.localizedDescription)"
                 notice = startError
@@ -247,7 +286,12 @@ public final class AppModel: ObservableObject {
             }
         }
         let code = service.openPairing()
-        pairing = PairingState(code: code, remaining: Int(PairingSession.lifetime))
+        var state = PairingState(code: code, remaining: Int(PairingSession.lifetime))
+        if let session = service.pairing {
+            state.shortCode = session.shortCodeText
+            state.match = SpkiFingerprint.matchCode(service.fingerprint, shortCode: session.shortCode)
+        }
+        pairing = state
         updateStatus()
     }
 
@@ -269,13 +313,13 @@ public final class AppModel: ObservableObject {
         notice = nil
     }
 
-    func ask(_ request: PairRequest) async -> Bool {
+    func ask(_ request: PairRequest, match: String = "") async -> Bool {
         await withTaskCancellationHandler {
             await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
                 Task { @MainActor in
                     self.settleApproval(false)
                     self.approvalAnswer = continuation
-                    self.approval = PairApproval(name: PairedDeviceStore.cleanName(request.phoneName), platform: request.platform)
+                    self.approval = PairApproval(name: PairedDeviceStore.cleanName(request.phoneName), platform: request.platform, match: match)
                     NSApplication.shared.activate(ignoringOtherApps: true)
                 }
             }
@@ -302,7 +346,11 @@ public final class AppModel: ObservableObject {
         let devices = service.devices.devices
         let seen = phones.map { phone -> PhoneRow in
             var phone = phone
-            if let device = devices.first(where: { $0.id == phone.id }) { phone.lastSeen = AppModel.lastSeen(device.lastSeen, now: now) }
+            if phone.computer {
+                phone.lastSeen = computerStatus(phone.id)
+            } else if let device = devices.first(where: { $0.id == phone.id }) {
+                phone.lastSeen = AppModel.lastSeen(device.lastSeen, now: now)
+            }
             return phone
         }
         if seen != phones { phones = seen }
@@ -382,6 +430,7 @@ public final class AppModel: ObservableObject {
         guard let phone = target() else { return false }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
+        if phone.computer { return sendNote(text, to: phone) }
         do {
             let note = try ItemRequest.note(text)
             let item: OutboxItem
@@ -403,7 +452,7 @@ public final class AppModel: ObservableObject {
     @discardableResult
     public func sendFiles(_ urls: [URL]) -> Int {
         guard let phone = target() else { return 0 }
-        var files: [(url: URL, bookmark: Data?, mime: String?)] = []
+        var readable: [URL] = []
         var problem: String?
         for url in urls {
             var isDirectory: ObjCBool = false
@@ -413,18 +462,29 @@ public final class AppModel: ObservableObject {
             } else if !reachable || !FileManager.default.isReadableFile(atPath: url.path) {
                 problem = "\(url.lastPathComponent) is not there or Lazy Send may not read it."
             } else {
+                readable.append(url)
+            }
+        }
+        var started = 0
+        if phone.computer {
+            for url in readable { sendFile(url, to: phone) }
+            started = readable.count
+        } else {
+            var files: [(url: URL, bookmark: Data?, mime: String?)] = []
+            for url in readable {
                 let scoped = url.startAccessingSecurityScopedResource()
                 let bookmark = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
                 if scoped { url.stopAccessingSecurityScopedResource() }
                 files.append((url, bookmark, AppModel.mime(of: url)))
             }
+            // One save for the whole drop, however many files it holds.
+            let queued = files.isEmpty ? [] : service.outbox.queueFiles(phone.id, files)
+            for item in queued { addSent(item, deviceName: phone.name) }
+            if queued.count < files.count { problem = "Too many items are waiting for \(phone.name). Wait until it picks some up." }
+            started = queued.count
         }
-        // One save for the whole drop, however many files it holds.
-        let queued = files.isEmpty ? [] : service.outbox.queueFiles(phone.id, files)
-        for item in queued { addSent(item, deviceName: phone.name) }
-        if queued.count < files.count { problem = "Too many items are waiting for \(phone.name). Wait until it picks some up." }
         if let problem = problem { notice = problem }
-        return queued.count
+        return started
     }
 
     /// What is on the pasteboard goes to the selected phone: files as they are, a picture as a PNG, text as a note.
@@ -506,9 +566,113 @@ public final class AppModel: ObservableObject {
     }
 
     public func cancel(_ row: TimelineRow) {
-        guard row.canCancel, let outboxId = row.outboxId, let index = timeline.firstIndex(where: { $0.id == row.id }) else { return }
+        guard row.canCancel else { return }
+        if let task = sends[row.id] {
+            task.cancel()
+            updateRow(row.id) {
+                $0.canCancel = false
+                self.describeSent(&$0, "Cancelled")
+            }
+            return
+        }
+        guard let outboxId = row.outboxId, let index = timeline.firstIndex(where: { $0.id == row.id }) else { return }
         timeline[index].cancelled = true
         if !service.outbox.acknowledge(row.deviceId, outboxId) { refreshSent() }
+    }
+
+    // MARK: Sending to a computer
+
+    private func sendNote(_ text: String, to computer: PhoneRow) -> Bool {
+        guard let guest = guest else { return false }
+        let note: ItemRequest
+        do {
+            note = try ItemRequest.note(text)
+        } catch {
+            notice = "That text is too long to send (the limit is 1 MiB)."
+            return false
+        }
+        let link = note.kind == "link"
+        let sent = link ? note : ItemRequest(kind: "text", text: AppModel.trimmingEnd(text))
+        var row = TimelineRow(id: UUID().uuidString, kind: link ? .link : .text, sent: true, deviceId: computer.id, deviceName: computer.name,
+                              time: Date(), text: link ? sent.url : sent.text)
+        row.heading = link ? "Link to \(computer.name)" : "Text to \(computer.name)"
+        let id = computer.id
+        startSend(row, size: 0) { _ in try await guest.send(sent, to: id) }
+        return true
+    }
+
+    private func sendFile(_ url: URL, to computer: PhoneRow) {
+        guard let guest = guest else { return }
+        var row = TimelineRow(id: UUID().uuidString, kind: .file, sent: true, deviceId: computer.id, deviceName: computer.name, time: Date(),
+                              fileURL: url)
+        row.heading = url.lastPathComponent
+        let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.int64Value ?? 0
+        let id = computer.id
+        startSend(row, size: size) { progress in
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            try await guest.sendFile(at: url, to: id, onProgress: progress)
+        }
+    }
+
+    typealias SendWork = @Sendable (_ progress: @escaping @Sendable (Int64) -> Void) async throws -> Void
+
+    /// Adds a row for what is being sent and runs `work`, two at a time; the row says how it went.
+    private func startSend(_ row: TimelineRow, size: Int64, work: @escaping SendWork) {
+        var row = row
+        row.canCancel = true
+        describeSent(&row, "Waiting to send")
+        push(row)
+        let rowId = row.id
+        let name = row.deviceName
+        let lanes = sendLanes
+        sends[rowId] = Task { [weak self] in
+            await lanes.acquire()
+            var outcome = "Sent to \(name)"
+            if Task.isCancelled {
+                outcome = "Cancelled"
+            } else {
+                self?.updateRow(rowId) { self?.describeSent(&$0, "Sending") }
+                do {
+                    try await work { sent in
+                        Task { @MainActor in
+                            guard size > 0 else { return }
+                            self?.updateRow(rowId) { self?.describeSent(&$0, "Sending, \(min(sent * 100 / size, 100))%") }
+                        }
+                    }
+                } catch {
+                    outcome = Task.isCancelled || error is CancellationError ? "Cancelled" : "Not sent: \(error.localizedDescription)"
+                }
+            }
+            await lanes.release()
+            self?.sends[rowId] = nil
+            self?.updateRow(rowId) {
+                $0.canCancel = false
+                self?.describeSent(&$0, outcome)
+            }
+        }
+    }
+
+    private func updateRow(_ id: String, _ change: (inout TimelineRow) -> Void) {
+        guard let index = timeline.firstIndex(where: { $0.id == id }) else { return }
+        change(&timeline[index])
+    }
+
+    // MARK: Connecting to a computer
+
+    public func beginConnecting() {
+        guard let guest = guest, connecting == nil else { return }
+        let model = ConnectModel(guest: guest, ownId: service.devices.desktopId)
+        model.onPaired = { [weak self] pc in
+            self?.refreshPhones()
+            self?.selectedPhoneId = pc.id
+        }
+        connecting = model
+    }
+
+    public func closeConnecting() {
+        connecting?.cancel()
+        connecting = nil
     }
 
     /// Adds a row at the top; past `maxRows` the oldest rows go, except those still waiting for a phone.
@@ -633,6 +797,32 @@ enum HandOff {
         else { return [] }
         return (parts.queryItems ?? []).filter { $0.name == "file" }.compactMap(\.value).filter { $0.hasPrefix("/") }
             .map { URL(fileURLWithPath: $0) }
+    }
+}
+
+/// Lets `limit` sends run at once and holds the rest in the order they came.
+actor SendLanes {
+    private var free: Int
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+
+    init(_ limit: Int) {
+        free = limit
+    }
+
+    func acquire() async {
+        if free > 0 {
+            free -= 1
+        } else {
+            await withCheckedContinuation { waiting.append($0) }
+        }
+    }
+
+    func release() {
+        if waiting.isEmpty {
+            free += 1
+        } else {
+            waiting.removeFirst().resume()
+        }
     }
 }
 #endif

@@ -114,5 +114,15 @@ final class ScreenshotTests: XCTestCase {
         model.closePairing()
         await fixture.tearDown()
     }
+
+    func testConnectSheet() async throws {
+        let folder = try shots()
+        let fixture = try await GuestModelFixture()
+        let connecting = fixture.connecting()
+        await connecting.look()
+        connecting.input = "7KQ2-M9XD"
+        try await capture(ConnectSheet(model: connecting, close: {}), name: "connect", in: folder, size: nil)
+        await fixture.tearDown()
+    }
 }
 #endif
