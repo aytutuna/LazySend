@@ -2,6 +2,7 @@
 import BackgroundTasks
 import Foundation
 import LazySendKit
+import LazySendServer
 import Photos
 import SwiftUI
 import UIKit
