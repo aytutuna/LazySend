@@ -507,6 +507,92 @@ final class GuestServiceTests: XCTestCase {
         }
         XCTAssertTrue(harness.service.devices.devices.isEmpty)
     }
+
+    private func finish(_ item: OutboxEntry, _ content: Data, with receiver: GuestReceiver) async throws {
+        _ = try await receiver.prepareFile(item)
+        try receiver.write(content, for: item)
+        try await receiver.finishFile(item)
+    }
+
+    func testAGalleryFileIsFiledByTheMonthItWasTaken() async throws {
+        let pc = try await pairGuest()
+        let receiver = GuestReceiver(hostId: pc.id, guest: fixture.guest)
+        let item = OutboxEntry(id: "item-0003-abcdef", kind: "file", name: "IMG_1.jpg", size: 3, sourceId: "asset-1#photo",
+                               taken: "2021-03-15T12:00:00Z")
+        try await finish(item, Data([1, 2, 3]), with: receiver)
+        let month = Inbox.month(Date(timeIntervalSince1970: 1_615_809_600))
+        let placed = hostFolder.appendingPathComponent("Gallery/\(month)/IMG_1.jpg")
+        XCTAssertEqual(try Data(contentsOf: placed), Data([1, 2, 3]))
+        let modified = try XCTUnwrap(try FileManager.default.attributesOfItem(atPath: placed.path)[.modificationDate] as? Date)
+        XCTAssertEqual(modified.timeIntervalSince1970, 1_615_809_600, accuracy: 1)
+        XCTAssertEqual(fixture.files.all.first?.sourceId, "asset-1#photo")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: hostFolder.appendingPathComponent(item.id + ".part").path))
+    }
+
+    func testAGalleryFileWithoutADateIsFiledByTheDayItArrived() async throws {
+        let pc = try await pairGuest()
+        let receiver = GuestReceiver(hostId: pc.id, guest: fixture.guest)
+        let item = OutboxEntry(id: "item-0004-abcdef", kind: "file", name: "clip.mov", size: 2, sourceId: "asset-2#video")
+        try await finish(item, Data([9, 9]), with: receiver)
+        let placed = hostFolder.appendingPathComponent("Gallery/\(Inbox.month(Date()))/clip.mov")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: placed.path))
+    }
+
+    func testAFileWithAnUnusableSourceIdIsFiledAsAnOrdinaryFile() async throws {
+        let pc = try await pairGuest()
+        let receiver = GuestReceiver(hostId: pc.id, guest: fixture.guest)
+        let item = OutboxEntry(id: "item-0005-abcdef", kind: "file", name: "plain.txt", size: 1, sourceId: "")
+        try await finish(item, Data([7]), with: receiver)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: hostFolder.appendingPathComponent("plain.txt").path))
+        XCTAssertNil(fixture.files.all.first?.sourceId)
+    }
+
+    func testAGalleryFileIsAcknowledgedAfterTheDownload() async throws {
+        let pc = try await pairGuest()
+        let collector = OutboxCollector(handler: GuestReceiver(hostId: pc.id, guest: fixture.guest))
+        let item = OutboxEntry(id: "item-0006-abcdef", kind: "file", name: "IMG_2.jpg", size: 4, sourceId: "asset-3#photo",
+                               taken: "2022-07-01T09:30:00+02:00")
+        let api = ScriptedOutbox(items: [item], files: [item.id: Data([1, 2, 3, 4])])
+        let taken = try await collector.collect(api: api, wait: 0)
+        XCTAssertEqual(taken, 1)
+        XCTAssertEqual(api.acknowledged, [item.id])
+        XCTAssertEqual(fixture.files.all.count, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: hostFolder.appendingPathComponent("Gallery").path))
+    }
+}
+
+private final class ScriptedOutbox: OutboxAPI, @unchecked Sendable {
+    private let items: [OutboxEntry]
+    private let files: [String: Data]
+    private let lock = NSLock()
+    private var done: [String] = []
+
+    init(items: [OutboxEntry], files: [String: Data]) {
+        self.items = items
+        self.files = files
+    }
+
+    var acknowledged: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return done
+    }
+
+    func outbox(wait: Int) async throws -> OutboxReply {
+        OutboxReply(items: items, more: false)
+    }
+
+    func download(id: String, from: Int64, onStart: @escaping (Int, Int64) throws -> Void, sink: @escaping (Data) throws -> Void) async throws {
+        let data = files[id] ?? Data()
+        try onStart(from > 0 ? 206 : 200, Int64(data.count))
+        try sink(Data(data.dropFirst(Int(from))))
+    }
+
+    func acknowledge(_ id: String) async throws {
+        lock.lock()
+        done.append(id)
+        lock.unlock()
+    }
 }
 
 private extension GuestFixture {

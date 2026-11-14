@@ -12,7 +12,7 @@ public final class GalleryIndex: @unchecked Sendable {
     }
 
     /// Whether `id` can be kept: 1 to 256 characters, none of them a control character.
-    static func isValidSourceId(_ id: String?) -> Bool {
+    public static func isValidSourceId(_ id: String?) -> Bool {
         guard let id = id, !id.isEmpty, id.count <= Limits.maxSourceIdLength else { return false }
         return !id.unicodeScalars.contains { $0.value < 0x20 || (0x7F...0x9F).contains($0.value) }
     }

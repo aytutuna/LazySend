@@ -569,14 +569,14 @@ public final class Inbox: @unchecked Sendable {
         }
     }
 
-    private static func parseDate(_ text: String) -> Date? {
+    static func parseDate(_ text: String) -> Date? {
         if let date = ISO8601DateFormatter().date(from: text) { return date }
         let fractional = ISO8601DateFormatter()
         fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return fractional.date(from: text)
     }
 
-    private static func month(_ date: Date) -> String {
+    static func month(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM"

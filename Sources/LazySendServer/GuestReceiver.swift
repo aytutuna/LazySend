@@ -119,7 +119,8 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
         let started = parts[item.id]
         lock.unlock()
         guard let part = started else { throw CocoaError(.fileNoSuchFile) }
-        let folder = part.deletingLastPathComponent()
+        let folder = item.galleryFolder(in: part.deletingLastPathComponent()) ?? part.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let target = folder.appendingPathComponent(FileNames.unique(in: folder, name: FileNames.clean(item.name)))
         try FileManager.default.moveItem(at: part, to: target)
         lock.lock()
@@ -128,8 +129,11 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
         if finished.count > GuestReceiver.finishedKept { finished.removeFirst(finished.count - GuestReceiver.finishedKept) }
         lock.unlock()
         Inbox.markAsDownloaded(target)
+        if let taken = item.takenDate {
+            try? FileManager.default.setAttributes([.modificationDate: taken], ofItemAtPath: target.path)
+        }
         guard let host = host else { return }
-        guest?.onFileReceived?(ReceivedFile(deviceId: host.id, deviceName: host.name, url: target, size: item.size ?? 0, sourceId: nil))
+        guest?.onFileReceived?(ReceivedFile(deviceId: host.id, deviceName: host.name, url: target, size: item.size ?? 0, sourceId: item.gallerySource))
     }
 
     func pause(_ item: OutboxEntry) async {
