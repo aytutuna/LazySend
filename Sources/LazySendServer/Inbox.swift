@@ -372,10 +372,13 @@ public final class Inbox: @unchecked Sendable {
         onFileReceived?(ReceivedFile(deviceId: file.deviceId, deviceName: file.deviceName, url: placed, size: file.size, sourceId: file.sourceId))
     }
 
-    /// Tags the file as downloaded, so Gatekeeper's checks apply to what a phone sends (an app, a script).
+    /// Tags the file as downloaded, so Gatekeeper's checks apply to what a phone sends (an app, a script). There is
+    /// no Gatekeeper on iOS, so files stay as they are there.
     static func markAsDownloaded(_ url: URL) {
+#if os(macOS)
         let value = "0081;\(String(Int(Date().timeIntervalSince1970), radix: 16));Lazy Send;"
         _ = value.withCString { setxattr(url.path, "com.apple.quarantine", $0, strlen($0), 0, 0) }
+#endif
     }
 
     private func moveIntoPlace(_ file: IncomingFile, _ part: URL) throws -> URL {

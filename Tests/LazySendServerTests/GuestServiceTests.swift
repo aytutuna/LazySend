@@ -160,7 +160,9 @@ final class GuestServiceTests: XCTestCase {
         XCTAssertEqual(file.deviceName, "Test Mac")
         XCTAssertEqual(file.size, Int64(content.count))
         XCTAssertEqual(try Data(contentsOf: file.url), content)
+#if os(macOS)
         XCTAssertTrue(quarantined(file.url))
+#endif
         let acknowledged = await waitUntil { outbox.pending(guestId).isEmpty }
         XCTAssertTrue(acknowledged)
         let names = try FileManager.default.contentsOfDirectory(atPath: hostFolder.path)

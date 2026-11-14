@@ -104,7 +104,9 @@ final class TransferLinkTests: XCTestCase {
     func testReceivedFilesAreMarkedAsDownloadedAndKeepTheirDate() async throws {
         try await phone.upload("dated.txt", bytes(100), modified: "2025-03-14T12:00:00Z")
         let url = phoneFolder.appendingPathComponent("dated.txt")
+#if os(macOS)
         XCTAssertGreaterThan(getxattr(url.path, "com.apple.quarantine", nil, 0, 0, 0), 0)
+#endif
         let modified = try XCTUnwrap(try FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date)
         XCTAssertEqual(modified.timeIntervalSince1970, 1_741_953_600, accuracy: 1)
     }
