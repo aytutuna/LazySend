@@ -14,7 +14,7 @@ class HostAdvertiser(context: Context) {
         unregister()
         val txtName = cleanName(name, 64)
         val info = NsdServiceInfo().apply {
-            serviceName = txtName.ifEmpty { "Lazy Send" }
+            serviceName = serviceName(name)
             serviceType = SERVICE_TYPE
             setPort(port)
             setAttribute("v", "1")
@@ -34,6 +34,11 @@ class HostAdvertiser(context: Context) {
         } catch (e: RuntimeException) {
             null
         }
+    }
+
+    companion object {
+        // A DNS label, which an instance name is, holds 63 bytes.
+        fun serviceName(name: String) = cleanName(name, 63).ifEmpty { "Lazy Send" }
     }
 
     @Synchronized
