@@ -33,6 +33,7 @@ class IncomingFile(
     var updated: Long,
     var done: Boolean = false,
     var finished: Long? = null,
+    val sendId: String? = null,
 )
 
 /**
@@ -54,6 +55,9 @@ class Inbox(
 
     // The unfinished file of each (guest, source id), so a gallery sync of tens of thousands of photos does not scan every record.
     private val bySource = HashMap<Pair<String, String>, IncomingFile>()
+
+    // Every record by (guest, send id), finished ones too until they are pruned.
+    private val bySend = HashMap<Pair<String, String>, IncomingFile>()
     private val writers = ConcurrentHashMap<String, Writer>()
     private var lastPrune = 0L
 
@@ -70,14 +74,23 @@ class Inbox(
         var hashed = 0L
     }
 
-    /** Starts a file, or finds the one already started for the same source id. A source id received before answers done. */
-    fun begin(guest: Guest, request: ItemRequest): ItemState {
+    /**
+     * Starts a file, or finds the one already started for the same send id or source id. A source id received before
+     * answers done. [onRepeat] is called when the answer is the record of an earlier post with the same send id.
+     */
+    fun begin(guest: Guest, request: ItemRequest, onRepeat: () -> Unit = {}): ItemState {
         val size = request.size?.takeIf { it >= 0 } ?: throw HostError.badRequest
         val sourceId = request.sourceId
         if (sourceId != null && !isValidSourceId(sourceId)) throw HostError.badRequest
         val sha256 = request.sha256?.let {
             if (it.length != 64 || !it.all { c -> c in '0'..'9' || c in 'a'..'f' || c in 'A'..'F' }) throw HostError.badRequest
             it.lowercase()
+        }
+        val sendId = request.sendId
+        if (sendId != null && !isValidSendId(sendId)) throw HostError.badRequest
+        findSend(guest.id, sendId, size, sha256)?.let {
+            onRepeat()
+            return resume(it)
         }
         val duplicate = ItemState("", size, true, true)
         if (sourceId != null && index.contains(guest.id, sourceId)) return duplicate
@@ -90,13 +103,17 @@ class Inbox(
         if (freeSpace() - size < MIN_FREE_BYTES) throw HostError.diskFull
         val file = IncomingFile(
             newId(), guest.id, guest.name, cleanFileName(request.name), size, request.mime, modified, sourceId, sha256, folder,
-            started = now, updated = now,
+            started = now, updated = now, sendId = sendId,
         )
         // Looked up and added in one step, so two requests for the same asset cannot start two transfers. A finished
         // transfer is in the index before it leaves bySource, so one of the two always shows it.
         var existing: IncomingFile? = null
         synchronized(gate) {
-            if (sourceId != null) {
+            findSend(guest.id, sendId, size, sha256)?.let {
+                existing = it
+                onRepeat()
+            }
+            if (existing == null && sourceId != null) {
                 val known = bySource[guest.id to sourceId]
                 when {
                     known != null && known.size == size -> existing = known
@@ -111,12 +128,10 @@ class Inbox(
                 }
                 records[file.id] = file
                 if (sourceId != null) bySource[guest.id to sourceId] = file
+                if (sendId != null) bySend[guest.id to sendId] = file
             }
         }
-        existing?.let {
-            finishIfFull(it)
-            return stateOf(it)
-        }
+        existing?.let { return resume(it) }
         try {
             save(file)
             onBegun(file)
@@ -127,6 +142,22 @@ class Inbox(
         }
         return stateOf(file)
     }
+
+    private fun resume(file: IncomingFile): ItemState {
+        finishIfFull(file)
+        return stateOf(file)
+    }
+
+    // Throws when this post does not match what the send id was first used for.
+    private fun findSend(deviceId: String, sendId: String?, size: Long, sha256: String?): IncomingFile? {
+        if (sendId == null) return null
+        val known = synchronized(gate) { bySend[deviceId to sendId] } ?: return null
+        if (known.size != size || known.sha256 != sha256) throw HostError.badRequest
+        return known
+    }
+
+    /** True when [deviceId] has a file under [sendId]. */
+    fun hasSend(deviceId: String, sendId: String) = synchronized(gate) { bySend.containsKey(deviceId to sendId) }
 
     /** Where a file of [deviceId] stands; null when there is no such file. */
     fun state(deviceId: String, id: String): ItemState? {
@@ -293,7 +324,10 @@ class Inbox(
             removed = !records.containsKey(file.id)
             if (!removed && file.sourceId != null) indexed = runCatching { index.add(file.deviceId, file.sourceId) }.isSuccess
             // The index answers for a gallery file from here on, so its record has nothing left to keep.
-            if (indexed) records.remove(file.id)
+            if (indexed) {
+                records.remove(file.id)
+                unsend(file)
+            }
             untrack(file)
         }
         writers.remove(file.id)
@@ -320,10 +354,18 @@ class Inbox(
         if (!file.done && file.uri.isNotEmpty()) runCatching { files.discard(file.uri) }
         synchronized(gate) {
             records.remove(file.id)
+            unsend(file)
             untrack(file)
         }
         writers.remove(file.id)
         File(directory, "${file.id}.json").delete()
+    }
+
+    // With the gate held.
+    private fun unsend(file: IncomingFile) {
+        val send = file.sendId ?: return
+        val key = file.deviceId to send
+        if (bySend[key] === file) bySend.remove(key)
     }
 
     // With the gate held.
@@ -379,6 +421,7 @@ class Inbox(
                 continue
             }
             records[file.id] = file
+            if (file.sendId != null && isValidSendId(file.sendId)) bySend[file.deviceId to file.sendId] = file
             if (!file.done && file.sourceId != null) bySource[file.deviceId to file.sourceId] = file
             when {
                 isStale(file, now) -> discard(file)

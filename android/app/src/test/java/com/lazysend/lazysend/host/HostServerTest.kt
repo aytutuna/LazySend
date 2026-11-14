@@ -2,6 +2,7 @@ package com.lazysend.lazysend.host
 
 import com.lazysend.lazysend.link.DataSource
 import com.lazysend.lazysend.link.ItemRequest
+import com.lazysend.lazysend.link.ItemState
 import com.lazysend.lazysend.link.LinkException
 import com.lazysend.lazysend.link.Uploader
 import com.lazysend.lazysend.link.missingIds
@@ -158,6 +159,34 @@ class HostServerTest {
         }
         assertArrayEquals(data, host.files.bytes(host.files.data.keys.single()))
         assertEquals("Test phone", host.files.folders.values.single())
+    }
+
+    @Test
+    fun aRepeatedSendIdMakesNoSecondItem() {
+        val client = host.client(host.pair())
+        val sendId = "AbCdEfGhIjKlMnOpQrStUv"
+        val data = ByteArray(9000) { it.toByte() }
+        runBlocking {
+            val text = client.postItem(ItemRequest("text", text = "hello", sendId = sendId + "1"))
+            assertEquals(text, client.postItem(ItemRequest("text", text = "hello", sendId = sendId + "1")))
+            refused("badRequest") { client.postItem(ItemRequest("link", url = "https://alazy.app/", sendId = sendId + "1")) }
+            refused("badRequest") { client.postItem(ItemRequest("file", name = "a", size = 1, sendId = sendId + "1")) }
+            refused("badRequest") { client.postItem(ItemRequest("text", text = "x", sendId = "no good")) }
+
+            val link = client.postItem(ItemRequest("link", url = "https://alazy.app/", sendId = sendId + "2"))
+            assertEquals(link, client.postItem(ItemRequest("link", url = "https://alazy.app/", sendId = sendId + "2")))
+
+            val file = ItemRequest("file", name = "a", size = 9000, sendId = sendId)
+            val begun = client.postItem(file)
+            client.putChunk(begun.id, 0, 4000, source(data))
+            assertEquals(ItemState(begun.id, 4000, false), client.postItem(file))
+            assertTrue(client.putChunk(begun.id, 4000, 5000, source(data)).done)
+            assertEquals(ItemState(begun.id, 9000, true), client.postItem(file))
+            refused("badRequest") { client.postItem(ItemRequest("text", text = "hello", sendId = sendId)) }
+            refused("badRequest") { client.postItem(ItemRequest("file", name = "a", size = 9001, sendId = sendId)) }
+        }
+        assertEquals(listOf("hello", "https://alazy.app/"), texts.map { it.third })
+        assertEquals(1, host.files.finished.size)
     }
 
     @Test

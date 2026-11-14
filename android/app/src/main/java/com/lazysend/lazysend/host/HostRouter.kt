@@ -40,6 +40,7 @@ class HostRouter(
     private val inbox: Inbox,
     private val outbox: Outbox,
     private val gallery: GalleryIndex,
+    private val sent: SendLog,
     private val limiter: RateLimiter,
     private val hostId: () -> String,
     private val hostName: () -> String,
@@ -188,25 +189,46 @@ class HostRouter(
         val length = request.head.contentLength ?: throw HostError.lengthRequired
         if (length > MAX_ITEM_BODY) throw HostError.tooLarge
         val item = json<ItemRequest>(request.body.readAll())
+        val sendId = item.sendId
+        if (sendId != null && !isValidSendId(sendId)) throw HostError.badRequest
         when (item.kind) {
             "text" -> {
                 val text = item.text
                 if (text.isNullOrEmpty()) throw HostError.badRequest
                 if (text.toByteArray().size > MAX_TEXT_BYTES) throw HostError.tooLarge
+                repeatedText(guest, sendId, "text")?.let { return it }
                 onText(guest, "text", text)
-                return HostResponse.json(201, ItemState(newId(), 0, true))
+                return textStored(guest, sendId, "text")
             }
             "link" -> {
                 if (!isAcceptableUrl(item.url)) throw HostError.badRequest
+                repeatedText(guest, sendId, "link")?.let { return it }
                 onText(guest, "link", item.url!!)
-                return HostResponse.json(201, ItemState(newId(), 0, true))
+                return textStored(guest, sendId, "link")
             }
             "file" -> {
-                val state = withContext(Dispatchers.IO) { inbox.begin(guest, item) }
-                return HostResponse.json(if (state.done) 200 else 201, state)
+                if (sendId != null && sent.find(guest.id, sendId) != null) throw HostError.badRequest
+                var repeat = false
+                val state = withContext(Dispatchers.IO) { inbox.begin(guest, item) { repeat = true } }
+                return HostResponse.json(if (repeat || state.done) 200 else 201, state)
             }
             else -> throw HostError.badRequest
         }
+    }
+
+    // A text or link keeps no size or hash, so only its kind can disagree with an earlier post.
+    private fun repeatedText(guest: Guest, sendId: String?, kind: String): HostResponse? {
+        if (sendId == null) return null
+        val known = sent.find(guest.id, sendId)
+        if (known == null) return if (inbox.hasSend(guest.id, sendId)) throw HostError.badRequest else null
+        if (known.kind != kind) throw HostError.badRequest
+        return HostResponse.json(200, ItemState(known.id, 0, true))
+    }
+
+    private fun textStored(guest: Guest, sendId: String?, kind: String): HostResponse {
+        val id = newId()
+        if (sendId != null) sent.add(guest.id, sendId, kind, id)
+        return HostResponse.json(201, ItemState(id, 0, true))
     }
 
     private suspend fun itemStatus(request: HostRequest, id: String, now: Long): HostResponse {

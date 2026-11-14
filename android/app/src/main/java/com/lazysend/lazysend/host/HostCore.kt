@@ -33,8 +33,9 @@ class HostCore(
     val gallery = GalleryIndex(File(root, "index"))
     val inbox = Inbox(File(root, "incoming"), files, gallery, freeSpace, clock)
     val outbox = Outbox(File(root, "outbox.json"), File(root, "outgoing"), clock, freeSpace)
+    val sent = SendLog(File(root, "sent.json"), clock)
     val limiter = RateLimiter()
-    val router = HostRouter(guests, inbox, outbox, gallery, limiter, hostId, hostName, clock)
+    val router = HostRouter(guests, inbox, outbox, gallery, sent, limiter, hostId, hostName, clock)
 
     private val session = MutableStateFlow<PairingSession?>(null)
     private val question = MutableStateFlow<Approval?>(null)
@@ -87,13 +88,17 @@ class HostCore(
         val guest = guests.get(id) ?: return
         guests.remove(id)
         inbox.removeDevice(id)
+        sent.removeDevice(id)
         outbox.clear(id)
         onGuestRemoved(guest)
     }
 
     /** Every pairing is dropped, as when this phone's key changed and no guest holds the right fingerprint any more. */
     fun forgetEveryone() {
-        guests.guests.value.forEach { inbox.removeDevice(it.id) }
+        guests.guests.value.forEach {
+            inbox.removeDevice(it.id)
+            sent.removeDevice(it.id)
+        }
         guests.clear()
         outbox.clearAll()
     }

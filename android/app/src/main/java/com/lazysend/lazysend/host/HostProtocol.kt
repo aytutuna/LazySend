@@ -31,6 +31,9 @@ val random = SecureRandom()
 fun isValidId(id: String?): Boolean =
     id != null && id.length in 8..64 && id.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it == '-' || it == '_' }
 
+/** A sender's id for one send: 16 to 64 of the characters an id has. */
+fun isValidSendId(id: String?): Boolean = id != null && id.length >= 16 && isValidId(id)
+
 fun newId(): String = UUID.randomUUID().toString().replace("-", "")
 
 fun sha256(bytes: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(bytes)

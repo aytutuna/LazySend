@@ -50,6 +50,7 @@ data class ItemRequest(
     val modified: String? = null,
     val sourceId: String? = null,
     val sha256: String? = null,
+    val sendId: String? = null,
 )
 
 @Serializable

@@ -224,4 +224,56 @@ class InboxTest {
         assertTrue(inbox.begin(guest, request).duplicate == true)
         assertTrue(newInbox().state(guest.id, plain.id)!!.done)
     }
+
+    private val sendId = "AbCdEfGhIjKlMnOpQrStUv"
+
+    @Test
+    fun aRepeatedSendIdInProgressGivesTheCurrentOffset() {
+        val request = ItemRequest("file", name = "a", size = 100, sendId = sendId)
+        val begun = inbox.begin(guest, request)
+        put(begun.id, 0, ByteArray(40))
+        var repeat = false
+        val again = inbox.begin(guest, request) { repeat = true }
+        assertTrue(repeat)
+        assertEquals(begun.id, again.id)
+        assertEquals(40L, again.offset)
+        assertFalse(again.done)
+        assertEquals(1, files.data.size)
+    }
+
+    @Test
+    fun aRepeatedSendIdAfterFinishingIsDoneAndReceivesNothingAgain() {
+        val request = ItemRequest("file", name = "a", size = 5, sendId = sendId)
+        var finished = 0
+        inbox.onFinished = { finished++ }
+        val begun = inbox.begin(guest, request)
+        put(begun.id, 0, ByteArray(5))
+        val again = inbox.begin(guest, request)
+        assertEquals(begun.id, again.id)
+        assertEquals(5L, again.offset)
+        assertTrue(again.done)
+        assertEquals(1, finished)
+        assertEquals(1, files.finished.size)
+    }
+
+    @Test
+    fun aSendIdSurvivesARestartAndIsScopedToItsGuest() {
+        val request = ItemRequest("file", name = "a", size = 100, sendId = sendId)
+        val begun = inbox.begin(guest, request)
+        put(begun.id, 0, ByteArray(40))
+        val restarted = newInbox()
+        assertEquals(begun.id, restarted.begin(guest, request).id)
+        val other = Guest("phone-0002", "Other", "android", "1", "", 0, 0)
+        assertNotEquals(begun.id, restarted.begin(other, request).id)
+    }
+
+    @Test
+    fun aSendIdUsedForAnotherSizeOrHashOrNotValidIsRefused() {
+        inbox.begin(guest, ItemRequest("file", name = "a", size = 100, sendId = sendId))
+        expect(400, "badRequest") { inbox.begin(guest, ItemRequest("file", name = "a", size = 101, sendId = sendId)) }
+        expect(400, "badRequest") { inbox.begin(guest, ItemRequest("file", name = "a", size = 100, sendId = sendId, sha256 = "0".repeat(64))) }
+        expect(400, "badRequest") { inbox.begin(guest, ItemRequest("file", name = "a", size = 100, sendId = "short")) }
+        expect(400, "badRequest") { inbox.begin(guest, ItemRequest("file", name = "a", size = 100, sendId = "a".repeat(15) + "!")) }
+        expect(400, "badRequest") { inbox.begin(guest, ItemRequest("file", name = "a", size = 100, sendId = "a".repeat(65))) }
+    }
 }
