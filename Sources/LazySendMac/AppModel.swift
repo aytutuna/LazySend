@@ -632,7 +632,7 @@ public final class AppModel: ObservableObject {
         startSend(row, size: resumed.send.size) { progress in try await resumed.run(progress) }
     }
 
-    typealias SendWork =@Sendable (_ progress: @escaping @Sendable (Int64) -> Void) async throws -> Void
+    typealias SendWork = @Sendable (_ progress: @escaping @Sendable (Int64) -> Void) async throws -> Void
 
     /// Adds a row for what is being sent and runs `work`, two at a time; the row says how it went.
     private func startSend(_ row: TimelineRow, size: Int64, work: @escaping SendWork) {
