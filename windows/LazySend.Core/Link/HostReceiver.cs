@@ -9,7 +9,7 @@ namespace LazySend.Core;
 /// then each item is acknowledged. The host keeps an item until it is, so one that arrives twice is
 /// noticed by its id in the history; a file whose acknowledgement was lost may be received again.
 /// </summary>
-public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendSettings settings)
+public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendSettings settings, GalleryIndex received)
 {
     private static readonly TimeSpan IdleTimeout = TimeSpan.FromSeconds(30);
     private const int FinishedKept = 200;
@@ -57,7 +57,7 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
                     AddText(host, item);
                     break;
                 case ItemKind.File:
-                    if (WasFinished(host.Id, item.Id)) break;
+                    if (WasFinished(host.Id, item.Id) || (GalleryIndex.IsValidSourceId(item.SourceId) && received.Contains(host.Id, item.SourceId))) break;
                     await DownloadAsync(host, client, item, cancellation).ConfigureAwait(false);
                     RememberFinished(host.Id, item.Id);
                     break;
@@ -193,6 +193,7 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
         {
             System.Diagnostics.Trace.TraceWarning($"Could not mark a received file as downloaded: {e.Message}");
         }
+        if (GalleryIndex.IsValidSourceId(item.SourceId)) received.Add(host.Id, item.SourceId);
         if (TakenOf(item) is { } taken)
         {
             try

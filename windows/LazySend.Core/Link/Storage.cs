@@ -16,6 +16,8 @@ public sealed record SendPaths(string Settings, string State, string DefaultRece
     public string HistoryFile => Path.Combine(State, "history.json");
     public string IncomingDirectory => Path.Combine(State, "incoming");
     public string IndexDirectory => Path.Combine(State, "index");
+    /// <summary>The gallery files received as a guest, apart from what phones sent to this computer as a host.</summary>
+    public string GuestIndexDirectory => Path.Combine(State, "guest-index");
     public string PendingFile => Path.Combine(State, "pending.json");
     public string OutboxFile => Path.Combine(State, "outbox.json");
     public string UsbFoldersFile => Path.Combine(State, "usb-folders.json");
@@ -31,6 +33,8 @@ public sealed class SendSettings(SendPaths paths)
 {
     private readonly object _gate = new();
     private SendSettingsFile _file = JsonFile.Load<SendSettingsFile>(paths.SettingsFile);
+
+    public string GuestIndexDirectory => paths.GuestIndexDirectory;
 
     /// <summary>The folder received files go under, one folder per phone inside it.</summary>
     public string ReceiveRoot

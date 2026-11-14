@@ -702,6 +702,41 @@ public class GuestReceiveTests
     }
 
     [Fact]
+    public async Task AssetReceivedBeforeIsOnlyAcknowledgedWhenQueuedAgain()
+    {
+        await using var h = new Harness();
+        using var guest = new GuestRig(h);
+        var host = await guest.PairAsync();
+        string source = Path.Combine(h.Root, "IMG_0002.jpg");
+        await File.WriteAllBytesAsync(source, RandomNumberGenerator.GetBytes(2_000));
+        var arrived = new List<ReceivedFile>();
+        guest.Service.Receiver.FileReceived += (_, file) => arrived.Add(file);
+        using var client = await guest.Service.Connector.ConnectAsync(host.Id, CancellationToken.None);
+        h.Service.Outbox.QueueFile(guest.GuestId, source, sourceId: "asset-5");
+        await guest.Service.Receiver.CollectAsync(client, host.Id, 0, CancellationToken.None);
+
+        h.Service.Outbox.QueueFile(guest.GuestId, source, sourceId: "asset-5");
+        await guest.Service.Receiver.CollectAsync(client, host.Id, 0, CancellationToken.None);
+
+        Assert.Single(arrived);
+        Assert.Empty(h.Service.Outbox.Pending(guest.GuestId));
+        Assert.True(guest.Service.Received.Contains(host.Id, "asset-5"));
+    }
+
+    [Fact]
+    public async Task RemovingAHostDropsItsReceivedAssets()
+    {
+        await using var h = new Harness();
+        using var guest = new GuestRig(h);
+        var host = await guest.PairAsync();
+        guest.Service.Received.Add(host.Id, "asset-6");
+
+        guest.Hosts.Remove(host.Id);
+
+        Assert.False(guest.Service.Received.Contains(host.Id, "asset-6"));
+    }
+
+    [Fact]
     public async Task FileWithAnUnusableSourceIdIsAnOrdinaryFile()
     {
         await using var h = new Harness();

@@ -36,17 +36,22 @@ public sealed class GuestService : IDisposable
         _guestName = guestName;
         _appVersion = appVersion;
         Connector = new HostConnector(hosts, guestId);
-        Receiver = new HostReceiver(hosts, history, settings);
+        Received = new GalleryIndex(settings.GuestIndexDirectory);
+        Receiver = new HostReceiver(hosts, history, settings, Received);
         hosts.Removed += (_, id) =>
         {
             StopWatching(id);
             pending.RemoveHost(id);
+            Received.Clear(id);
         };
     }
 
     public HostStore Hosts { get; }
     public HostConnector Connector { get; }
     public HostReceiver Receiver { get; }
+
+    /// <summary>The source ids of the gallery files received from each host.</summary>
+    internal GalleryIndex Received { get; }
 
     /// <summary>A host became reachable or stopped being so; the arguments are its id and which.</summary>
     public event EventHandler<(string HostId, bool Reachable)>? ReachabilityChanged;
