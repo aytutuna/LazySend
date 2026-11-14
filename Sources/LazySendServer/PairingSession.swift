@@ -1,5 +1,4 @@
 import Foundation
-import CryptoKit
 import LazySendKit
 
 public enum PairingSessionState: Equatable, Sendable {
@@ -22,8 +21,7 @@ public final class PairingSession: @unchecked Sendable {
     public static let lifetime: TimeInterval = 5 * 60
     public static let maxFailedAttempts = 5
     public static let maxTotalFailedAttempts = 25
-    public static let shortCodeLength = 8
-    private static let codeAlphabet = Array("0123456789ABCDEFGHJKMNPQRSTVWXYZ")
+    public static let shortCodeLength = ShortCode.length
 
     private let lock = NSLock()
     private let tokenBytes: [UInt8]
@@ -50,7 +48,7 @@ public final class PairingSession: @unchecked Sendable {
         self.token = Base64Url.encode(Data(bytes))
         var codeGenerator = SystemRandomNumberGenerator()
         shortCode = String((0..<PairingSession.shortCodeLength).map { _ in
-            PairingSession.codeAlphabet.randomElement(using: &codeGenerator)!
+            ShortCode.alphabet.randomElement(using: &codeGenerator)!
         })
         self.opened = opened
         expires = opened.addingTimeInterval(PairingSession.lifetime)
@@ -59,18 +57,8 @@ public final class PairingSession: @unchecked Sendable {
     /// The short code as shown, XXXX-XXXX.
     public var shortCodeText: String { "\(shortCode.prefix(4))-\(shortCode.suffix(4))" }
 
-    /// A short code as typed (any case, with dashes or spaces) in its canonical form; nil when it is not 8
-    /// characters of the alphabet, which also tells it from a 22-character token.
     public static func normalizeShortCode(_ text: String?) -> String? {
-        guard let text = text, text.utf8.count <= 32 else { return nil }
-        var code = ""
-        for scalar in text.unicodeScalars {
-            if scalar == "-" || scalar == " " { continue }
-            let upper = scalar.value >= 97 && scalar.value <= 122 ? Unicode.Scalar(scalar.value - 32)! : scalar
-            guard codeAlphabet.contains(Character(upper)) else { return nil }
-            code.unicodeScalars.append(upper)
-        }
-        return code.count == shortCodeLength ? code : nil
+        ShortCode.normalize(text)
     }
 
     private static func sameBytes(_ a: [UInt8], _ b: [UInt8]) -> Bool {
@@ -134,16 +122,5 @@ public final class PairingSession: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         if current == .open { current = .closed }
-    }
-}
-
-extension SpkiFingerprint {
-    /// The check code of a pairing by short code: the same six digits, taken from SHA-256 over the fingerprint
-    /// and the canonical short code. A guest that typed the code has no fingerprint in advance, and a key can be
-    /// ground until the plain check code of the real certificate comes out; the short code is not known when the
-    /// certificate is chosen, so this cannot be ground.
-    public static func matchCode(_ fingerprint: Data, shortCode: String) -> String {
-        guard fingerprint.count == byteCount else { return "" }
-        return checkCode(Data(SHA256.hash(data: fingerprint + Data(shortCode.utf8))))
     }
 }

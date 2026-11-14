@@ -28,7 +28,6 @@ public enum Limits {
     public static let maxOutboxInlineBytes = 4 * 1024 * 1024
     public static let maxOutboxItemsPerDevice = 1000
     public static let maxDevices = 16
-    public static let maxNameBytes = 128
 }
 
 enum ItemKind {

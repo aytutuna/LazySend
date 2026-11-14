@@ -127,17 +127,8 @@ public final class PairedDeviceStore: @unchecked Sendable {
         SHA256.hash(data: secret).map { String(format: "%02x", $0) }.joined()
     }
 
-    /// A name as kept: control characters removed, trimmed, cut to `Limits.maxNameBytes` UTF-8 bytes.
+    /// A name as kept: control characters removed, trimmed, cut to `DisplayName.maxBytes` UTF-8 bytes.
     public static func cleanName(_ name: String?) -> String {
-        var text = String.UnicodeScalarView()
-        var bytes = 0
-        for scalar in (name ?? "").unicodeScalars {
-            if scalar.value < 0x20 || (0x7F...0x9F).contains(scalar.value) { continue }
-            let length = String(scalar).utf8.count
-            if bytes + length > Limits.maxNameBytes { break }
-            bytes += length
-            text.append(scalar)
-        }
-        return String(text).trimmingCharacters(in: .whitespacesAndNewlines)
+        DisplayName.clean(name)
     }
 }
