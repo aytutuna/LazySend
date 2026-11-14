@@ -153,7 +153,11 @@ private fun Connection(state: MainState, actions: MainActions) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             stringResource(R.string.feed_progress, feed.sent, feed.total, pc.name) +
-                                if (feed.wait == FeedWait.Storage) " " + stringResource(R.string.feed_low_storage) else "",
+                                when (feed.wait) {
+                                    FeedWait.Storage -> " " + stringResource(R.string.feed_low_storage)
+                                    FeedWait.Outbox -> " " + stringResource(R.string.feed_outbox_full, pc.name)
+                                    null -> ""
+                                },
                             Modifier.weight(1f),
                             style = MaterialTheme.typography.bodySmall,
                         )

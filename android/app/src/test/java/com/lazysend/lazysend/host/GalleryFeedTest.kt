@@ -222,6 +222,20 @@ class GalleryFeedTest {
     }
 
     @Test
+    fun aFullOutboxMakesTheFeedWaitInsteadOfDroppingAssets() = runBlocking {
+        repeat(MAX_QUEUED) { outbox.queueText(guest, "note $it") }
+        feed.start(guest).join()
+        assertEquals(FeedWait.Outbox, feed.progress.value[guest]?.wait)
+        assertEquals(0, opened.get())
+        assertTrue(queued().isEmpty())
+        outbox.acknowledge(guest, outbox.pending(guest).first().id)
+        waitFor("one queued") { queued().size == 1 }
+        assertEquals("external_primary:image:1", queued().first().sourceId)
+        assertEquals(1, opened.get())
+        waitFor("waiting again") { feed.progress.value[guest]?.wait == FeedWait.Outbox }
+    }
+
+    @Test
     fun theTotalNeverFallsBehindWhatWasSent() = runBlocking {
         library = libraryOf(2)
         feed.start(guest).join()

@@ -26,6 +26,12 @@ data class OutboxItem(
     val queued: Long,
 )
 
+/** The guest already has as many items waiting as the outbox holds. */
+class OutboxFullException : IllegalStateException("Too many items wait for this device.")
+
+/** The phone is too full to make another copy. */
+class LowStorageException : IllegalStateException("This phone is almost out of storage.")
+
 @Serializable
 private data class OutboxFile(val items: List<OutboxItem> = emptyList())
 
@@ -85,9 +91,9 @@ class Outbox(
         taken: Long? = null,
         open: () -> InputStream,
     ): OutboxItem {
-        check(pending(deviceId).size < MAX_QUEUED) { "Too many items wait for this device." }
+        if (pending(deviceId).size >= MAX_QUEUED) throw OutboxFullException()
         // The copy is made here, so the 1 GiB floor holds for it as it does for what arrives.
-        check(freeSpace() - (size ?: 0) >= MIN_FREE_BYTES) { "This phone is almost out of storage." }
+        if (freeSpace() - (size ?: 0) < MIN_FREE_BYTES) throw LowStorageException()
         val id = newId()
         val copy = File(copies, id)
         copies.mkdirs()
@@ -164,7 +170,7 @@ class Outbox(
 
     @Synchronized
     private fun add(item: OutboxItem): OutboxItem {
-        if (items.count { it.deviceId == item.deviceId } >= MAX_QUEUED) throw IllegalStateException("Too many items wait for this device.")
+        if (items.count { it.deviceId == item.deviceId } >= MAX_QUEUED) throw OutboxFullException()
         val before = items
         items = items + item
         try {

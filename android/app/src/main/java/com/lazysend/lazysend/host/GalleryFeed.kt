@@ -18,7 +18,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 
 /** Why a running feed is not queuing anything for now. */
-enum class FeedWait { Storage }
+enum class FeedWait { Storage, Outbox }
 
 /** [failed] counts assets that could not be read, also after a second try. */
 data class FeedProgress(val sent: Int, val total: Int, val done: Boolean, val failed: Int = 0, val wait: FeedWait? = null)
@@ -121,8 +121,8 @@ class GalleryFeed(
     }
 
     private fun acknowledged(item: OutboxItem) {
-        val id = item.sourceId ?: return
-        if (isValidSourceId(id)) sent.add(item.deviceId, id)
+        val id = item.sourceId
+        if (id != null && isValidSourceId(id)) sent.add(item.deviceId, id)
         publish()
         if (active(item.deviceId)) scope.launch { fill(item.deviceId) }
     }
@@ -157,6 +157,10 @@ class GalleryFeed(
                 synchronized(this) { lists[deviceId]?.removeFirstOrNull() }
                 continue
             }
+            if (outbox.pending(deviceId).size >= MAX_QUEUED) {
+                setWait(deviceId, FeedWait.Outbox)
+                return true
+            }
             if (waiting.isNotEmpty() && waiting.sumOf { it.size ?: 0L } + asset.size > queueBytes) return true
             synchronized(this) { lists[deviceId]?.removeFirstOrNull() }
             if (!queue(deviceId, asset)) return false
@@ -178,6 +182,11 @@ class GalleryFeed(
         publish()
     }
 
+    private fun setWait(deviceId: String, wait: FeedWait?) {
+        val changed = synchronized(this) { if (wait == null) waits.remove(deviceId) != null else waits.put(deviceId, wait) != wait }
+        if (changed) publish()
+    }
+
     private fun clearState(deviceId: String) {
         lists.remove(deviceId)
         later.remove(deviceId)
@@ -192,19 +201,20 @@ class GalleryFeed(
             }
         } catch (e: CancellationException) {
             throw e
-        } catch (e: IllegalStateException) {
-            synchronized(this) {
-                lists[deviceId]?.addFirst(asset)
-                waits[deviceId] = FeedWait.Storage
-            }
-            publish()
+        } catch (e: OutboxFullException) {
+            // Someone else filled the outbox meanwhile: the asset waits for the next acknowledgement.
+            synchronized(this) { lists[deviceId]?.addFirst(asset) }
+            setWait(deviceId, FeedWait.Outbox)
+            return true
+        } catch (e: LowStorageException) {
+            synchronized(this) { lists[deviceId]?.addFirst(asset) }
+            setWait(deviceId, FeedWait.Storage)
             return false
         } catch (e: Exception) {
             failed(deviceId, asset)
             return true
         }
-        val waited = synchronized(this) { waits.remove(deviceId) }
-        if (waited != null) publish()
+        setWait(deviceId, null)
         // The run was stopped while the copy was being made.
         if (!active(deviceId)) outbox.removeGalleryItems(deviceId)
         return true
