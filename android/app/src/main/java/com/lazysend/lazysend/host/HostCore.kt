@@ -47,6 +47,9 @@ class HostCore(
 
     var onGuestRemoved: (Guest) -> Unit = {}
 
+    /** Reads what an earlier run left in the inbox; may hash a file, so call it off the main thread. */
+    fun load() = inbox.load()
+
     init {
         router.currentPairing = { session.value?.takeIf { it.stateAt(clock()) == SessionState.Open } }
         router.approve = { pair, digits ->

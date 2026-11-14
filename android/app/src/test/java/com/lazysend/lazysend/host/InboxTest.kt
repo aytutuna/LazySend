@@ -28,7 +28,7 @@ class InboxTest {
     private val inbox = newInbox()
     private val guest = Guest("phone-0001", "Pixel 8", "android", "1", "", 0, 0)
 
-    private fun newInbox() = Inbox(File(dir, "incoming"), files, index, { free })
+    private fun newInbox() = Inbox(File(dir, "incoming"), files, index, { free }).also { it.load() }
 
     private fun body(bytes: ByteArray) = RequestBody(ByteArrayInputStream(bytes), bytes.size.toLong())
 
@@ -210,4 +210,18 @@ class InboxTest {
         assertEquals(1, files.data.size)
     }
 
+
+    @Test
+    fun aGalleryFilesRecordGoesOnceTheIndexHasIt() {
+        val request = ItemRequest("file", name = "a.jpg", size = 3, sourceId = "s1")
+        val plain = inbox.begin(guest, ItemRequest("file", name = "b.txt", size = 3))
+        val begun = inbox.begin(guest, request)
+        put(plain.id, 0, ByteArray(3))
+        put(begun.id, 0, ByteArray(3))
+        assertNull(inbox.state(guest.id, begun.id))
+        assertTrue(File(dir, "incoming/${plain.id}.json").exists())
+        assertFalse(File(dir, "incoming/${begun.id}.json").exists())
+        assertTrue(inbox.begin(guest, request).duplicate == true)
+        assertTrue(newInbox().state(guest.id, plain.id)!!.done)
+    }
 }

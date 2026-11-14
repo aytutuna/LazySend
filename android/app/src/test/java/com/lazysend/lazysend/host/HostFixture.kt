@@ -31,6 +31,7 @@ class HostFixture(networks: HostNetworks = HostNetworks({ emptyList() })) : Auto
     init {
         core.router.fingerprint = { identity.fingerprint }
         core.router.addresses = { listOf("127.0.0.1") }
+        core.load()
     }
 
     fun client(credentials: Credentials? = null) = LinkClient(Endpoint("127.0.0.1", port), identity.fingerprint, credentials)

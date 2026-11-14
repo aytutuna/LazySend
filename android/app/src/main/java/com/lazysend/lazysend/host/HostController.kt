@@ -65,6 +65,7 @@ class HostController(
     val core = HostCore(root, files, hostId, hostName, freeSpace, clock)
     private val fingerprintFile = File(root, "fingerprint.txt")
     private val hostingFile = File(root, "hosting")
+    private val loaded = CompletableDeferred<Unit>()
     private val shown = MutableStateFlow(ReceiveState())
     private var supervisor: Job? = null
     @Volatile
@@ -106,6 +107,13 @@ class HostController(
         }
         core.onGuestRemoved = { if (core.guests.guests.value.isEmpty() && !screenOpen) stop() }
         core.router.addresses = { networks.pairingAddresses() }
+        scope.launch(Dispatchers.IO) {
+            try {
+                core.load()
+            } finally {
+                loaded.complete(Unit)
+            }
+        }
         scope.launch {
             // A guest pairing while the screen is open is a person to wait on; the window refreshes with the network.
             while (isActive) {
@@ -189,6 +197,7 @@ class HostController(
         supervisor = scope.launch {
             // The run being stopped puts its state and announcement away first, so it cannot undo this one.
             previous?.join()
+            loaded.await()
             var wait = 1000L
             while (isActive) {
                 val failed = CompletableDeferred<Throwable>()

@@ -70,10 +70,6 @@ class Inbox(
         var hashed = 0L
     }
 
-    init {
-        load()
-    }
-
     /** Starts a file, or finds the one already started for the same source id. A source id received before answers done. */
     fun begin(guest: Guest, request: ItemRequest): ItemState {
         val size = request.size?.takeIf { it >= 0 } ?: throw HostError.badRequest
@@ -289,18 +285,21 @@ class Inbox(
         // The file is in place: record that first, so nothing below can make the guest send it again. The index takes
         // the asset in the same step that stops tracking the transfer, under the lock begin decides with.
         var removed: Boolean
+        var indexed = false
         synchronized(gate) {
             file.uri = uri
             file.done = true
             file.finished = clock()
             removed = !records.containsKey(file.id)
-            if (!removed && file.sourceId != null) runCatching { index.add(file.deviceId, file.sourceId) }
+            if (!removed && file.sourceId != null) indexed = runCatching { index.add(file.deviceId, file.sourceId) }.isSuccess
+            // The index answers for a gallery file from here on, so its record has nothing left to keep.
+            if (indexed) records.remove(file.id)
             untrack(file)
         }
         writers.remove(file.id)
         // The guest was removed while the file was finishing: the file stays, nothing is announced or recorded.
         if (removed) return
-        runCatching { save(file) }
+        if (indexed) File(directory, "${file.id}.json").delete() else runCatching { save(file) }
         onFinished(file)
     }
 
@@ -364,7 +363,8 @@ class Inbox(
 
     private fun failed(e: Exception): HostError = HostError.serverError
 
-    private fun load() {
+    /** Reads the records left by a run before, and finishes or drops what they say. Slow (it may hash a file), so not on the main thread. */
+    fun load() {
         val now = clock()
         lastPrune = now
         for (path in directory.listFiles { f -> f.name.endsWith(".json") }.orEmpty()) {
