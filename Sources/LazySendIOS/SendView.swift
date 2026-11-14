@@ -95,11 +95,16 @@ struct SendView: View {
             if running {
                 Text("\(progress.sent) of \(progress.total) sent to \(target.name)")
                     .accessibilityIdentifier("send.galleryProgress")
+                if progress.wait == .storage {
+                    Text("Waiting for free storage").foregroundStyle(.secondary)
+                }
                 Text("Keep Lazy Send open until it is done.").foregroundStyle(.secondary)
                 Button("Stop", role: .destructive) { model.stopGalleryFeed(for: target) }
                     .accessibilityIdentifier("send.galleryStop")
             } else if progress.total == 0 {
                 Text("Nothing new to send to \(target.name)").foregroundStyle(.secondary)
+            } else if progress.failed > 0 {
+                Text("\(progress.sent) sent to \(target.name), \(progress.failed) could not be read").foregroundStyle(.secondary)
             } else {
                 Text("All \(progress.sent) photos and videos sent to \(target.name)").foregroundStyle(.secondary)
             }

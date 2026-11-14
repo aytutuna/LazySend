@@ -1,10 +1,18 @@
 import Foundation
 import LazySendKit
 
+/// Why a running feed is not queuing anything for now.
+public enum GalleryFeedWait: Equatable, Sendable {
+    case storage
+}
+
 public struct GalleryFeedProgress: Equatable, Sendable {
     public var sent: Int
     public var total: Int
     public var done: Bool
+    /// Assets that could not be read, also after a second try.
+    public var failed = 0
+    public var wait: GalleryFeedWait?
 }
 
 /// Feeds a phone's photo library into a guest's outbox, a few files at a time. A file is exported and copied into
@@ -13,11 +21,14 @@ public struct GalleryFeedProgress: Equatable, Sendable {
 @MainActor
 public final class GalleryFeed {
     public static let queueLimit = 20
+    /// About this many bytes of copies wait at a time; one item always may, however large.
+    public static let queueBytes: Int64 = 1024 * 1024 * 1024
 
     private struct Run: Codable, Equatable {
         var total: Int
         var base: Int
         var done = false
+        var failed = 0
     }
 
     private struct Saved: Codable {
@@ -29,9 +40,16 @@ public final class GalleryFeed {
     private let stateURL: URL
     private let outgoing: URL
     private let library: @Sendable () async -> [GalleryItem]
+    private let freeSpace: () -> Int64
+    private let retryDelay: TimeInterval
+    private let queueBytes: Int64
     private var runs: [String: Run]
     // What is left to queue for each running guest, last first.
     private var lists: [String: [GalleryItem]] = [:]
+    // Assets that failed once, tried again when the list is used up, and the ids already tried twice.
+    private var later: [String: [GalleryItem]] = [:]
+    private var retried: [String: Set<String>] = [:]
+    private var waits: [String: GalleryFeedWait] = [:]
     private var loading: Set<String> = []
     private var filling: Set<String> = []
     private var refill: Set<String> = []
@@ -40,8 +58,12 @@ public final class GalleryFeed {
     public var onChange: (@MainActor () -> Void)?
 
     /// `library` lists what the phone may send, without the assets it saved itself.
-    public init(outbox: Outbox, indexDirectory: URL, stateURL: URL, outgoing: URL, library: @escaping @Sendable () async -> [GalleryItem]) {
+    public init(outbox: Outbox, indexDirectory: URL, stateURL: URL, outgoing: URL, retryDelay: TimeInterval = 30,
+                queueBytes: Int64 = GalleryFeed.queueBytes, freeSpace: (() -> Int64)? = nil, library: @escaping @Sendable () async -> [GalleryItem]) {
         self.outbox = outbox
+        self.retryDelay = retryDelay
+        self.queueBytes = queueBytes
+        self.freeSpace = freeSpace ?? { Inbox.volumeFreeBytes(outgoing) }
         self.stateURL = stateURL
         self.outgoing = outgoing
         self.library = library
@@ -57,7 +79,9 @@ public final class GalleryFeed {
 
     public func progress(_ deviceId: String) -> GalleryFeedProgress? {
         guard let run = runs[deviceId] else { return nil }
-        return GalleryFeedProgress(sent: max(sent.count(deviceId) - run.base, 0), total: run.total, done: run.done)
+        let count = max(sent.count(deviceId) - run.base, 0)
+        return GalleryFeedProgress(sent: count, total: max(run.total, count + run.failed), done: run.done, failed: run.failed,
+                                   wait: run.done ? nil : waits[deviceId])
     }
 
     public var running: Set<String> {
@@ -96,6 +120,9 @@ public final class GalleryFeed {
     public func stop(_ deviceId: String) {
         runs[deviceId] = nil
         lists[deviceId] = nil
+        later[deviceId] = nil
+        retried[deviceId] = nil
+        waits[deviceId] = nil
         for item in outbox.removeGalleryItems(deviceId) { discardCopy(of: item) }
         save()
     }
@@ -134,26 +161,66 @@ public final class GalleryFeed {
         defer { filling.remove(deviceId) }
         repeat {
             refill.remove(deviceId)
-            await topUp(deviceId)
-        } while refill.contains(deviceId)
+            if await !topUp(deviceId) {
+                try? await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
+                refill.insert(deviceId)
+            }
+        } while refill.contains(deviceId) && runs[deviceId]?.done == false
     }
 
-    private func topUp(_ deviceId: String) async {
+    /// False when the phone is too full to export the next asset and the try has to be repeated later.
+    private func topUp(_ deviceId: String) async -> Bool {
         while runs[deviceId]?.done == false, lists[deviceId] != nil {
             let waiting = outbox.pending(deviceId).filter { $0.sourceId != nil }
-            if waiting.count >= Self.queueLimit { return }
-            guard let item = lists[deviceId]?.popLast() else {
+            if waiting.count >= Self.queueLimit { return true }
+            guard let item = lists[deviceId]?.last else {
+                if let again = later[deviceId], !again.isEmpty {
+                    lists[deviceId] = again.reversed()
+                    later[deviceId] = nil
+                    continue
+                }
                 if waiting.isEmpty { finish(deviceId) }
-                return
+                return true
             }
-            if sent.contains(deviceId, item.sourceId) || waiting.contains(where: { $0.sourceId == item.sourceId }) { continue }
+            if sent.contains(deviceId, item.sourceId) || waiting.contains(where: { $0.sourceId == item.sourceId }) {
+                lists[deviceId]?.removeLast()
+                continue
+            }
+            let queuedBytes = waiting.reduce(Int64(0)) { $0 + ($1.size ?? 0) }
+            if !waiting.isEmpty, queuedBytes + item.sizeHint > queueBytes { return true }
+            if freeSpace() - item.sizeHint < Limits.minFree {
+                setWait(.storage, for: deviceId)
+                return false
+            }
+            setWait(nil, for: deviceId)
+            lists[deviceId]?.removeLast()
             await queue(item, for: deviceId)
+        }
+        return true
+    }
+
+    private func setWait(_ wait: GalleryFeedWait?, for deviceId: String) {
+        guard waits[deviceId] != wait else { return }
+        waits[deviceId] = wait
+        onChange?()
+    }
+
+    // An asset that cannot be read is tried once more after the others, then counted as not sent.
+    private func failed(_ item: GalleryItem, for deviceId: String) {
+        guard runs[deviceId]?.done == false else { return }
+        if retried[deviceId, default: []].insert(item.sourceId).inserted {
+            later[deviceId, default: []].append(item)
+        } else {
+            runs[deviceId]?.failed += 1
+            save()
         }
     }
 
     private func queue(_ item: GalleryItem, for deviceId: String) async {
-        // An asset that cannot be read is left out of this run.
-        guard let exported = try? await item.export() else { return }
+        guard let exported = try? await item.export() else {
+            failed(item, for: deviceId)
+            return
+        }
         defer { exported.cleanup() }
         guard runs[deviceId]?.done == false else { return }
         let folder = UUID().uuidString
@@ -180,6 +247,9 @@ public final class GalleryFeed {
     private func finish(_ deviceId: String) {
         runs[deviceId]?.done = true
         lists[deviceId] = nil
+        later[deviceId] = nil
+        retried[deviceId] = nil
+        waits[deviceId] = nil
         save()
     }
 

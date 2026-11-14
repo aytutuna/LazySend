@@ -9,6 +9,10 @@ final class FakeLibrary: @unchecked Sendable {
     private let folder: URL
     private var exported = 0
     var assets: [(id: String, name: String, taken: Date?)]
+    /// Sizes the assets claim; 3 for the rest.
+    var sizes: [String: Int64] = [:]
+    /// How many more exports of an asset fail.
+    var failures: [String: Int] = [:]
 
     init(folder: URL, count: Int) {
         self.folder = folder
@@ -23,14 +27,17 @@ final class FakeLibrary: @unchecked Sendable {
 
     func items() -> [GalleryItem] {
         assets.map { asset in
-            GalleryItem(sourceId: asset.id, name: asset.name, mime: "image/jpeg", modified: asset.taken, sizeHint: 3) { [self] in
+            GalleryItem(sourceId: asset.id, name: asset.name, mime: "image/jpeg", modified: asset.taken, sizeHint: sizes[asset.id] ?? 3) { [self] in
                 lock.lock()
                 exported += 1
+                let failing = failures[asset.id] ?? 0
+                if failing > 0 { failures[asset.id] = failing - 1 }
                 lock.unlock()
+                if failing > 0 { throw CocoaError(.fileReadUnknown) }
                 let temp = folder.appendingPathComponent("export-" + UUID().uuidString, isDirectory: true)
                 try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
                 let file = temp.appendingPathComponent("original")
-                try Data([1, 2, 3]).write(to: file)
+                try Data(repeating: 1, count: Int(sizes[asset.id] ?? 3)).write(to: file)
                 return ExportedFile(url: file, size: 3, cleanup: { try? FileManager.default.removeItem(at: temp) })
             }
         }
@@ -44,6 +51,7 @@ final class GalleryFeedTests: XCTestCase {
     private var outbox: Outbox!
     private var feed: GalleryFeed!
     private let guest = "guest-phone-0001"
+    private var free = Int64.max
 
     private var outgoing: URL { root.appendingPathComponent("Outgoing", isDirectory: true) }
 
@@ -63,7 +71,8 @@ final class GalleryFeedTests: XCTestCase {
         outbox = Outbox(url: root.appendingPathComponent("outbox.json"))
         let library = self.library!
         feed = GalleryFeed(outbox: outbox, indexDirectory: root.appendingPathComponent("feed-index"),
-                           stateURL: root.appendingPathComponent("feeds.json"), outgoing: outgoing, library: { library.items() })
+                           stateURL: root.appendingPathComponent("feeds.json"), outgoing: outgoing, retryDelay: 0.05, queueBytes: 100,
+                           freeSpace: { [unowned self] in free }, library: { library.items() })
     }
 
     private func queued() -> [OutboxItem] {
@@ -184,16 +193,65 @@ final class GalleryFeedTests: XCTestCase {
         XCTAssertEqual(entries[1].taken, "2021-03-15T12:00:00Z")
     }
 
-    func testAnAssetThatCannotBeExportedIsSkipped() async {
-        var items = library.items()
-        items.insert(GalleryItem(sourceId: "broken#photo", name: "x.jpg", mime: nil, modified: nil, sizeHint: 0) { throw CocoaError(.fileReadNoSuchFile) }, at: 0)
-        outbox = Outbox(url: root.appendingPathComponent("outbox-2.json"))
-        let all = items
-        feed = GalleryFeed(outbox: outbox, indexDirectory: root.appendingPathComponent("feed-index-2"), stateURL: root.appendingPathComponent("feeds-2.json"),
-                           outgoing: outgoing, library: { all })
+    func testAnAssetThatFailsToExportIsTriedOnceMoreAtTheEnd() async {
+        library = FakeLibrary(folder: root, count: 3)
+        library.failures["asset-2#photo"] = 1
+        makeFeed()
         await feed.start(guest)
-        XCTAssertEqual(queued().count, 20)
-        XCTAssertFalse(queued().contains { $0.sourceId == "broken#photo" })
+        XCTAssertEqual(queued().compactMap(\.sourceId), ["asset-1#photo", "asset-3#photo", "asset-2#photo"])
+        for item in queued() { outbox.acknowledge(guest, item.id) }
+        _ = await waitUntil { self.feed.progress(self.guest)?.done == true }
+        XCTAssertEqual(feed.progress(guest), GalleryFeedProgress(sent: 3, total: 3, done: true))
+    }
+
+    func testAnAssetThatFailsTwiceIsCountedAsNotSent() async {
+        library = FakeLibrary(folder: root, count: 3)
+        library.failures["asset-2#photo"] = 5
+        makeFeed()
+        await feed.start(guest)
+        XCTAssertEqual(queued().count, 2)
+        XCTAssertEqual(library.exports, 4)
+        for item in queued() { outbox.acknowledge(guest, item.id) }
+        _ = await waitUntil { self.feed.progress(self.guest)?.done == true }
+        XCTAssertEqual(feed.progress(guest), GalleryFeedProgress(sent: 2, total: 3, done: true, failed: 1))
+        makeFeed()
+        XCTAssertEqual(feed.progress(guest)?.failed, 1)
+    }
+
+    func testOneOversizeItemStillGoesAndTheRestWaitForTheByteCap() async {
+        library = FakeLibrary(folder: root, count: 4)
+        library.sizes = ["asset-1#photo": 150, "asset-2#photo": 60, "asset-3#photo": 60]
+        makeFeed()
+        await feed.start(guest)
+        XCTAssertEqual(queued().compactMap(\.sourceId), ["asset-1#photo"])
+        outbox.acknowledge(guest, queued()[0].id)
+        // 60 bytes fit under the cap of 100 once, 120 do not.
+        _ = await waitUntil { self.queued().count == 1 && self.library.exports == 2 }
+        XCTAssertEqual(queued().compactMap(\.sourceId), ["asset-2#photo"])
+        XCTAssertEqual(library.exports, 2)
+    }
+
+    func testAFullPhoneWaitsAndGoesOnWhenThereIsRoom() async {
+        free = 1024 * 1024 * 1024 + 2
+        await feed.start(guest)
+        XCTAssertTrue(queued().isEmpty)
+        XCTAssertEqual(library.exports, 0)
+        XCTAssertEqual(feed.progress(guest)?.wait, .storage)
+        free = Int64.max
+        let queuedNow = await waitUntil { self.queued().count == 20 }
+        XCTAssertTrue(queuedNow)
+        XCTAssertNil(feed.progress(guest)?.wait)
+    }
+
+    func testTheTotalGrowsWhenTheLibraryDoes() async {
+        library = FakeLibrary(folder: root, count: 2)
+        makeFeed()
+        await feed.start(guest)
+        library.assets += [("asset-3#photo", "IMG_3.jpg", nil)]
+        for item in queued() { outbox.acknowledge(guest, item.id) }
+        _ = await waitUntil { self.feed.progress(self.guest)?.done == true }
+        XCTAssertEqual(feed.progress(guest)?.sent, 2)
+        XCTAssertGreaterThanOrEqual(feed.progress(guest)?.total ?? 0, feed.progress(guest)?.sent ?? 0)
     }
 
     func testAnIdTheOutboxCannotKeepIsNotQueued() async {
