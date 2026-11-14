@@ -45,12 +45,10 @@ class SenderTest {
     }
 
     @Test
-    fun aNoteGoesWithASendIdThatTheTimelineKeeps() = runBlocking {
+    fun aNoteGoesWithASendId() = runBlocking {
         assertEquals(null, sender().sendText(paired, "hello"))
 
-        val sent = pc.items.single()
-        assertEquals(22, sent.sendId!!.length)
-        assertEquals(sent.sendId, timeline.entries.value.single().sendId)
+        assertEquals(22, pc.items.single().sendId!!.length)
     }
 
     @Test

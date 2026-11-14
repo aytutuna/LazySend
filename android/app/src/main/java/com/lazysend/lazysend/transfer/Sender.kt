@@ -59,7 +59,7 @@ class Sender(
         if (text.toByteArray().size > 1024 * 1024) return "That is more than the 1 MB a note can hold. Send it as a file instead."
         val entry = TimelineEntry(
             UUID.randomUUID().toString(), clock(), Direction.Sent, if (isLink) EntryKind.Link else EntryKind.Text, pc.name,
-            if (isLink) trimmed else text, state = EntryState.Active, sendId = sendId,
+            if (isLink) trimmed else text, state = EntryState.Active,
         )
         timeline.add(entry)
         return try {
@@ -115,7 +115,7 @@ class Sender(
         val id = UUID.randomUUID().toString()
         val sendId = newSendId()
         timeline.add(
-            TimelineEntry(id, clock(), Direction.Sent, EntryKind.File, pc.name, uri.lastPathSegment ?: "file", state = EntryState.Active, sendId = sendId),
+            TimelineEntry(id, clock(), Direction.Sent, EntryKind.File, pc.name, uri.lastPathSegment ?: "file", state = EntryState.Active),
         )
         try {
             val meta = withContext(Dispatchers.IO) { describe(uri) }
