@@ -233,10 +233,12 @@ final class GalleryFeedTests: XCTestCase {
 
     func testAFullPhoneWaitsAndGoesOnWhenThereIsRoom() async {
         free = 1024 * 1024 * 1024 + 2
-        await feed.start(guest)
+        // The start only returns once the run has nothing left to wait for.
+        Task { await self.feed.start(self.guest) }
+        let waiting = await waitUntil { self.feed.progress(self.guest)?.wait == .storage }
+        XCTAssertTrue(waiting)
         XCTAssertTrue(queued().isEmpty)
         XCTAssertEqual(library.exports, 0)
-        XCTAssertEqual(feed.progress(guest)?.wait, .storage)
         free = Int64.max
         let queuedNow = await waitUntil { self.queued().count == 20 }
         XCTAssertTrue(queuedNow)
