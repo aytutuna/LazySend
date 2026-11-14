@@ -442,6 +442,32 @@ final class GuestServiceTests: XCTestCase {
         XCTAssertTrue(fixture.pending.sends.isEmpty)
     }
 
+    func testAnEntryWithoutABookmarkStillDecodes() throws {
+        let old = #"{"hostId":"h","sendId":"s","path":"/tmp/a","size":5,"modified":7,"sha256":"x"}"#
+        let send = try JSONDecoder().decode(PendingSend.self, from: Data(old.utf8))
+        XCTAssertEqual(send.path, "/tmp/a")
+        XCTAssertNil(send.bookmark)
+    }
+
+    #if os(macOS)
+    func testAResumedSendOpensTheFileByItsBookmarkWhenThePathIsGone() async throws {
+        let pc = try await pairGuest()
+        let content = bytes(50_000)
+        let left = try await leaveUnfinished(pc, "moved.bin", content, sent: 10_000)
+        var send = left
+        send.bookmark = try URL(fileURLWithPath: left.path).bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+        send.path = "/nonexistent/moved.bin"
+        fixture.pending.add(send)
+        restartGuest()
+        fixture.guest.start()
+        let resumed = try XCTUnwrap(fixture.resumed.all.first)
+        try await resumed.run { _ in }
+        let landed = harness.received.appendingPathComponent("Guest Mac/moved.bin")
+        XCTAssertEqual(try Data(contentsOf: landed), content)
+        XCTAssertTrue(fixture.pending.sends.isEmpty)
+    }
+    #endif
+
     func testForgettingAHostDropsItsPendingSends() async throws {
         let pc = try await pairGuest()
         _ = try await leaveUnfinished(pc, "left.bin", bytes(10_000), sent: 1000)

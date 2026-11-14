@@ -9,6 +9,8 @@ public struct PendingSend: Codable, Equatable, Sendable {
     /// The file's modified time in whole seconds, which is all the host is told of it.
     public var modified: Int64
     public var sha256: String
+    /// Security-scoped, so a sandboxed app can open a file it was given outside its container again.
+    public var bookmark: Data?
 
     static func seconds(_ date: Date) -> Int64 {
         Int64(date.timeIntervalSince1970.rounded(.down))

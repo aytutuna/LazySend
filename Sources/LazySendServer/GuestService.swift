@@ -209,7 +209,8 @@ public final class GuestService: @unchecked Sendable {
     }
 
     /// A file, in chunks that carry on after a drop. `onProgress` gets the bytes the host is known to have.
-    public func sendFile(at url: URL, to id: String, onProgress: @escaping @Sendable (Int64) -> Void = { _ in }) async throws {
+    /// `bookmark` opens the file again after a restart, where the sandbox has forgotten its path.
+    public func sendFile(at url: URL, to id: String, bookmark: Data? = nil, onProgress: @escaping @Sendable (Int64) -> Void = { _ in }) async throws {
         let sendId = newSendId()
         let (request, modified) = try await Task.detached { () throws -> (ItemRequest, Date?) in
             let values = try? url.resourceValues(forKeys: [.contentTypeKey, .contentModificationDateKey])
@@ -218,8 +219,9 @@ public final class GuestService: @unchecked Sendable {
             return (request, values?.contentModificationDate)
         }.value
         let send = PendingSend(hostId: id, sendId: sendId, path: url.standardizedFileURL.path, size: request.size ?? 0,
-                               modified: PendingSend.seconds(modified ?? Date(timeIntervalSince1970: 0)), sha256: request.sha256 ?? "")
-        try await sendPending(send, request: request, onProgress: onProgress)
+                               modified: PendingSend.seconds(modified ?? Date(timeIntervalSince1970: 0)), sha256: request.sha256 ?? "",
+                               bookmark: bookmark)
+        try await sendPending(send, url: url, request: request, onProgress: onProgress)
     }
 
     private func waitForHost(_ hostId: String) async throws {
@@ -231,7 +233,17 @@ public final class GuestService: @unchecked Sendable {
 
     /// Carries on with a file the host may already have part of; the caller has waited for the host.
     private func resume(_ send: PendingSend, onProgress: @escaping @Sendable (Int64) -> Void) async throws {
-        let url = URL(fileURLWithPath: send.path)
+        var url = URL(fileURLWithPath: send.path)
+        var scoped = false
+        #if os(macOS)
+        var stale = false
+        if let data = send.bookmark,
+           let opened = try? URL(resolvingBookmarkData: data, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &stale) {
+            url = opened
+            scoped = opened.startAccessingSecurityScopedResource()
+        }
+        #endif
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentTypeKey, .contentModificationDateKey])
         guard let size = values?.fileSize, let modified = values?.contentModificationDate,
               Int64(size) == send.size, PendingSend.seconds(modified) == send.modified else {
@@ -240,11 +252,11 @@ public final class GuestService: @unchecked Sendable {
         }
         let request = ItemRequest(kind: "file", name: url.lastPathComponent, size: send.size, mime: values?.contentType?.preferredMIMEType,
                                   modified: ISO8601DateFormatter().string(from: modified), sha256: send.sha256, sendId: send.sendId)
-        try await sendPending(send, request: request, onProgress: onProgress)
+        try await sendPending(send, url: url, request: request, onProgress: onProgress)
     }
 
     // A send that did not finish leaves no entry, unless the app is ending: then the next run carries on.
-    private func sendPending(_ send: PendingSend, request: ItemRequest, onProgress: @escaping @Sendable (Int64) -> Void) async throws {
+    private func sendPending(_ send: PendingSend, url: URL, request: ItemRequest, onProgress: @escaping @Sendable (Int64) -> Void) async throws {
         pending.add(send)
         let id = send.hostId
         let secret = hosts.secret(for: id)
@@ -255,7 +267,7 @@ public final class GuestService: @unchecked Sendable {
             return try await client(for: id, search: search)
         }
         do {
-            _ = try await uploader.send(request, source: FileDataSource(url: URL(fileURLWithPath: send.path)), onProgress: onProgress)
+            _ = try await uploader.send(request, source: FileDataSource(url: url), onProgress: onProgress)
         } catch let error as LinkError where error.status == 401 {
             settle(send)
             lost(id, using: secret)

@@ -618,7 +618,8 @@ public final class AppModel: ObservableObject {
         startSend(row, size: size) { progress in
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            try await guest.sendFile(at: url, to: id, onProgress: progress)
+            let bookmark = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+            try await guest.sendFile(at: url, to: id, bookmark: bookmark, onProgress: progress)
         }
     }
 
