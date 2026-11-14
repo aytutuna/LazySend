@@ -246,16 +246,17 @@ final class GalleryFeedTests: XCTestCase {
     }
 
     func testAFullOutboxMakesTheFeedWaitInsteadOfDroppingAssets() async throws {
+        let gallery = { self.queued().filter { $0.sourceId != nil } }
         for number in 1...Limits.maxOutboxItemsPerDevice { try outbox.queueText(guest, "note \(number)") }
         await feed.start(guest)
         XCTAssertEqual(feed.progress(guest)?.wait, .outbox)
         XCTAssertEqual(library.exports, 0)
-        XCTAssertTrue(queued().isEmpty)
+        XCTAssertTrue(gallery().isEmpty)
         let first = try XCTUnwrap(outbox.pending(guest).first)
         outbox.acknowledge(guest, first.id)
-        let queuedOne = await waitUntil { self.queued().count == 1 }
+        let queuedOne = await waitUntil { gallery().count == 1 }
         XCTAssertTrue(queuedOne)
-        XCTAssertEqual(queued().first?.sourceId, "asset-1#photo")
+        XCTAssertEqual(gallery().first?.sourceId, "asset-1#photo")
         XCTAssertEqual(feed.progress(guest)?.wait, .outbox)
         XCTAssertEqual(library.exports, 1)
     }

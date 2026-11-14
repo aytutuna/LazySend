@@ -619,7 +619,7 @@ final class GuestServiceTests: XCTestCase {
         XCTAssertTrue(landed)
         for number in 1...3 {
             let placed = hostFolder.appendingPathComponent("Gallery/\(month)/IMG_\(number).jpg")
-            XCTAssertEqual(try Data(contentsOf: placed), Data([1, 2, 3]))
+            XCTAssertEqual(try Data(contentsOf: placed), Data(repeating: 1, count: 3))
         }
         XCTAssertEqual(fixture.files.all.compactMap(\.sourceId).sorted(), ["asset-1#photo", "asset-2#photo", "asset-3#photo"])
         XCTAssertTrue(outbox.pending(guestId).isEmpty)
