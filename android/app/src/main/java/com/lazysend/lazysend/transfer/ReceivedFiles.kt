@@ -48,7 +48,7 @@ class MediaFiles(private val context: Context) : ReceivedFiles {
     }
 
     override fun create(name: String, mime: String?, folder: String): ReceivedFiles.Part =
-        if (Build.VERSION.SDK_INT >= 29) createInMediaStore(name, mime, folder) else createLegacy(name, folder)
+        if (Build.VERSION.SDK_INT >= 29) createInMediaStore(name, mime, folder) else createLegacy(name, mime, folder)
 
     override fun append(part: ReceivedFiles.Part): OutputStream =
         if (part.uri.startsWith("file:")) FileOutputStream(File(Uri.parse(part.uri).path!!), true)
@@ -104,8 +104,14 @@ class MediaFiles(private val context: Context) : ReceivedFiles {
     }
 
     @Suppress("DEPRECATION")
-    private fun createLegacy(name: String, folder: String): ReceivedFiles.Part {
-        val root = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), RECEIVED_FOLDER)
+    private fun createLegacy(name: String, mime: String?, folder: String): ReceivedFiles.Part {
+        // The same public folders the media store gives on Android 10 and later.
+        val base = when {
+            mime?.startsWith("image/") == true -> Environment.DIRECTORY_PICTURES
+            mime?.startsWith("video/") == true -> Environment.DIRECTORY_MOVIES
+            else -> Environment.DIRECTORY_DOWNLOADS
+        }
+        val root = File(Environment.getExternalStoragePublicDirectory(base), RECEIVED_FOLDER)
         val directory = (if (folder.isEmpty()) root else File(root, folder)).also { it.mkdirs() }
         val file = File(directory, "$name.${java.util.UUID.randomUUID().toString().take(8)}.part")
         file.delete()
