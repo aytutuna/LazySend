@@ -21,8 +21,9 @@ final class AppHost {
             // This Mac's own id is the id it gives the computers it connects to, as the Windows app does.
             let hosts = PcStore(file: paths.root.appendingPathComponent("hosts.json"), secrets: KeychainSecrets(),
                                 phoneId: service.devices.desktopId)
+            let pending = PendingSends(url: paths.root.appendingPathComponent("pending.json"))
             let guest = GuestService(hosts: hosts, connector: PcConnector(store: hosts), history: service.history, settings: service.settings,
-                                     guestName: AppHost.computerName(),
+                                     pending: pending, guestName: AppHost.computerName(),
                                      appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0")
             model = AppModel(service: service, advertiser: Advertiser(), guest: guest, notify: { Notifications.post($0, $1) })
             failure = nil

@@ -23,8 +23,9 @@ private final class Events<T>: @unchecked Sendable {
 // The computer side of a guest on its own folders, as the Mac app builds it, talking to the real server.
 private final class GuestFixture {
     let paths: SendPaths
-    let secrets = MemorySecrets()
+    let secrets: MemorySecrets
     let hosts: PcStore
+    let pending: PendingSends
     let settings: SendSettings
     let guest: GuestService
     let texts = Events<ReceivedItem>()
@@ -32,22 +33,26 @@ private final class GuestFixture {
     let failures = Events<String>()
     let forgotten = Events<String>()
     let changes = Events<Void>()
+    let resumed = Events<ResumedSend>()
 
     var received: URL { paths.defaultReceiveRoot }
 
-    init(root: URL, guestId: String) {
+    init(root: URL, guestId: String, secrets: MemorySecrets = MemorySecrets()) {
+        self.secrets = secrets
         paths = SendPaths(root: root.appendingPathComponent("guest-state"), defaultReceiveRoot: root.appendingPathComponent("guest-received"))
         hosts = PcStore(file: paths.root.appendingPathComponent("hosts.json"), secrets: secrets, phoneId: guestId)
         settings = SendSettings(paths: paths)
+        pending = PendingSends(url: paths.root.appendingPathComponent("pending.json"))
         let quiet = Discovery(announced: { _ in [:] }, subnets: { [] }, probe: { _, _ in [] })
         guest = GuestService(hosts: hosts, connector: PcConnector(store: hosts, discovery: quiet), history: ReceivedHistory(url: paths.historyFile),
-                             settings: settings, guestName: "Guest Mac", appVersion: "1.0", firstRetry: 0.2, lastRetry: 0.5)
-        let texts = self.texts, files = self.files, failures = self.failures, forgotten = self.forgotten, changes = self.changes
+                             settings: settings, pending: pending, guestName: "Guest Mac", appVersion: "1.0", firstRetry: 0.2, lastRetry: 0.5)
+        let texts = self.texts, files = self.files, failures = self.failures, forgotten = self.forgotten, changes = self.changes, resumed = self.resumed
         guest.onTextReceived = { texts.add($0) }
         guest.onFileReceived = { files.add($0) }
         guest.onFailed = { failures.add($0) }
         guest.onForgotten = { forgotten.add($0) }
         guest.onChange = { changes.add(()) }
+        guest.onSendResumed = { resumed.add($0) }
     }
 }
 
@@ -336,6 +341,116 @@ final class GuestServiceTests: XCTestCase {
         await fixture.guest.forget(pc.id)
         XCTAssertTrue(fixture.hosts.pcs.isEmpty)
         XCTAssertTrue(harness.service.devices.devices.isEmpty)
+    }
+
+    // What an earlier run of the app leaves: the host has the first `sent` bytes and the guest has the entry.
+    private func leaveUnfinished(_ pc: PairedPc, _ name: String, _ content: Data, sent: Int) async throws -> PendingSend {
+        let url = harness.root.appendingPathComponent(name)
+        try content.write(to: url)
+        let modified = try XCTUnwrap(try FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date)
+        let sendId = newSendId()
+        let request = try ItemRequest.file(at: url, name: name, mime: nil, modified: modified, sendId: sendId)
+        let reached = await fixture.guest.connector.connect(pc, search: false).reached
+        let client = try XCTUnwrap(reached).client
+        let state = try await client.postItem(request)
+        _ = try await client.putChunk(id: state.id, offset: 0, data: content.prefix(sent), onBytes: { _ in })
+        let send = PendingSend(hostId: pc.id, sendId: sendId, path: url.path, size: Int64(content.count),
+                               modified: PendingSend.seconds(modified), sha256: sha256(content))
+        fixture.pending.add(send)
+        return send
+    }
+
+    // The app closed and opened again on the same folders.
+    private func restartGuest() {
+        fixture.guest.stop()
+        fixture = GuestFixture(root: harness.root, guestId: guestId, secrets: fixture.secrets)
+    }
+
+    func testAFinishedSendLeavesNoEntryAndAFailedOneNeither() async throws {
+        let pc = try await pairGuest()
+        let url = harness.root.appendingPathComponent("done.bin")
+        try bytes(5000).write(to: url)
+        try await fixture.guest.sendFile(at: url, to: pc.id)
+        XCTAssertTrue(fixture.pending.sends.isEmpty)
+        harness.service.devices.remove(guestId)
+        do {
+            try await fixture.guest.sendFile(at: url, to: pc.id)
+            XCTFail("Expected a refusal")
+        } catch {
+            XCTAssertEqual((error as? LinkError)?.status, 401)
+        }
+        XCTAssertTrue(fixture.pending.sends.isEmpty)
+    }
+
+    func testAnUnfinishedFileCarriesOnFromTheHostsOffsetAfterARestart() async throws {
+        let pc = try await pairGuest()
+        let content = bytes(300_000)
+        _ = try await leaveUnfinished(pc, "resume.bin", content, sent: 100_000)
+        restartGuest()
+        fixture.guest.start()
+        let resumed = try XCTUnwrap(fixture.resumed.all.first)
+        XCTAssertEqual(resumed.send.path, harness.root.appendingPathComponent("resume.bin").path)
+        let progress = Events<Int64>()
+        try await resumed.run { progress.add($0) }
+        XCTAssertEqual(progress.all.first, 100_000)
+        XCTAssertEqual(progress.all.last, 300_000)
+        let folder = harness.received.appendingPathComponent("Guest Mac")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: folder.path), ["resume.bin"])
+        XCTAssertEqual(try Data(contentsOf: folder.appendingPathComponent("resume.bin")), content)
+        XCTAssertTrue(fixture.pending.sends.isEmpty)
+    }
+
+    func testAFileThatChangedOrWentIsDroppedAndFailsTheSend() async throws {
+        let pc = try await pairGuest()
+        let changed = try await leaveUnfinished(pc, "changed.bin", bytes(10_000), sent: 1000)
+        try bytes(10_001).write(to: URL(fileURLWithPath: changed.path))
+        restartGuest()
+        fixture.guest.start()
+        let resumed = try XCTUnwrap(fixture.resumed.all.first)
+        do {
+            try await resumed.run { _ in }
+            XCTFail("Expected the send to fail")
+        } catch {
+            XCTAssertTrue(error is ResumeError)
+        }
+        XCTAssertTrue(fixture.pending.sends.isEmpty)
+
+        let gone = try await leaveUnfinished(pc, "gone.bin", bytes(10_000), sent: 1000)
+        try FileManager.default.removeItem(atPath: gone.path)
+        restartGuest()
+        fixture.guest.start()
+        let again = try XCTUnwrap(fixture.resumed.all.first)
+        do {
+            try await again.run { _ in }
+            XCTFail("Expected the send to fail")
+        } catch {
+            XCTAssertTrue(error is ResumeError)
+        }
+        XCTAssertTrue(fixture.pending.sends.isEmpty)
+    }
+
+    func testForgettingAHostDropsItsPendingSends() async throws {
+        let pc = try await pairGuest()
+        _ = try await leaveUnfinished(pc, "left.bin", bytes(10_000), sent: 1000)
+        XCTAssertEqual(fixture.pending.sends.count, 1)
+        await fixture.guest.forget(pc.id)
+        XCTAssertTrue(fixture.pending.sends.isEmpty)
+    }
+
+    func testAPendingSendOfAnUnknownHostIsDroppedAtStart() async throws {
+        fixture.pending.add(PendingSend(hostId: "nobody-0001", sendId: newSendId(), path: "/tmp/none", size: 1, modified: 0, sha256: sha256(Data([1]))))
+        fixture.guest.start()
+        XCTAssertTrue(fixture.resumed.all.isEmpty)
+        XCTAssertTrue(fixture.pending.sends.isEmpty)
+    }
+
+    func testARepeatedTextFromTheGuestIsStoredOnce() async throws {
+        let pc = try await pairGuest()
+        var note = try ItemRequest.note("said once")
+        note.sendId = newSendId()
+        try await fixture.guest.send(note, to: pc.id)
+        try await fixture.guest.send(note, to: pc.id)
+        XCTAssertEqual(harness.service.history.items.map(\.text), ["said once"])
     }
 
     func testNoMoreThanSixteenComputersAreKept() async throws {

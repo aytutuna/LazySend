@@ -51,7 +51,7 @@ final class GuestModelFixture {
         let hosts = PcStore(file: paths.root.appendingPathComponent("hosts.json"), secrets: MemorySecrets(), phoneId: own.devices.desktopId)
         let quiet = Discovery(announced: { _ in [:] }, subnets: { [] }, probe: { _, _ in [] })
         let guest = GuestService(hosts: hosts, connector: PcConnector(store: hosts, discovery: quiet), history: own.history, settings: own.settings,
-                                 guestName: "Test Mac", appVersion: "1.0", firstRetry: 0.2, lastRetry: 0.5)
+                                 pending: PendingSends(url: paths.root.appendingPathComponent("pending.json")), guestName: "Test Mac", appVersion: "1.0", firstRetry: 0.2, lastRetry: 0.5)
         self.root = root
         self.host = host
         self.port = port

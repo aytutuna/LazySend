@@ -10,6 +10,25 @@ public struct HostKeyUnreadable: Error, LocalizedError {
     public var errorDescription: String? { "The key for \(hostName) cannot be read. Connect to it again." }
 }
 
+/// A file left unfinished by an earlier run of the app; `run` sends the rest once the host answers, and throws when the
+/// file is gone or changed.
+public struct ResumedSend: Sendable {
+    public let send: PendingSend
+    public let run: @Sendable (@escaping @Sendable (Int64) -> Void) async throws -> Void
+}
+
+enum ResumeError: Error, LocalizedError {
+    case changed(String)
+    case hostRemoved
+
+    var errorDescription: String? {
+        switch self {
+        case .changed(let name): return "\(name) is gone or has changed since it was left unfinished."
+        case .hostRemoved: return "The computer was removed."
+        }
+    }
+}
+
 /// This computer as a guest of other computers: pairing with them, sending to them, and taking what they queue
 /// while the app runs. A host that does not answer is tried again quietly, a little later each time; one that no
 /// longer knows this computer is dropped. The callbacks are raised on whatever thread saw the event.
@@ -21,6 +40,7 @@ public final class GuestService: @unchecked Sendable {
     public let connector: PcConnector
     let history: ReceivedHistory
     let settings: SendSettings
+    let pending: PendingSends
     private let guestName: String
     private let appVersion: String
     private let firstRetry: TimeInterval
@@ -31,6 +51,7 @@ public final class GuestService: @unchecked Sendable {
     private var receivers: [String: GuestReceiver] = [:]
     private var reachable = Set<String>()
     private var running = false
+    private var ending = false
 
     /// The list of hosts or which of them answer changed.
     public var onChange: (() -> Void)?
@@ -40,13 +61,16 @@ public final class GuestService: @unchecked Sendable {
     public var onFailed: ((String) -> Void)?
     /// A host that no longer knows this computer was dropped; the argument is its name.
     public var onForgotten: ((String) -> Void)?
+    /// A file left unfinished by an earlier run is carrying on; `ResumedSend.run` does it.
+    public var onSendResumed: ((ResumedSend) -> Void)?
 
-    public init(hosts: PcStore, connector: PcConnector, history: ReceivedHistory, settings: SendSettings, guestName: String,
-                appVersion: String, firstRetry: TimeInterval = 5, lastRetry: TimeInterval = 60) {
+    public init(hosts: PcStore, connector: PcConnector, history: ReceivedHistory, settings: SendSettings, pending: PendingSends,
+                guestName: String, appVersion: String, firstRetry: TimeInterval = 5, lastRetry: TimeInterval = 60) {
         self.hosts = hosts
         self.connector = connector
         self.history = history
         self.settings = settings
+        self.pending = pending
         self.guestName = guestName
         self.appVersion = appVersion
         self.firstRetry = firstRetry
@@ -59,17 +83,27 @@ public final class GuestService: @unchecked Sendable {
         return reachable.contains(hostId)
     }
 
-    /// Starts taking what the paired hosts queue, and does so for each one paired later.
+    /// Starts taking what the paired hosts queue, and does so for each one paired later. Files left unfinished by an
+    /// earlier run go on once their host answers.
     public func start() {
         lock.lock()
         running = true
+        ending = false
         lock.unlock()
         for host in hosts.pcs { watch(host.id) }
+        for send in pending.sends {
+            if hosts.get(send.hostId) == nil {
+                pending.remove(send.sendId)
+            } else {
+                onSendResumed?(ResumedSend(send: send, run: { [self] progress in try await resume(send, onProgress: progress) }))
+            }
+        }
     }
 
     public func stop() {
         lock.lock()
         running = false
+        ending = true
         let tasks = Array(watchers.values)
         watchers = [:]
         lock.unlock()
@@ -125,6 +159,7 @@ public final class GuestService: @unchecked Sendable {
 
     private func removeLocally(_ id: String) {
         hosts.remove(id)
+        pending.removeHost(id)
         lock.lock()
         collectors[id] = nil
         let receiver = receivers.removeValue(forKey: id)
@@ -148,6 +183,9 @@ public final class GuestService: @unchecked Sendable {
 
     /// A text or a link (what `ItemRequest.note` made of it).
     public func send(_ note: ItemRequest, to id: String) async throws {
+        // One id for every try, so a post whose answer was lost is not stored twice.
+        var note = note
+        if note.sendId == nil { note.sendId = newSendId() }
         var failures = 0
         while true {
             let secret = hosts.secret(for: id)
@@ -166,11 +204,45 @@ public final class GuestService: @unchecked Sendable {
 
     /// A file, in chunks that carry on after a drop. `onProgress` gets the bytes the host is known to have.
     public func sendFile(at url: URL, to id: String, onProgress: @escaping @Sendable (Int64) -> Void = { _ in }) async throws {
-        let request = try await Task.detached { () throws -> ItemRequest in
+        let sendId = newSendId()
+        let (request, modified) = try await Task.detached { () throws -> (ItemRequest, Date?) in
             let values = try? url.resourceValues(forKeys: [.contentTypeKey, .contentModificationDateKey])
-            return try ItemRequest.file(at: url, name: url.lastPathComponent, mime: values?.contentType?.preferredMIMEType,
-                                        modified: values?.contentModificationDate)
+            let request = try ItemRequest.file(at: url, name: url.lastPathComponent, mime: values?.contentType?.preferredMIMEType,
+                                               modified: values?.contentModificationDate, sendId: sendId)
+            return (request, values?.contentModificationDate)
         }.value
+        let send = PendingSend(hostId: id, sendId: sendId, path: url.standardizedFileURL.path, size: request.size ?? 0,
+                               modified: PendingSend.seconds(modified ?? Date(timeIntervalSince1970: 0)), sha256: request.sha256 ?? "")
+        try await sendPending(send, request: request, onProgress: onProgress)
+    }
+
+    /// Carries on with a file the host may already have part of, once the host answers.
+    private func resume(_ send: PendingSend, onProgress: @escaping @Sendable (Int64) -> Void) async throws {
+        let url = URL(fileURLWithPath: send.path)
+        let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentTypeKey, .contentModificationDateKey])
+        guard let size = values?.fileSize, let modified = values?.contentModificationDate,
+              Int64(size) == send.size, PendingSend.seconds(modified) == send.modified else {
+            pending.remove(send.sendId)
+            throw ResumeError.changed(url.lastPathComponent)
+        }
+        do {
+            while !isReachable(send.hostId) {
+                guard hosts.get(send.hostId) != nil else { throw ResumeError.hostRemoved }
+                try await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+        } catch {
+            settle(send)
+            throw error
+        }
+        let request = ItemRequest(kind: "file", name: url.lastPathComponent, size: send.size, mime: values?.contentType?.preferredMIMEType,
+                                  modified: ISO8601DateFormatter().string(from: modified), sha256: send.sha256, sendId: send.sendId)
+        try await sendPending(send, request: request, onProgress: onProgress)
+    }
+
+    // A send that did not finish leaves no entry, unless the app is ending: then the next run carries on.
+    private func sendPending(_ send: PendingSend, request: ItemRequest, onProgress: @escaping @Sendable (Int64) -> Void) async throws {
+        pending.add(send)
+        let id = send.hostId
         let secret = hosts.secret(for: id)
         var first = true
         let uploader = Uploader(chunkBytes: GuestService.chunkBytes) { [self] () async throws -> UploadAPI in
@@ -179,11 +251,23 @@ public final class GuestService: @unchecked Sendable {
             return try await client(for: id, search: search)
         }
         do {
-            _ = try await uploader.send(request, source: FileDataSource(url: url), onProgress: onProgress)
+            _ = try await uploader.send(request, source: FileDataSource(url: URL(fileURLWithPath: send.path)), onProgress: onProgress)
         } catch let error as LinkError where error.status == 401 {
+            settle(send)
             lost(id, using: secret)
             throw error
+        } catch {
+            settle(send)
+            throw error
         }
+        pending.remove(send.sendId)
+    }
+
+    private func settle(_ send: PendingSend) {
+        lock.lock()
+        let keep = ending
+        lock.unlock()
+        if !keep { pending.remove(send.sendId) }
     }
 
     /// A client for the host, or the reason there is none: a 401 when it dropped this computer, a network error otherwise.
