@@ -90,13 +90,10 @@ targets:
       - target: LazySendiOS
       - package: LazySend
         product: LazySendIOS
-        link: false
       - package: LazySend
         product: LazySendServer
-        link: false
       - package: LazySend
         product: LazySendKit
-        link: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lazysend.lazysend.unittests
