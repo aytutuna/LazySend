@@ -17,11 +17,18 @@ public sealed class HostSender(Func<CancellationToken, Task<LinkClient>> connect
     private readonly IReadOnlyList<TimeSpan> _delays = retryDelays ?? DefaultDelays;
     private LinkClient? _client;
 
-    public Task SendTextAsync(string text, CancellationToken cancellation) =>
-        RetryAsync(c => c.PostItemAsync(new ItemRequest(ItemKind.Text, Text: text), cancellation), cancellation);
+    // The request is built once, so a retry after a lost answer carries the same send id and the host adds nothing twice.
+    public Task SendTextAsync(string text, CancellationToken cancellation)
+    {
+        var request = new ItemRequest(ItemKind.Text, Text: text, SendId: Protocol.NewSendId());
+        return RetryAsync(c => c.PostItemAsync(request, cancellation), cancellation);
+    }
 
-    public Task SendLinkAsync(string url, CancellationToken cancellation) =>
-        RetryAsync(c => c.PostItemAsync(new ItemRequest(ItemKind.Link, Url: url), cancellation), cancellation);
+    public Task SendLinkAsync(string url, CancellationToken cancellation)
+    {
+        var request = new ItemRequest(ItemKind.Link, Url: url, SendId: Protocol.NewSendId());
+        return RetryAsync(c => c.PostItemAsync(request, cancellation), cancellation);
+    }
 
     /// <summary>What the host is told about the file at <paramref name="path"/>: its name, size, modified time and SHA-256.</summary>
     public static ItemRequest FileRequest(string path)
@@ -39,6 +46,7 @@ public sealed class HostSender(Func<CancellationToken, Task<LinkClient>> connect
     public async Task SendFileAsync(ItemRequest request, string path, IProgress<long>? progress, CancellationToken cancellation)
     {
         long size = request.Size ?? throw new ArgumentException("A file needs a size.", nameof(request));
+        request = request with { SendId = request.SendId ?? Protocol.NewSendId() };
         var state = await RetryAsync(c => c.PostItemAsync(request, cancellation), cancellation).ConfigureAwait(false);
         if (state.Duplicate == true) return;
         progress?.Report(state.Offset);

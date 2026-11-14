@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -90,6 +91,9 @@ public static class Protocol
     }
 
     public static string NewId() => Guid.NewGuid().ToString("N");
+
+    /// <summary>A fresh send id: 22 base64url characters from 16 random bytes.</summary>
+    public static string NewSendId() => EncodeBase64Url(RandomNumberGenerator.GetBytes(16));
 
     public static string EncodeBase64Url(ReadOnlySpan<byte> data) =>
         Convert.ToBase64String(data).TrimEnd('=').Replace('+', '-').Replace('/', '_');

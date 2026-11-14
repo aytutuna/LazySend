@@ -352,6 +352,22 @@ public class GuestSendTests
     }
 
     [Fact]
+    public async Task EachSendGetsItsOwnSendId()
+    {
+        await using var h = new Harness();
+        using var guest = new GuestRig(h);
+        var host = await guest.PairAsync();
+
+        await guest.Service.SendTextAsync(host.Id, "same", CancellationToken.None);
+        await guest.Service.SendTextAsync(host.Id, "same", CancellationToken.None);
+
+        var items = h.Service.History.Items;
+        Assert.Equal(2, items.Count);
+        Assert.All(items, i => Assert.Equal(22, i.SendId?.Length));
+        Assert.NotEqual(items[0].SendId, items[1].SendId);
+    }
+
+    [Fact]
     public async Task FileGoesUpInChunksAndLandsWithItsHash()
     {
         await using var h = new Harness();
