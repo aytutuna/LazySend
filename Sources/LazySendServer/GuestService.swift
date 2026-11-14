@@ -220,7 +220,6 @@ public final class GuestService: @unchecked Sendable {
         receivers[id] = receiver
         return (made, receiver)
     }
-    }
 
     private func setReachable(_ id: String, _ value: Bool) {
         lock.lock()
