@@ -12,8 +12,8 @@ The phone link is Lazy Print's (its CONTRACTS.md, "The phone link"), copied and 
 | Namespace (Windows core) | `LazySend.Core` |
 | Protocol version | 1, in the pairing code and every hello, health and pair answer |
 | Pairing code | `lazysend://pair?v=1&id=&n=&fp=&a=&p=&t=` |
-| Short code | 8 characters of Crockford base32, shown `XXXX-XXXX` (see Short code) |
-| DNS-SD service | `_lazysend._tcp`, TXT keys `v` (protocol version), `id` (the computer's id) and `n` (its name, at most 64 UTF-8 bytes; left out when empty) |
+| Short code | 8 characters of Crockford base32, shown `XXXX-XXXX` (see Short code; the Windows host has it, the Mac host follows) |
+| DNS-SD service | `_lazysend._tcp`, TXT keys `v` (protocol version), `id` (the computer's id) and `n` (its name, at most 64 UTF-8 bytes; left out when empty; the Windows app sends it and the Mac app follows, so a guest lists a host without it by its instance name) |
 | Port | 52734 first (Lazy Scan 52731, Lazy Print 52732, Lazy PDF 52733), any free port when taken |
 | `service` in health answers | `lazysend` |
 | Settings | `%APPDATA%\Lazy Send\devices.json`, `hosts.json`, `settings.json` |
@@ -42,7 +42,7 @@ Tokens are compared in constant time. Five wrong tokens from one address refuse 
 
 ### Short code
 
-A session also has a short code for a guest that cannot scan: 8 characters from `0123456789ABCDEFGHJKMNPQRSTVWXYZ` (Crockford base32, no I, L, O or U), shown as `XXXX-XXXX`. `POST /v1/pair` takes it as `token` in place of the 22-character token. Case, dashes and spaces are ignored, and it is compared in constant time. It belongs to the same session, so either one uses the session up, and it works within the same 5 minutes and under the same limits on wrong tokens, which is what makes 40 bits enough.
+The Windows host supports this today; the Mac host follows, and until it does a guest pairs with a Mac only by its pairing link. A session also has a short code for a guest that cannot scan: 8 characters from `0123456789ABCDEFGHJKMNPQRSTVWXYZ` (Crockford base32, no I, L, O or U), shown as `XXXX-XXXX`. `POST /v1/pair` takes it as `token` in place of the 22-character token. Case, dashes and spaces are ignored, and it is compared in constant time. It belongs to the same session, so either one uses the session up, and it works within the same 5 minutes and under the same limits on wrong tokens, which is what makes 40 bits enough.
 
 A guest that typed the short code has no fingerprint yet. To make a man in the middle visible, a match code is compared on both screens, and the order matters because the code itself is a secret that a computer pretending to be the host would learn:
 
@@ -54,6 +54,8 @@ The match code is:
 
 - Paired from a QR code or a pasted link, the guest holds the fingerprint already, and both screens show the check code phones show: the first four bytes of the fingerprint as a big-endian number modulo one million, six digits with leading zeros.
 - Paired by short code, the same six digits are taken from SHA-256 over the 32 fingerprint bytes followed by the 8 canonical characters of the short code. The certificate is chosen before the code is known, so a man in the middle cannot grind a key until the plain check code of the real certificate comes out, as it could if the digits came from the fingerprint alone.
+
+Digits are shown three and three with a space ("066 051"). For the fingerprint bytes 0x00 to 0x1F the check code is 066 051, and with the short code `7KQ2M9XD` the match code is 987 292; both servers' tests hold this vector.
 
 The host works out which one applies from the shape of `token` (22 characters of base64url, or 8 of the alphabet), so existing phones, which only send tokens, see no change.
 
@@ -185,7 +187,7 @@ The Store build keeps its certificate and its pairings per package, apart from t
 
 A Windows computer pairs with another computer (a Mac or another Windows PC) as a phone does, with `platform` `windows`, its own computer id as `phoneId` and its name as `phoneName`; the wire names stay as they are. Connect to a computer browses `_lazysend._tcp` and lists what answers by its `n` (the instance name when a host sends none), leaving out its own `id`. The user picks one and types the short code, or pastes a pairing link, and sees the match code while the host's user answers.
 
-The app tries a host's addresses in turn, the one that answered last first, and checks each with `hello` over TLS pinned to the host's key. The addresses in `hello` replace the kept ones, and when none answers the ones the host announces on the network are tried. A host that answers 401 has forgotten this computer and is dropped here.
+The app tries a host's addresses in turn, the one that answered last first, and checks each with `hello` over TLS pinned to the host's key. The addresses in `hello` go in front of the kept ones (at most 8 in all, anything that is not an IP address or carries a zone dropped), the address that answered is remembered with its port, and when none answers the address and port the host announces on the network are tried. A host that answers 401 has forgotten this computer and is dropped here.
 
 While the app runs it keeps `GET /v1/outbox?wait=25` open for each host and takes the items as a phone does. Texts and links go into the received history under the item's own id, so a repeat is noticed. A file is written as `<id>.part` in `<receive root>\<host name>\`, continued with `Range` after a drop, renamed when whole, given the `Zone.Identifier` stream, and then acknowledged. A host out of reach is tried again after 5 seconds, then at doubling gaps up to 60. What this computer sends goes up through the same routes a phone uses, files in 4 MiB chunks, continuing from the offset the host gives after a drop.
 

@@ -111,6 +111,26 @@ public class ProtocolTests
     }
 }
 
+public class MatchCodeTests
+{
+    // The Swift server's tests hold the same vector.
+    private static readonly byte[] Fingerprint = [.. Enumerable.Range(0, 32).Select(i => (byte)i)];
+
+    [Fact]
+    public void CheckCodeIsTheFirstFourBytesModAMillion()
+    {
+        Assert.Equal("066051", SpkiFingerprint.CheckCode(Fingerprint));
+        Assert.Equal("066 051", SpkiFingerprint.Spaced("066051"));
+    }
+
+    [Fact]
+    public void MatchCodeIsTakenFromTheHashOfTheFingerprintAndTheCode()
+    {
+        Assert.Equal("987292", SpkiFingerprint.MatchCode(Fingerprint, "7KQ2M9XD"));
+        Assert.Equal("987 292", SpkiFingerprint.Spaced(SpkiFingerprint.MatchCode(Fingerprint, "7KQ2M9XD")));
+    }
+}
+
 public class TxtRecordTests
 {
     [Fact]

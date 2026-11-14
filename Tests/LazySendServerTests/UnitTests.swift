@@ -263,6 +263,12 @@ final class PairingSessionTests: XCTestCase {
         XCTAssertEqual(session.redeem(session.shortCode, now: start, peer: [10, 0, 0, 2]), .accepted)
     }
 
+    func testTheMatchCodeVectorAgreesWithTheWindowsServer() {
+        let fingerprint = Data((0..<32).map { UInt8($0) })
+        XCTAssertEqual(SpkiFingerprint.checkCode(fingerprint), "066 051")
+        XCTAssertEqual(SpkiFingerprint.matchCode(fingerprint, shortCode: "7KQ2M9XD"), "987 292")
+    }
+
     func testTheTokenIsSixteenRandomBytes() {
         let a = PairingSession(opened: start)
         let b = PairingSession(opened: start)

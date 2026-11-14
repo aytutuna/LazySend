@@ -35,6 +35,9 @@ public static class SpkiFingerprint
         return (value % 1_000_000).ToString("D6", CultureInfo.InvariantCulture);
     }
 
+    /// <summary>Six digits as people read them, three and three with a space ("066 051"), as the phones show them.</summary>
+    public static string Spaced(string digits) => digits.Length == 6 ? $"{digits[..3]} {digits[3..]}" : digits;
+
     /// <summary>
     /// The check code of a pairing by short code: the same six digits, taken from SHA-256 over the
     /// fingerprint and the canonical short code. A guest that typed the code has no fingerprint in
