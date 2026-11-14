@@ -573,7 +573,8 @@ public final class Inbox: @unchecked Sendable {
         if let date = ISO8601DateFormatter().date(from: text) { return date }
         let fractional = ISO8601DateFormatter()
         fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return fractional.date(from: text)
+        // .NET writes up to seven fraction digits; the formatter is sure of three.
+        return fractional.date(from: text.replacingOccurrences(of: #"(\.\d{3})\d+"#, with: "$1", options: .regularExpression))
     }
 
     static func month(_ date: Date) -> String {

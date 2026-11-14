@@ -578,6 +578,13 @@ final class GuestServiceTests: XCTestCase {
         XCTAssertFalse(receiver.isReceivingGallery)
     }
 
+    func testATakenDateWithSevenFractionDigitsIsRead() {
+        let item = OutboxEntry(id: "item-0010-abcdef", kind: "file", name: "a.jpg", size: 1, sourceId: "asset-10", taken: "2021-03-15T12:00:00.1234567+00:00")
+        XCTAssertEqual(try XCTUnwrap(item.takenDate).timeIntervalSince1970, 1_615_809_600.123, accuracy: 0.01)
+        let plain = OutboxEntry(id: "item-0011-abcdef", kind: "file", sourceId: "asset-11", taken: "2021-03-15T12:00:00Z")
+        XCTAssertNotNil(plain.takenDate)
+    }
+
     func testOnlyAFullDiskIsToldApart() {
         XCTAssertTrue(CocoaError(.fileWriteOutOfSpace).isOutOfSpace)
         XCTAssertTrue(POSIXError(.ENOSPC).isOutOfSpace)
