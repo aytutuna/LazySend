@@ -268,6 +268,20 @@ class GalleryFeedTest {
     }
 
     @Test
+    fun stopLeavesTheItemBeingDownloadedAndTheGuestAcknowledgesItAsUsual() = runBlocking {
+        feed.start(guest).join()
+        val busy = queued()[3]
+        outbox.beginServing(busy.id)
+        feed.stop(guest)
+        assertEquals(listOf(busy.id), queued().map { it.id })
+        assertEquals(1, copies())
+        outbox.endServing(busy.id)
+        outbox.acknowledge(guest, busy.id)
+        assertEquals(0, copies())
+        assertNull(feed.progress.value[guest])
+    }
+
+    @Test
     fun theTotalNeverFallsBehindWhatWasSent() = runBlocking {
         library = libraryOf(2)
         feed.start(guest).join()

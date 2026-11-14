@@ -305,8 +305,13 @@ class HostRouter(
             throw HostError.notFound
         }
         val headers = listOf("Content-Type" to safeMime(item.mime), "Accept-Ranges" to "bytes")
-        if (!partial) return HostResponse(200, headers, stream = stream, length = size)
-        return HostResponse(206, headers + ("Content-Range" to "bytes $start-${size - 1}/$size"), stream = stream, length = size - start)
+        val response = if (!partial) {
+            HostResponse(200, headers, stream = stream, length = size)
+        } else {
+            HostResponse(206, headers + ("Content-Range" to "bytes $start-${size - 1}/$size"), stream = stream, length = size - start)
+        }
+        outbox.beginServing(item.id)
+        return response.withWritten { outbox.endServing(item.id) }
     }
 
     // The type goes into a header as it is, so anything that is not a plain type/subtype is not sent.

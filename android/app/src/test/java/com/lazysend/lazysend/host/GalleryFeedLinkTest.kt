@@ -14,13 +14,15 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], application = Application::class)
 class GalleryFeedLinkTest {
-    private fun fixture(library: () -> List<com.lazysend.lazysend.transfer.Asset>) =
-        HostFixture(assets = library, openAsset = { ByteArrayInputStream(byteArrayOf(1, 2, 3)) })
+    private fun fixture(
+        library: () -> List<com.lazysend.lazysend.transfer.Asset>,
+        open: (com.lazysend.lazysend.transfer.Asset) -> java.io.InputStream = { ByteArrayInputStream(byteArrayOf(1, 2, 3)) },
+    ) = HostFixture(assets = library, openAsset = open)
 
     @Test
     fun aGuestGetsGalleryItemsWithTheirIdAndDateAndAcknowledgesThemOneByOne() = runBlocking {
         val library = libraryOf(25)
-        fixture { library }.use { host ->
+        fixture({ library }).use { host ->
             val guest = host.pair()
             host.core.feed.start(guest.deviceId).join()
             val client = host.client(guest)
@@ -39,9 +41,41 @@ class GalleryFeedLinkTest {
     }
 
     @Test
+    fun stopWhileTheGuestIsStillDownloadingKeepsThatItem() = runBlocking {
+        // Big enough that the host cannot finish writing before the guest reads.
+        val library = libraryOf(3, sizes = mapOf(1 to 64L * 1024 * 1024))
+        fixture({ library }, { asset -> java.io.ByteArrayInputStream(ByteArray(asset.size.toInt())) }).use { host ->
+            val guest = host.pair()
+            host.core.feed.start(guest.deviceId).join()
+            val client = host.client(guest)
+            val busy = client.outbox(0).items.first()
+            client.download(busy.id, 0).use { download ->
+                val began = System.currentTimeMillis() + 10_000
+                while (!host.core.outbox.isServing(busy.id) && System.currentTimeMillis() < began) Thread.sleep(20)
+                assertTrue(host.core.outbox.isServing(busy.id))
+                host.core.feed.stop(guest.deviceId)
+                assertEquals(listOf(busy.id), host.core.outbox.pending(guest.deviceId).map { it.id })
+                var total = 0L
+                val buffer = ByteArray(1 shl 16)
+                while (true) {
+                    val n = download.body.read(buffer)
+                    if (n < 0) break
+                    total += n
+                }
+                assertEquals(64L * 1024 * 1024, total)
+            }
+            client.acknowledge(busy.id)
+            assertTrue(host.core.outbox.pending(guest.deviceId).isEmpty())
+            val end = System.currentTimeMillis() + 10_000
+            while (host.core.outbox.isServing(busy.id) && System.currentTimeMillis() < end) Thread.sleep(20)
+            assertTrue(!host.core.outbox.isServing(busy.id))
+        }
+    }
+
+    @Test
     fun aDateOutsideTheUsableYearsIsLeftOutOfTheReply() = runBlocking {
         val library = libraryOf(1, taken = -5_000_000_000_000)
-        fixture { library }.use { host ->
+        fixture({ library }).use { host ->
             val guest = host.pair()
             host.core.feed.start(guest.deviceId).join()
             val item = host.client(guest).outbox(0).items.single()
@@ -53,7 +87,7 @@ class GalleryFeedLinkTest {
     @Test
     fun removingTheGuestEndsItsFeed() = runBlocking {
         val library = libraryOf(25)
-        fixture { library }.use { host ->
+        fixture({ library }).use { host ->
             val guest = host.pair()
             host.core.feed.start(guest.deviceId).join()
             host.core.removeGuest(guest.deviceId)

@@ -49,6 +49,9 @@ class Outbox(
     private var items = loadJson(file) { OutboxFile() }.items
     private val changes = MutableStateFlow(0)
 
+    // Items whose file is being sent right now, by how many downloads.
+    private val serving = HashMap<String, Int>()
+
     /** Called with each item the guest acknowledges, after it is removed and before anything else can see it gone; it must not call back into the outbox. */
     @Volatile
     var onAcknowledged: (OutboxItem) -> Unit = {}
@@ -128,10 +131,28 @@ class Outbox(
         return removed
     }
 
-    /** Takes the gallery items back out for the guest without acknowledging them, with their copies; returns how many. */
+    /** The router is about to send the item's file; the item stays through [removeGalleryItems] until [endServing]. */
+    @Synchronized
+    fun beginServing(id: String) {
+        serving[id] = (serving[id] ?: 0) + 1
+    }
+
+    @Synchronized
+    fun endServing(id: String) {
+        val left = (serving[id] ?: 1) - 1
+        if (left <= 0) serving.remove(id) else serving[id] = left
+    }
+
+    @Synchronized
+    fun isServing(id: String) = id in serving
+
+    /**
+     * Takes the gallery items back out for the guest without acknowledging them, with their copies, except the ones being
+     * downloaded right now, which the guest acknowledges as usual; returns how many.
+     */
     fun removeGalleryItems(deviceId: String): Int {
         val gone = synchronized(this) {
-            val mine = items.filter { it.deviceId == deviceId && it.sourceId != null }
+            val mine = items.filter { it.deviceId == deviceId && it.sourceId != null && it.id !in serving }
             if (mine.isEmpty()) return 0
             items = items - mine.toSet()
             save()
