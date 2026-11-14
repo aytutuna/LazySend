@@ -12,7 +12,6 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.lazysend.lazysend.AppGraph
 import com.lazysend.lazysend.LazySendApp
-import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -21,7 +20,6 @@ import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -30,7 +28,7 @@ import kotlinx.coroutines.withContext
  */
 class SendService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val running = AtomicInteger()
+    private lateinit var gate: ServiceGate
     private lateinit var graph: AppGraph
     private lateinit var notifications: Notifications
 
@@ -48,7 +46,8 @@ class SendService : Service() {
             }
         }.onEach { getSystemService(android.app.NotificationManager::class.java).notify(NOTIFICATION_ID, it) }.launchIn(scope)
         // Hosting ended, by the person or for good: nothing keeps the service but a send in progress.
-        graph.host.keepAlive.onEach { if (!it && running.get() == 0) finish() }.launchIn(scope)
+        gate = ServiceGate({ graph.host.keepAlive.value }, ::finish)
+        graph.host.keepAlive.onEach(gate::hostingChanged).launchIn(scope)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -60,21 +59,24 @@ class SendService : Service() {
         ServiceCompat.startForeground(this, NOTIFICATION_ID, first, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         val pc = intent?.getStringExtra(EXTRA_PC)?.let(graph.pcs::get)
         when (intent?.action) {
-            ACTION_FILES -> if (pc != null) launch { graph.sender.sendFiles(pc, uris(intent)) }
-            ACTION_GALLERY -> if (pc != null) launch { graph.sender.syncGallery(pc) }
-            ACTION_TEXT -> if (pc != null) intent.getStringExtra(EXTRA_TEXT)?.let { text -> launch { graph.sender.sendText(pc, text) } }
+            ACTION_FILES -> if (pc != null) gate.launch { graph.sender.sendFiles(pc, uris(intent)) }
+            ACTION_GALLERY -> if (pc != null) gate.launch { graph.sender.syncGallery(pc) }
+            ACTION_TEXT -> if (pc != null) intent.getStringExtra(EXTRA_TEXT)?.let { text -> gate.launch { graph.sender.sendText(pc, text) } }
             ACTION_QUEUE -> intent.getStringExtra(EXTRA_GUEST)?.let(graph.host.core.guests::get)?.let { guest ->
                 val text = intent.getStringExtra(EXTRA_TEXT)
-                launch {
+                gate.launch {
                     withContext(Dispatchers.IO) {
                         if (text != null) graph.host.queueText(guest, text) else graph.host.queueUris(guest, contentResolver, uris(intent))
                     }
                 }
             }
             ACTION_STOP -> scope.coroutineContext.cancelChildren()
-            ACTION_STOP_HOST -> graph.host.stop()
+            ACTION_STOP_HOST -> {
+                graph.host.stop()
+                gate.hostStopped()
+            }
         }
-        if (running.get() == 0 && !graph.host.keepAlive.value) finish()
+        gate.started()
         return START_NOT_STICKY
     }
 
@@ -87,23 +89,9 @@ class SendService : Service() {
 
     override fun onDestroy() {
         scope.cancel()
+        gate.close()
         getSystemService(android.app.NotificationManager::class.java).cancel(NOTIFICATION_ID)
         super.onDestroy()
-    }
-
-    private fun launch(block: suspend () -> Unit) {
-        running.incrementAndGet()
-        scope.launch {
-            try {
-                block()
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // Sender reports its own failures in the timeline; nothing here may take the process down.
-            } finally {
-                if (running.decrementAndGet() == 0 && !graph.host.keepAlive.value) finish()
-            }
-        }
     }
 
     private fun finish() {
