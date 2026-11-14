@@ -41,6 +41,9 @@ public sealed class TimelineItem : INotifyPropertyChanged
 
     public string? OutboxId { get; init; }
 
+    /// <summary>Stops a send to a computer that is under way.</summary>
+    public CancellationTokenSource? SendStop { get; init; }
+
     private ImageSource? _thumbnail;
 
     public ImageSource? Thumbnail

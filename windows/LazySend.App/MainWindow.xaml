@@ -21,9 +21,11 @@
                                Foreground="{DynamicResource TextFillColorSecondaryBrush}" AutomationProperties.LiveSetting="Polite" />
                 </StackPanel>
                 <TextBlock DockPanel.Dock="Top" Text="Lazy Send" Style="{StaticResource SubtitleText}" />
-                <TextBlock DockPanel.Dock="Top" Text="Phones" Style="{StaticResource SectionHeaderText}" Margin="0,20,0,8" />
+                <TextBlock DockPanel.Dock="Top" Text="Devices" Style="{StaticResource SectionHeaderText}" Margin="0,20,0,8" />
                 <Button DockPanel.Dock="Bottom" x:Name="PairButton" Content="Pair a phone" ui:Icon.Glyph="&#xE8EA;" Margin="0,8,0,16"
                         Style="{StaticResource AccentIconTextButtonStyle}" HorizontalAlignment="Stretch" Click="Pair_Click" />
+                <Button DockPanel.Dock="Bottom" x:Name="ConnectButton" Content="Connect to a computer" ui:Icon.Glyph="&#xE839;" Margin="0,8,0,0"
+                        Style="{StaticResource IconTextButtonStyle}" HorizontalAlignment="Stretch" Click="Connect_Click" />
                 <StackPanel DockPanel.Dock="Bottom">
                     <TextBlock Text="Phones on USB" Style="{StaticResource SectionHeaderText}" Margin="0,0,0,8" />
                     <TextBlock x:Name="UsbHintText" Style="{StaticResource CaptionText}" TextWrapping="Wrap" Margin="0,0,0,8"
@@ -46,14 +48,14 @@
                                Text="Copies new photos and videos to the receive folder, skipping what is already there. On an iPhone, choose Settings > Photos > Transfer to Mac or PC > Keep Originals first; Automatic converts HEIC photos on the fly and is slower." />
                 </StackPanel>
                 <TextBlock x:Name="NoPhonesText" DockPanel.Dock="Top" Style="{StaticResource SecondaryBodyText}" TextWrapping="Wrap"
-                           Text="No phone is paired yet. Pair one to send things between it and this PC." />
+                           Text="Nothing is paired yet. Pair a phone, or connect to another computer, to send things between it and this PC." />
                 <ListBox x:Name="PhonesList" ItemsSource="{Binding Phones}" SelectionChanged="PhonesList_SelectionChanged"
-                         Style="{StaticResource NavListBoxStyle}" AutomationProperties.Name="Paired phones">
+                         Style="{StaticResource NavListBoxStyle}" AutomationProperties.Name="Paired phones and computers">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <DockPanel Margin="4,2">
                                 <Button DockPanel.Dock="Right" Style="{StaticResource SmallIconButtonStyle}" ui:Icon.Glyph="&#xE711;"
-                                        ToolTip="Remove this phone" AutomationProperties.Name="Remove this phone" Click="RemovePhone_Click" />
+                                        ToolTip="Remove this device" AutomationProperties.Name="Remove this device" Click="RemovePhone_Click" />
                                 <StackPanel>
                                     <TextBlock Text="{Binding Name}" Style="{StaticResource BodyStrongText}" TextTrimming="CharacterEllipsis" />
                                     <TextBlock Text="{Binding LastSeen}" Style="{StaticResource CaptionText}"

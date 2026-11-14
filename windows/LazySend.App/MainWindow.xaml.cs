@@ -17,6 +17,7 @@ public partial class MainWindow : Window
     private readonly AppModel _model;
     private readonly DispatcherTimer _noticeTimer = new() { Interval = TimeSpan.FromSeconds(8) };
     private PairWindow? _pairWindow;
+    private ConnectWindow? _connectWindow;
 
     public MainWindow(AppModel model)
     {
@@ -97,6 +98,17 @@ public partial class MainWindow : Window
         }
         _pairWindow = new PairWindow(_model) { Owner = this };
         _pairWindow.Show();
+    }
+
+    private void Connect_Click(object sender, RoutedEventArgs e)
+    {
+        if (_connectWindow is { IsLoaded: true })
+        {
+            _connectWindow.Activate();
+            return;
+        }
+        _connectWindow = new ConnectWindow(_model) { Owner = this };
+        _connectWindow.Show();
     }
 
     private void Settings_Click(object sender, RoutedEventArgs e) => new SettingsWindow(_model) { Owner = this }.ShowDialog();

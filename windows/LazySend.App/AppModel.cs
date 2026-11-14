@@ -1,3 +1,4 @@
+using System.IO;
 using System.Security.Cryptography;
 using System.Windows.Threading;
 using LazySend.App.Services;
@@ -28,6 +29,9 @@ public sealed partial class AppModel : IDisposable
         var certificate = certificates.Current();
         _thumbprint = certificate.Thumbprint;
         Service = new LinkService(paths, certificate, new LinkServerOptions { AllowPeer = LocalNetworks.IsAllowedPeer });
+        Guest = new GuestService(new HostStore(Path.Combine(paths.Settings, "hosts.json")), Service.History, Service.Settings,
+                                 Service.Devices.DesktopId, Environment.MachineName,
+                                 typeof(AppModel).Assembly.GetName().Version?.ToString(3) ?? "1.0");
         Service.Router.ApprovePairing = (request, match, cancellation) =>
         {
             _ui.BeginInvoke(() => PairingRequested?.Invoke(this, request.PhoneName));
@@ -38,6 +42,7 @@ public sealed partial class AppModel : IDisposable
 
     public SendPaths Paths { get; }
     public LinkService Service { get; }
+    public GuestService Guest { get; }
     public LinkRouter Router => Service.Router;
     public AppSettings Settings { get; }
 
@@ -74,6 +79,7 @@ public sealed partial class AppModel : IDisposable
         }
         Advertise();
         StartTimeline();
+        StartComputers();
         StartUsb();
         _renewal = new DispatcherTimer(DispatcherPriority.Background, _ui) { Interval = TimeSpan.FromDays(1) };
         _renewal.Tick += (_, _) => RenewCertificate();
@@ -136,6 +142,7 @@ public sealed partial class AppModel : IDisposable
     {
         _renewal?.Stop();
         _usbStop.Cancel();
+        Guest.Dispose();
         _network.Dispose();
         foreach (var advertisement in _advertisements) advertisement.Dispose();
         _advertisements.Clear();

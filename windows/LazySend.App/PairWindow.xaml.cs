@@ -60,7 +60,7 @@ public partial class PairWindow : Window
         QrImage.Source = ZXingQrEncoder.Encode(text) is { } modules ? Draw(modules) : null;
     }
 
-    private static string FormatCheckCode(string code) => code.Length == 6 ? $"{code[..3]} {code[3..]}" : code;
+    internal static string FormatCheckCode(string code) => code.Length == 6 ? $"{code[..3]} {code[3..]}" : code;
 
     /// <summary>The modules as black on white with a four-module quiet zone, six pixels to a module.</summary>
     internal static BitmapSource Draw(QrModules modules)

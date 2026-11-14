@@ -20,6 +20,9 @@ public sealed class PhoneRow(string id, string name, string platform) : INotifyP
     public string Name { get; set; } = name;
     public string Platform { get; } = platform;
 
+    /// <summary>This PC is a guest of the computer, so it sends to it directly.</summary>
+    public bool IsComputer { get; set; }
+
     public string LastSeen
     {
         get => _lastSeen;
@@ -98,15 +101,18 @@ public sealed partial class AppModel
     private void RefreshPhones()
     {
         var devices = Service.Devices.Devices;
+        var hosts = Guest.Hosts.Hosts;
         for (int i = Phones.Count - 1; i >= 0; i--)
         {
-            if (devices.All(d => d.Id != Phones[i].Id)) Phones.RemoveAt(i);
+            if (devices.All(d => d.Id != Phones[i].Id) && hosts.All(h => h.Id != Phones[i].Id)) Phones.RemoveAt(i);
         }
-        foreach (var device in devices)
+        // A computer paired both ways is one entry.
+        foreach (var (id, name, platform) in devices.Select(d => (d.Id, d.Name, d.Platform)).Concat(hosts.Select(h => (h.Id, h.Name, ""))))
         {
-            if (Phones.FirstOrDefault(p => p.Id == device.Id) is { } row) row.Name = device.Name;
-            else Phones.Add(new PhoneRow(device.Id, device.Name, device.Platform));
+            if (Phones.FirstOrDefault(p => p.Id == id) is { } row) row.Name = name;
+            else Phones.Add(new PhoneRow(id, name, platform));
         }
+        foreach (var row in Phones) row.IsComputer = hosts.Any(h => h.Id == row.Id);
         UpdateLastSeen();
         if (SelectedPhone is null) SelectPhone(Phones.FirstOrDefault());
         else SelectionChanged?.Invoke(this, EventArgs.Empty);
@@ -117,6 +123,11 @@ public sealed partial class AppModel
         var devices = Service.Devices.Devices;
         foreach (var row in Phones)
         {
+            if (row.IsComputer)
+            {
+                row.LastSeen = Guest.IsReachable(row.Id) ? "Connected" : "Not reachable right now";
+                continue;
+            }
             if (devices.FirstOrDefault(d => d.Id == row.Id)?.LastSeen is not { } seen) continue;
             var ago = DateTimeOffset.UtcNow - seen;
             row.LastSeen = ago < TimeSpan.FromMinutes(2) ? "Connected just now"
@@ -125,7 +136,11 @@ public sealed partial class AppModel
         }
     }
 
-    public void RemovePhone(PhoneRow phone) => Service.Devices.Remove(phone.Id);
+    public void RemovePhone(PhoneRow phone)
+    {
+        if (phone.IsComputer) _ = Guest.ForgetAsync(phone.Id);
+        Service.Devices.Remove(phone.Id);
+    }
 
     private void AddReceivedText(ReceivedItem item, bool arrived = true)
     {
@@ -203,6 +218,19 @@ public sealed partial class AppModel
         if (!HasTarget(out var phone)) return false;
         string trimmed = text.Trim();
         if (trimmed.Length == 0) return false;
+        if (phone.IsComputer)
+        {
+            bool link = LinkDetector.IsLink(trimmed);
+            string sent = link ? trimmed : text.TrimEnd();
+            if (!link && System.Text.Encoding.UTF8.GetByteCount(sent) > Protocol.MaxTextBytes)
+            {
+                Notice?.Invoke(this, "That text is too long to send (the limit is 1 MiB).");
+                return false;
+            }
+            SendToComputer(phone, link ? TimelineKind.Link : TimelineKind.Text, sent, null,
+                           (stop, _) => link ? Guest.SendLinkAsync(phone.Id, sent, stop) : Guest.SendTextAsync(phone.Id, sent, stop));
+            return true;
+        }
         try
         {
             if (LinkDetector.IsLink(trimmed)) AddSent(Service.Outbox.QueueLink(phone.Id, trimmed), phone);
@@ -223,6 +251,7 @@ public sealed partial class AppModel
     public int SendFiles(IEnumerable<string> paths)
     {
         if (!HasTarget(out var phone)) return 0;
+        if (phone.IsComputer) return SendFilesToComputer(phone, paths);
         var files = new List<string>();
         string? problem = null;
         foreach (string path in paths)
@@ -243,7 +272,7 @@ public sealed partial class AppModel
     {
         phone = SelectedPhone!;
         if (phone is not null) return true;
-        Notice?.Invoke(this, "Pair a phone first.");
+        Notice?.Invoke(this, "Pair a phone or connect to a computer first.");
         return false;
     }
 
@@ -299,6 +328,12 @@ public sealed partial class AppModel
 
     public void Cancel(TimelineItem row)
     {
+        if (row is { CanCancel: true, SendStop: { } stop })
+        {
+            row.Cancelling = true;
+            stop.Cancel();
+            return;
+        }
         if (!row.CanCancel || row.OutboxId is null) return;
         row.Cancelling = true;
         if (!Service.Outbox.Acknowledge(row.DeviceId, row.OutboxId)) RefreshSent();
