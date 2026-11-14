@@ -32,6 +32,9 @@ public static class Protocol
 
     public const string TxtVersionKey = "v";
     public const string TxtIdKey = "id";
+    public const string TxtNameKey = "n";
+    /// <summary>The longest name in the TXT record, in UTF-8 bytes, so a record stays well under a packet.</summary>
+    public const int MaxTxtNameBytes = 64;
 
     /// <summary>A pairing request, small enough to be read under a total time limit.</summary>
     public const int MaxSmallBodyBytes = 8192;
@@ -65,6 +68,22 @@ public static class Protocol
             if (!(c is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or '-' or '_')) return false;
         }
         return true;
+    }
+
+    /// <summary>The DNS-SD TXT entries for a computer: the protocol version, its id and its name cut to <see cref="MaxTxtNameBytes"/>.</summary>
+    public static List<KeyValuePair<string, string>> TxtRecords(string desktopId, string name)
+    {
+        var text = new StringBuilder();
+        int bytes = 0;
+        foreach (var rune in PairedDeviceStore.CleanName(name).EnumerateRunes())
+        {
+            if (bytes + rune.Utf8SequenceLength > MaxTxtNameBytes) break;
+            bytes += rune.Utf8SequenceLength;
+            text.Append(rune.ToString());
+        }
+        List<KeyValuePair<string, string>> txt = [new(TxtVersionKey, Version.ToString()), new(TxtIdKey, desktopId)];
+        if (text.Length > 0) txt.Add(new(TxtNameKey, text.ToString()));
+        return txt;
     }
 
     public static string NewId() => Guid.NewGuid().ToString("N");

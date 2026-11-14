@@ -118,11 +118,7 @@ public sealed partial class AppModel : IDisposable
         AdvertiseProblem = null;
         if (Port == 0) return;
         string name = Environment.MachineName;
-        List<KeyValuePair<string, string>> txt =
-        [
-            new(Protocol.TxtVersionKey, Protocol.Version.ToString()),
-            new(Protocol.TxtIdKey, Service.Devices.DesktopId),
-        ];
+        var txt = Protocol.TxtRecords(Service.Devices.DesktopId, Router.DesktopName());
         foreach (var network in NetworkWatcher.Interfaces())
         {
             try

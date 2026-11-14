@@ -111,6 +111,33 @@ public class ProtocolTests
     }
 }
 
+public class TxtRecordTests
+{
+    [Fact]
+    public void RecordCarriesVersionIdAndName()
+    {
+        var txt = Protocol.TxtRecords("abcdef0123456789", "Aytu's PC");
+
+        Assert.Equal(["v=1", "id=abcdef0123456789", "n=Aytu's PC"], txt.Select(e => $"{e.Key}={e.Value}"));
+    }
+
+    [Fact]
+    public void LongNameIsCutOnACharacterBoundary()
+    {
+        var txt = Protocol.TxtRecords("abcdef0123456789", new string('a', 60) + "ééé");
+
+        string name = txt.Single(e => e.Key == Protocol.TxtNameKey).Value;
+        Assert.Equal(new string('a', 60) + "éé", name);
+        Assert.True(Encoding.UTF8.GetByteCount(name) <= Protocol.MaxTxtNameBytes);
+    }
+
+    [Fact]
+    public void EmptyNameLeavesTheKeyOut()
+    {
+        Assert.DoesNotContain(Protocol.TxtRecords("abcdef0123456789", " 	 ").Select(e => e.Key), key => key == Protocol.TxtNameKey);
+    }
+}
+
 public class HttpTests
 {
     private static HttpParseResult Parse(string head) => LinkHttp.Parse(Encoding.Latin1.GetBytes(head));
