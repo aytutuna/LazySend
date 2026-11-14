@@ -36,6 +36,7 @@
     <string name="feed_progress">%1$d of %2$d sent to %3$s</string>
     <string name="feed_low_storage">Waiting for free storage.</string>
     <string name="feed_outbox_full">Waiting for %1$s to take what is queued.</string>
+    <string name="feed_no_photos">Paused.</string>
     <string name="feed_done">All %1$d photos and videos sent to %2$s</string>
     <string name="feed_done_some">%1$d sent to %2$s, %3$d could not be read</string>
     <string name="feed_nothing_new">Nothing new to send to %1$s</string>

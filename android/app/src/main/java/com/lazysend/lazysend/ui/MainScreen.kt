@@ -156,6 +156,7 @@ private fun Connection(state: MainState, actions: MainActions) {
                                 when (feed.wait) {
                                     FeedWait.Storage -> " " + stringResource(R.string.feed_low_storage)
                                     FeedWait.Outbox -> " " + stringResource(R.string.feed_outbox_full, pc.name)
+                                    FeedWait.Photos -> " " + stringResource(R.string.feed_no_photos)
                                     null -> ""
                                 },
                             Modifier.weight(1f),
@@ -163,6 +164,12 @@ private fun Connection(state: MainState, actions: MainActions) {
                         )
                         TextButton(onClick = actions.onStopFeed) { Text(stringResource(R.string.stop)) }
                     }
+                }
+            }
+            if (feed?.wait == FeedWait.Photos) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.photo_permission_needed), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = actions.onAllowPhotos) { Text(stringResource(R.string.allow_all_photos)) }
                 }
             }
             if (state.photoAccess == PhotoAccess.Partial) {

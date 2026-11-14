@@ -37,6 +37,7 @@ class GalleryFeedTest {
     private val failures = HashMap<String, Int>()
     private var queueBytes = FEED_QUEUE_BYTES
     private var readMs = 0L
+    private var photosAllowed = true
     private var outbox = newOutbox()
     private var feed = newFeed()
 
@@ -45,7 +46,7 @@ class GalleryFeedTest {
     private fun newOutbox() = Outbox(File(dir, "outbox.json"), outgoing, freeSpace = { free })
 
     private fun newFeed() = GalleryFeed(
-        outbox, GalleryIndex(File(dir, "feed-index")), File(dir, "feeds.json"), scope, { Thread.sleep(readMs); library },
+        outbox, GalleryIndex(File(dir, "feed-index")), File(dir, "feeds.json"), scope, { Thread.sleep(readMs); library.takeIf { photosAllowed } },
         { asset ->
             opened.incrementAndGet()
             val failing = failures[asset.sourceId] ?: 0
@@ -248,6 +249,22 @@ class GalleryFeedTest {
         assertTrue(queued().isEmpty())
         assertEquals(0, opened.get())
         assertEquals(0, copies())
+    }
+
+    @Test
+    fun aFeedPausesAfterARestartWithoutPhotoAccessAndCarriesOnWhenItIsBack() = runBlocking {
+        feed.start(guest).join()
+        outbox.acknowledge(guest, queued().first().id)
+        waitFor("topped up") { queued().size == 20 }
+        photosAllowed = false
+        restart()
+        feed.resume().join()
+        assertEquals(FeedWait.Photos, feed.progress.value[guest]?.wait)
+        assertEquals(setOf(guest), feed.running())
+        photosAllowed = true
+        feed.resume().join()
+        assertNull(feed.progress.value[guest]?.wait)
+        assertEquals(20, queued().size)
     }
 
     @Test

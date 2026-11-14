@@ -93,6 +93,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun resumeHosting() {
         graph.notifications.clearPaused()
         graph.host.resumeIfWanted()
+        graph.host.core.feed.resume()
+    }
+
+    /** The photo permission came back: a feed that was paused for lack of it carries on. */
+    fun resumeFeeds() {
+        graph.host.core.feed.resume()
     }
 
     fun leaveReceive() = graph.host.leave()

@@ -92,6 +92,7 @@ class MainActivity : ComponentActivity() {
             if (access != PhotoAccess.None && pendingGallery) {
                 model.selectedPc()?.let { SendService.syncGallery(this@MainActivity, it.id) }
             }
+            if (access != PhotoAccess.None) model.resumeFeeds()
             if (access != PhotoAccess.None && pendingFeed) model.startFeed()
             pendingGallery = false
             pendingFeed = false

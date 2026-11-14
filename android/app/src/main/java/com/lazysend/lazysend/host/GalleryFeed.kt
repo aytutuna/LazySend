@@ -18,7 +18,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 
 /** Why a running feed is not queuing anything for now. */
-enum class FeedWait { Storage, Outbox }
+enum class FeedWait { Storage, Outbox, Photos }
 
 /** [failed] counts assets that could not be read, also after a second try. */
 data class FeedProgress(val sent: Int, val total: Int, val done: Boolean, val failed: Int = 0, val wait: FeedWait? = null)
@@ -58,6 +58,8 @@ class GalleryFeed(
     private val waits = HashMap<String, FeedWait>()
     // Guests whose run is being set up: the library is read before the run exists.
     private val starting = HashSet<String>()
+    // The library could not be read the last time it was needed (permission taken away).
+    private var noPhotos = false
     private val locks = ConcurrentHashMap<String, Mutex>()
     private val shown = MutableStateFlow<Map<String, FeedProgress>>(emptyMap())
 
@@ -94,7 +96,10 @@ class GalleryFeed(
         for (deviceId in running()) {
             launch {
                 if (synchronized(this@GalleryFeed) { lists[deviceId] } == null) {
-                    val todo = candidates(deviceId) ?: return@launch
+                    val todo = candidates(deviceId)
+                    val changed = synchronized(this@GalleryFeed) { (noPhotos != (todo == null)).also { noPhotos = todo == null } }
+                    if (changed) publish()
+                    if (todo == null) return@launch
                     synchronized(this@GalleryFeed) { if (active(deviceId)) lists[deviceId] = ArrayDeque(todo) }
                 }
                 fill(deviceId)
@@ -240,7 +245,7 @@ class GalleryFeed(
         shown.value = synchronized(this) {
             runs.mapValues { (id, run) ->
                 val count = maxOf(sent.count(id) - run.base, 0)
-                FeedProgress(count, maxOf(run.total, count + run.failed), run.done, run.failed, if (run.done) null else waits[id])
+                FeedProgress(count, maxOf(run.total, count + run.failed), run.done, run.failed, if (run.done) null else if (noPhotos) FeedWait.Photos else waits[id])
             }
         }
     }
