@@ -12,6 +12,13 @@ public enum AppGroup {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         return folder
     }
+
+    /// What the phone keeps as a host (pairings, its outbox, the files it queues), in a folder of its own.
+    public static func hostFolder() -> URL {
+        let folder = AppGroup.folder().appendingPathComponent("Host", isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder
+    }
 }
 
 public struct QueuedItem: Codable, Equatable, Identifiable, Sendable {

@@ -21,3 +21,24 @@ final class ShareQueueTests: XCTestCase {
         XCTAssertEqual(queue.items().first?.text, "hi")
     }
 }
+
+final class HostedPhonesTests: XCTestCase {
+    func testTheListIsReadFromTheHostsDevicesFile() throws {
+        let folder = try temporaryFolder()
+        let json = #"{"desktopId":"abc12345","devices":[{"id":"phone-0001","name":"Pixel","platform":"android","secretHash":"x"}]}"#
+        try Data(json.utf8).write(to: folder.appendingPathComponent("devices.json"))
+        XCTAssertEqual(HostedPhones.read(in: folder), [HostedPhone(id: "phone-0001", name: "Pixel")])
+    }
+
+    func testNoFileOrAnUnreadableOneIsNoPhones() throws {
+        let folder = try temporaryFolder()
+        XCTAssertEqual(HostedPhones.read(in: folder), [])
+        try Data("nonsense".utf8).write(to: folder.appendingPathComponent("devices.json"))
+        XCTAssertEqual(HostedPhones.read(in: folder), [])
+    }
+
+    func testTargetsKeepThePhonesApartFromComputers() {
+        XCTAssertEqual(HostedPhones.id(ofTarget: HostedPhones.target("abc12345")), "abc12345")
+        XCTAssertNil(HostedPhones.id(ofTarget: "abc12345"))
+    }
+}
