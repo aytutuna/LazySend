@@ -29,7 +29,7 @@ public sealed partial class AppModel : IDisposable
         var certificate = certificates.Current();
         _thumbprint = certificate.Thumbprint;
         Service = new LinkService(paths, certificate, new LinkServerOptions { AllowPeer = LocalNetworks.IsAllowedPeer });
-        Guest = new GuestService(new HostStore(Path.Combine(paths.Settings, "hosts.json")), Service.History, Service.Settings,
+        Guest = new GuestService(new HostStore(Path.Combine(paths.Settings, "hosts.json")), Service.History, Service.Settings, new PendingSends(paths.PendingFile),
                                  Service.Devices.DesktopId, Environment.MachineName,
                                  typeof(AppModel).Assembly.GetName().Version?.ToString(3) ?? "1.0");
         Service.Router.ApprovePairing = (request, match, cancellation) =>

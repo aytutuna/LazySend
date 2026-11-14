@@ -6,20 +6,22 @@ namespace LazySend.Core.Tests;
 /// <summary>This computer as a guest, with the real server of <see cref="Harness"/> as the host.</summary>
 public sealed class GuestRig : IDisposable
 {
-    public GuestRig(Harness host)
+    public GuestRig(Harness host, string? guestId = null)
     {
         Host = host;
         Paths = new SendPaths(Path.Combine(host.Root, "guest-settings"), Path.Combine(host.Root, "guest-state"), Path.Combine(host.Root, "guest-received"));
         Hosts = new HostStore(Path.Combine(Paths.Settings, "hosts.json"));
         History = new ReceivedHistory(Paths.HistoryFile);
-        GuestId = Protocol.NewId();
-        Service = new GuestService(Hosts, History, new SendSettings(Paths), GuestId, "Guest PC", "1.0");
+        Pending = new PendingSends(Paths.PendingFile);
+        GuestId = guestId ?? Protocol.NewId();
+        Service = new GuestService(Hosts, History, new SendSettings(Paths), Pending, GuestId, "Guest PC", "1.0");
     }
 
     public Harness Host { get; }
     public SendPaths Paths { get; }
     public HostStore Hosts { get; }
     public ReceivedHistory History { get; }
+    public PendingSends Pending { get; }
     public string GuestId { get; }
     public GuestService Service { get; }
 
@@ -412,6 +414,81 @@ public class GuestSendTests
         string[] files = Directory.GetFiles(Path.Combine(h.ReceivedRoot, "Guest PC", "Gallery"), "cut.bin", SearchOption.AllDirectories);
         Assert.Equal(content, await File.ReadAllBytesAsync(Assert.Single(files)));
         Assert.Equal(held, progress.First());
+    }
+
+    private static async Task<(PendingSend Send, byte[] Content, long Held)> LeaveHalfSentAsync(Harness h, GuestRig guest, GuestHost host)
+    {
+        string path = Path.Combine(h.Root, "left.bin");
+        byte[] content = RandomNumberGenerator.GetBytes(HostSender.ChunkBytes + 70_000);
+        await File.WriteAllBytesAsync(path, content);
+        var request = HostSender.FileRequest(path) with { SendId = Protocol.NewSendId() };
+        using var earlier = new Phone(h, h.Service.Fingerprint, guest.GuestId) { Secret = guest.Hosts.Secret(host.Id)! };
+        using var begun = await earlier.PostAsync(Protocol.ItemsPath, request);
+        var state = await Harness.ReadAsync<ItemState>(begun);
+        using (var first = await earlier.PutChunkAsync(state.Id, 0, content[..100_000])) first.EnsureSuccessStatusCode();
+        var send = new PendingSend(host.Id, request.SendId!, path, content.Length, request.Modified!.Value, request.Sha256!);
+        guest.Pending.Add(send);
+        return (send, content, 100_000);
+    }
+
+    [Fact]
+    public async Task RestartedGuestResumesFromTheHostsOffset()
+    {
+        await using var h = new Harness();
+        var before = new GuestRig(h);
+        var host = await before.PairAsync();
+        var (send, content, held) = await LeaveHalfSentAsync(h, before, host);
+        before.Dispose();
+        using var guest = new GuestRig(h, before.GuestId);
+        var resumed = new TaskCompletionSource<ResumedSend>();
+        guest.Service.SendResumed += (_, r) => resumed.TrySetResult(r);
+        guest.Service.Start();
+        var progress = new List<long>();
+
+        var run = await resumed.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await run.Run(new SyncProgress(progress), CancellationToken.None);
+
+        Assert.Equal(send, run.Send);
+        Assert.Equal(held, progress.First());
+        Assert.Equal(content, await File.ReadAllBytesAsync(Path.Combine(h.ReceivedRoot, "Guest PC", "left.bin")));
+        Assert.Empty(guest.Pending.Sends);
+    }
+
+    [Fact]
+    public async Task ChangedFileIsDroppedAndFails()
+    {
+        await using var h = new Harness();
+        var before = new GuestRig(h);
+        var host = await before.PairAsync();
+        var (send, _, _) = await LeaveHalfSentAsync(h, before, host);
+        before.Dispose();
+        await File.AppendAllTextAsync(send.Path, "more");
+        using var guest = new GuestRig(h, before.GuestId);
+        var resumed = new TaskCompletionSource<ResumedSend>();
+        guest.Service.SendResumed += (_, r) => resumed.TrySetResult(r);
+        guest.Service.Start();
+
+        var run = await resumed.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        await Assert.ThrowsAsync<IOException>(() => run.Run(null, CancellationToken.None));
+        Assert.Empty(guest.Pending.Sends);
+    }
+
+    [Fact]
+    public async Task FinishedAndCancelledSendsLeaveNoEntry()
+    {
+        await using var h = new Harness();
+        using var guest = new GuestRig(h);
+        var host = await guest.PairAsync();
+        string path = Path.Combine(h.Root, "done.bin");
+        await File.WriteAllBytesAsync(path, RandomNumberGenerator.GetBytes(1000));
+        await guest.Service.SendFileAsync(host.Id, path, null, CancellationToken.None);
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => guest.Service.SendFileAsync(host.Id, path, null, cancelled.Token));
+
+        Assert.Empty(guest.Pending.Sends);
     }
 
     [Fact]

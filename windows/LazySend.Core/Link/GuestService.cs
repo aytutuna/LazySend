@@ -1,5 +1,8 @@
 namespace LazySend.Core;
 
+/// <summary>An unfinished send found at start; <paramref name="Run"/> sends the rest and reports its progress.</summary>
+public sealed record ResumedSend(PendingSend Send, Func<IProgress<long>?, CancellationToken, Task> Run);
+
 /// <summary>
 /// This computer's side as a guest of other computers: pairing with them, sending to them, and taking what they
 /// queue while the app runs. A host that does not answer is tried again quietly, a little later each time; one
@@ -10,6 +13,7 @@ public sealed class GuestService : IDisposable
     private static readonly TimeSpan FirstRetry = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan LastRetry = TimeSpan.FromSeconds(60);
 
+    private readonly PendingSends _pending;
     private readonly string _guestId;
     private readonly string _guestName;
     private readonly string _appVersion;
@@ -20,15 +24,21 @@ public sealed class GuestService : IDisposable
     private bool _started;
     private bool _disposed;
 
-    public GuestService(HostStore hosts, ReceivedHistory history, SendSettings settings, string guestId, string guestName, string appVersion)
+    public GuestService(HostStore hosts, ReceivedHistory history, SendSettings settings, PendingSends pending, string guestId, string guestName,
+                        string appVersion)
     {
         Hosts = hosts;
+        _pending = pending;
         _guestId = guestId;
         _guestName = guestName;
         _appVersion = appVersion;
         Connector = new HostConnector(hosts, guestId);
         Receiver = new HostReceiver(hosts, history, settings);
-        hosts.Removed += (_, id) => StopWatching(id);
+        hosts.Removed += (_, id) =>
+        {
+            StopWatching(id);
+            pending.RemoveHost(id);
+        };
     }
 
     public HostStore Hosts { get; }
@@ -41,6 +51,9 @@ public sealed class GuestService : IDisposable
     /// <summary>A host that no longer knows this computer was dropped; the argument is its name.</summary>
     public event EventHandler<string>? Forgotten;
 
+    /// <summary>A file left unfinished by an earlier run of the app is carrying on; <see cref="ResumedSend.Run"/> does it.</summary>
+    public event EventHandler<ResumedSend>? SendResumed;
+
     public bool IsReachable(string hostId)
     {
         lock (_gate) return _reachable.Contains(hostId);
@@ -51,6 +64,11 @@ public sealed class GuestService : IDisposable
     {
         lock (_gate) _started = true;
         foreach (var host in Hosts.Hosts) Watch(host.Id);
+        foreach (var send in _pending.Sends)
+        {
+            if (Hosts.Find(send.HostId) is null) _pending.Remove(send.SendId);
+            else SendResumed?.Invoke(this, new ResumedSend(send, (progress, cancellation) => ResumeAsync(send, progress, cancellation)));
+        }
     }
 
     /// <summary>
@@ -171,8 +189,57 @@ public sealed class GuestService : IDisposable
 
     public async Task SendFileAsync(string hostId, string path, IProgress<long>? progress, CancellationToken cancellation)
     {
-        using var sender = SenderFor(hostId);
-        await sender.SendFileAsync(path, progress, cancellation).ConfigureAwait(false);
+        var request = HostSender.FileRequest(path) with { SendId = Protocol.NewSendId() };
+        var send = new PendingSend(hostId, request.SendId!, System.IO.Path.GetFullPath(path), request.Size!.Value, request.Modified!.Value, request.Sha256!);
+        await SendPendingAsync(send, request, progress, cancellation).ConfigureAwait(false);
+    }
+
+    /// <summary>Carries on with a file the host may already have part of, once the host answers. Throws when the file is gone or changed.</summary>
+    private async Task ResumeAsync(PendingSend send, IProgress<long>? progress, CancellationToken cancellation)
+    {
+        var info = new FileInfo(send.Path);
+        if (!info.Exists || info.Length != send.Size || new DateTimeOffset(info.LastWriteTimeUtc) != send.Modified)
+        {
+            _pending.Remove(send.SendId);
+            throw new IOException($"{info.Name} is gone or has changed since it was left unfinished.");
+        }
+        try
+        {
+            while (!IsReachable(send.HostId))
+            {
+                if (Hosts.Find(send.HostId) is null) throw new IOException("The computer was removed.");
+                await Task.Delay(TimeSpan.FromSeconds(1), cancellation).ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+            if (cancellation.IsCancellationRequested) _pending.Remove(send.SendId);
+            throw;
+        }
+        var request = new ItemRequest(ItemKind.File, Name: info.Name, Size: send.Size, Modified: send.Modified, Sha256: send.Sha256, SendId: send.SendId);
+        await SendPendingAsync(send, request, progress, cancellation).ConfigureAwait(false);
+    }
+
+    // The entry stays only when the app is ending, so the next run carries on; a finished, failed or cancelled send leaves no entry.
+    private async Task SendPendingAsync(PendingSend send, ItemRequest request, IProgress<long>? progress, CancellationToken cancellation)
+    {
+        _pending.Add(send);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellation, _stop.Token);
+        try
+        {
+            using var sender = SenderFor(send.HostId);
+            await sender.SendFileAsync(request, send.Path, progress, linked.Token).ConfigureAwait(false);
+        }
+        catch when (_stop.IsCancellationRequested && !cancellation.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            _pending.Remove(send.SendId);
+            throw;
+        }
+        _pending.Remove(send.SendId);
     }
 
     private HostSender SenderFor(string hostId) => new(cancellation => Connector.ConnectAsync(hostId, cancellation));
