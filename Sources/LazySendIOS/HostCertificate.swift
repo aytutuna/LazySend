@@ -6,18 +6,18 @@ import Security
 /// The phone's own certificate for hosting: a permanent P-256 key and a self-signed certificate in the Keychain,
 /// this device only. Guests pin the key, so a certificate that is about to end is renewed on the same key.
 struct HostCertificate {
-    static let label = "Lazy Send"
-    static let keyTag = Data("com.lazysend.identity".utf8)
     static let renewBefore: TimeInterval = 60 * 24 * 60 * 60
 
     let hostName: String
+    var label = "Lazy Send"
+    var keyTag = Data("com.lazysend.identity".utf8)
 
     func current(now: Date = Date()) throws -> SecIdentity {
         guard let key = try existingKey() else {
             return try makeIdentity(now: now)
         }
         if let der = try existingCertificate(), let notAfter = SelfSignedCertificate.notAfter(der),
-           notAfter > now.addingTimeInterval(HostCertificate.renewBefore), let identity = HostCertificate.identity() {
+           notAfter > now.addingTimeInterval(HostCertificate.renewBefore), let identity = keptIdentity() {
             return identity
         }
         return try addCertificate(for: key, now: now)
@@ -26,7 +26,7 @@ struct HostCertificate {
     private func existingKey() throws -> SecKey? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassKey,
-            kSecAttrApplicationTag as String: HostCertificate.keyTag,
+            kSecAttrApplicationTag as String: keyTag,
             kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
             kSecReturnRef as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
@@ -41,7 +41,7 @@ struct HostCertificate {
     private func existingCertificate() throws -> Data? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassCertificate,
-            kSecAttrLabel as String: HostCertificate.label,
+            kSecAttrLabel as String: label,
             kSecReturnRef as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
@@ -57,8 +57,8 @@ struct HostCertificate {
     private func makeIdentity(now: Date) throws -> SecIdentity {
         let privateAttributes: [String: Any] = [
             kSecAttrIsPermanent as String: true,
-            kSecAttrApplicationTag as String: HostCertificate.keyTag,
-            kSecAttrLabel as String: HostCertificate.label,
+            kSecAttrApplicationTag as String: keyTag,
+            kSecAttrLabel as String: label,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
         let attributes: [String: Any] = [
@@ -74,7 +74,7 @@ struct HostCertificate {
         do {
             return try addCertificate(for: key, now: now)
         } catch {
-            HostCertificate.deleteKeys()
+            deleteKeys()
             throw error
         }
     }
@@ -85,23 +85,23 @@ struct HostCertificate {
         guard let certificate = SelfSignedCertificate.certificate(der) else {
             throw SelfSignedCertificateError("The certificate that was made does not read.")
         }
-        HostCertificate.deleteCertificates()
+        deleteCertificates()
         let item: [String: Any] = [
             kSecClass as String: kSecClassCertificate,
             kSecValueRef as String: certificate,
-            kSecAttrLabel as String: HostCertificate.label,
+            kSecAttrLabel as String: label,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
         let added = SecItemAdd(item as CFDictionary, nil)
         guard added == errSecSuccess else { throw HostCertificate.failure("The certificate could not be added to the keychain", added) }
-        guard let identity = HostCertificate.identity() else {
-            HostCertificate.deleteCertificates()
+        guard let identity = keptIdentity() else {
+            deleteCertificates()
             throw SelfSignedCertificateError("The keychain did not pair the key with its certificate.")
         }
         return identity
     }
 
-    private static func identity() -> SecIdentity? {
+    private func keptIdentity() -> SecIdentity? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassIdentity,
             kSecAttrLabel as String: label,
@@ -113,11 +113,11 @@ struct HostCertificate {
         return (found as! SecIdentity)
     }
 
-    private static func deleteCertificates() {
+    private func deleteCertificates() {
         SecItemDelete([kSecClass as String: kSecClassCertificate, kSecAttrLabel as String: label] as CFDictionary)
     }
 
-    private static func deleteKeys() {
+    private func deleteKeys() {
         SecItemDelete([kSecClass as String: kSecClassKey, kSecAttrApplicationTag as String: keyTag] as CFDictionary)
     }
 
