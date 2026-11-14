@@ -133,9 +133,9 @@ final class GuestModelTests: XCTestCase {
         connecting.connect()
         XCTAssertEqual(connecting.step, .entering)
         XCTAssertFalse(connecting.message.isEmpty)
-        connecting.input = "https://example.com"
+        connecting.input = "lazysend:open?file=x"
         connecting.connect()
-        XCTAssertEqual(connecting.message, "This is not a Lazy Send pairing code.")
+        XCTAssertTrue(connecting.message.hasPrefix("This pairing code could not be read"), connecting.message)
     }
 
     func testTheNearbyListLeavesOutThisMacAndPicksTheOnlyOne() async throws {
