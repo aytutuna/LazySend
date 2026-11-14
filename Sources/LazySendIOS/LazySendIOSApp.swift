@@ -15,6 +15,7 @@ struct RootView: View {
                     case .send: SendView()
                     case .pair: PairView(app: model)
                     case .pcs: PcsView(go: { path.append($0) })
+                    case .receive: ReceiveView(host: model.host)
                     }
                 }
         }

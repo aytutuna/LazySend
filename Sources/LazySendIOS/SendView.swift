@@ -14,23 +14,23 @@ struct SendView: View {
 
     var body: some View {
         Group {
-            if let pc = model.selected {
-                form(pc)
+            if let target = model.selectedTarget {
+                form(target)
             } else {
                 Text("Nothing paired yet").foregroundStyle(.secondary)
             }
         }
-        .navigationTitle(model.selected.map { String(localized: "Send to \($0.name)") } ?? String(localized: "Send"))
+        .navigationTitle(model.selectedTarget.map { String(localized: "Send to \($0.name)") } ?? String(localized: "Send"))
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func form(_ pc: PairedPc) -> some View {
+    private func form(_ target: AppModel.Target) -> some View {
         Form {
             Section {
                 TextField("Type or paste text or a link", text: $text, axis: .vertical)
                     .lineLimit(1...6)
                     .accessibilityIdentifier("send.text")
-                Button("Send text") { sendText(to: pc) }
+                Button("Send text") { sendText(to: target) }
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .accessibilityIdentifier("send.textButton")
                 if let failure {
@@ -44,9 +44,14 @@ struct SendView: View {
                     Text("Pick photos")
                 }
                 .accessibilityIdentifier("send.photos")
-                Button("All photos and videos") { model.startGallerySync(for: pc) }
-                    .disabled(model.galleryRunning)
-                    .accessibilityIdentifier("send.gallery")
+                if let pc = model.pcs.first(where: { $0.id == target.id }) {
+                    Button("All photos and videos") { model.startGallerySync(for: pc) }
+                        .disabled(model.galleryRunning)
+                        .accessibilityIdentifier("send.gallery")
+                }
+                if let notice = model.notice {
+                    Text(notice).foregroundStyle(.red)
+                }
                 if model.photoNotice == .limited {
                     Text("Only the photos you allowed are sent.").foregroundStyle(.secondary)
                     Button("Allow all") { openSettings() }
@@ -61,7 +66,7 @@ struct SendView: View {
         }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             if case .success(let urls) = result {
-                model.sendFiles(urls, to: pc, scoped: true)
+                model.sendFiles(urls, to: target, scoped: true)
             }
         }
         .onChange(of: picks) { _, items in
@@ -72,7 +77,7 @@ struct SendView: View {
                 for item in items {
                     if let media = try? await item.loadTransferable(type: PickedMedia.self) { urls.append(media.url) }
                 }
-                model.sendFiles(urls, to: pc)
+                model.sendFiles(urls, to: target)
             }
         }
     }
@@ -82,9 +87,9 @@ struct SendView: View {
         UIApplication.shared.open(url, options: [:], completionHandler: nil)
     }
 
-    private func sendText(to pc: PairedPc) {
+    private func sendText(to target: AppModel.Target) {
         do {
-            try model.sendNote(text, to: pc)
+            try model.sendNote(text, to: target)
             text = ""
             failure = nil
         } catch {

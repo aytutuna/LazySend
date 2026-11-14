@@ -8,6 +8,7 @@ enum Route: Hashable {
     case send
     case pair
     case pcs
+    case receive
 }
 
 struct MainView: View {
@@ -18,7 +19,7 @@ struct MainView: View {
 
     var body: some View {
         Group {
-            if model.pcs.isEmpty {
+            if model.targets.isEmpty {
                 empty
             } else {
                 VStack(spacing: 0) {
@@ -30,8 +31,8 @@ struct MainView: View {
         .navigationTitle("Lazy Send")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                if !model.pcs.isEmpty {
-                    Button("Paired PCs") { go(.pcs) }
+                if !model.targets.isEmpty {
+                    Button("Devices") { go(.pcs) }
                         .accessibilityIdentifier("main.pcs")
                 }
             }
@@ -50,6 +51,8 @@ struct MainView: View {
             Button("Pair a PC") { go(.pair) }
                 .buttonStyle(.borderedProminent)
                 .accessibilityIdentifier("empty.pair")
+            Button("Receive from a phone") { go(.receive) }
+                .accessibilityIdentifier("empty.receive")
         }
         .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -57,24 +60,31 @@ struct MainView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if model.pcs.count > 1 {
-                Picker("PC", selection: Binding(get: { model.selected?.id ?? "" }, set: { model.select($0) })) {
-                    ForEach(model.pcs) { pc in
-                        Text(pc.name).tag(pc.id)
+            if model.targets.count > 1 {
+                Picker("Send to", selection: Binding(get: { model.selectedTarget?.id ?? "" }, set: { model.select($0) })) {
+                    ForEach(model.targets) { target in
+                        Text(target.name).tag(target.id)
                     }
                 }
                 .pickerStyle(.menu)
             }
-            if let pc = model.selected {
-                Text(pc.name).font(.headline)
-                if let link = model.links[pc.id] {
+            if let target = model.selectedTarget {
+                Text(target.name).font(.headline)
+                if target.phone {
+                    Text("\(target.name) picks up what you send the next time it connects to this phone.")
+                } else if let link = model.links[target.id] {
                     Text("Connected over \(link.label)")
                 } else {
-                    Text("\(pc.name) is not reachable")
+                    Text("\(target.name) is not reachable")
                 }
-                Button("Send") { go(.send) }
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityIdentifier("main.send")
+                HStack {
+                    Button("Send") { go(.send) }
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("main.send")
+                    Button("Receive") { go(.receive) }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("main.receive")
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -141,11 +151,13 @@ private struct EntryRow: View {
                 if !entry.detail.isEmpty {
                     Text(verbatim: entry.detail).font(.caption).foregroundStyle(.secondary)
                 }
-            } else if entry.kind == .file {
+            } else if entry.kind == .file, !entry.id.hasPrefix(HostModel.sentPrefix) {
                 ProgressView(value: Double(entry.bytes), total: Double(max(entry.totalBytes, 1)))
                 Text(verbatim: String(localized: "\(formatBytes(entry.bytes)) of \(formatBytes(entry.totalBytes))")).font(.caption)
-            } else {
+            } else if entry.detail.isEmpty {
                 ProgressView()
+            } else {
+                Text(verbatim: entry.detail).font(.caption).foregroundStyle(.secondary)
             }
         case .paused:
             Text("Paused").font(.caption)
@@ -153,7 +165,7 @@ private struct EntryRow: View {
             Text(verbatim: failedLine).font(.caption).foregroundStyle(.red)
         case .done:
             if entry.kind == .gallery {
-                Text(verbatim: String(localized: "\(entry.count) sent")).font(.caption)
+                Text(verbatim: sent ? String(localized: "\(entry.count) sent") : String(localized: "\(entry.count) received")).font(.caption)
                 if !entry.detail.isEmpty {
                     Text(verbatim: entry.detail).font(.caption).foregroundStyle(.secondary)
                 }
