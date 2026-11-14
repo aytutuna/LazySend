@@ -52,8 +52,8 @@ ZXing.Net 0.16.11 (zxing.dll)
 
 ZXing core 3.5.3 (Android app)
     By the ZXing authors. https://github.com/zxing/zxing
-    Apache License 2.0, in full below. The Android app uses it only to read
-    the pairing QR code from the camera.
+    Apache License 2.0, in full below. The Android app uses it to read and to draw
+    the pairing QR code.
 
 OkHttp 5, Okio, Kotlin and kotlinx libraries, AndroidX and Jetpack Compose,
 CameraX, WorkManager (Android app)
