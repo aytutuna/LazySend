@@ -13,8 +13,11 @@ final class HostFixture {
     let model: AppModel
     var host: HostModel { model.host }
 
-    init() throws {
+    init(photos: PhotoSource = .none, savedAssets: [String] = []) throws {
         var env = AppEnvironment.temporary()
+        env.photos = photos
+        let saved = SavedAssets(file: env.support.appendingPathComponent("saved-assets.json"))
+        for id in savedAssets { saved.insert(id) }
         let identity = try HostFixture.identity()
         env.identity = { identity }
         env.addresses = { ["127.0.0.1"] }
@@ -314,6 +317,90 @@ final class HostModelTests: XCTestCase {
         XCTAssertTrue(gone)
         XCTAssertTrue(host.devices.isEmpty)
         XCTAssertTrue(model.timeline.entries.filter { $0.direction == .sent }.allSatisfy { $0.state == .failed })
+    }
+
+    private func library(count: Int, access: PhotoAccess = .allowed) -> PhotoSource {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("lazysend-library-" + UUID().uuidString, isDirectory: true)
+        return PhotoSource(access: { access }, items: { skipping in
+            (1...count).map { "asset-\($0)#photo" }.filter { !skipping.contains(String($0.split(separator: "#")[0])) }.map { id in
+                GalleryItem(sourceId: id, name: "IMG.jpg", mime: "image/jpeg", modified: Date(timeIntervalSince1970: 1_615_809_600), sizeHint: 3) {
+                    let temp = folder.appendingPathComponent(UUID().uuidString, isDirectory: true)
+                    try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+                    try Data([1, 2, 3]).write(to: temp.appendingPathComponent("original"))
+                    return ExportedFile(url: temp.appendingPathComponent("original"), size: 3, cleanup: { try? FileManager.default.removeItem(at: temp) })
+                }
+            }
+        })
+    }
+
+    func testTheLibraryIsFedToAGuestPhoneTwentyFilesAtATime() async throws {
+        fixture = try HostFixture(photos: library(count: 30))
+        await fixture.startReceiving()
+        let guest = try await fixture.pair("Pixel")
+        let target = try XCTUnwrap(model.targets.first { $0.phone })
+        model.startGalleryFeed(for: target)
+        let queued = await fixture.until { self.host.feeds[guest.id]?.total == 30 && self.fixture.staged().count == 20 }
+        XCTAssertTrue(queued)
+        let items = try await guest.client.outbox(wait: 0).items
+        XCTAssertEqual(items.count, 20)
+        XCTAssertEqual(items[0].sourceId, "asset-1#photo")
+        XCTAssertEqual(items[0].taken, "2021-03-15T12:00:00Z")
+        for item in items { try await guest.client.acknowledge(item.id) }
+        let finished = await fixture.until { self.host.feeds[guest.id]?.sent == 20 && self.fixture.staged().count == 10 }
+        XCTAssertTrue(finished)
+        for item in try await guest.client.outbox(wait: 0).items { try await guest.client.acknowledge(item.id) }
+        let done = await fixture.until { self.host.feeds[guest.id] == GalleryFeedProgress(sent: 30, total: 30, done: true) }
+        XCTAssertTrue(done)
+        XCTAssertTrue(fixture.staged().isEmpty)
+    }
+
+    func testThePhotosThisAppSavedAreNotFed() async throws {
+        fixture = try HostFixture(photos: library(count: 5), savedAssets: ["asset-2", "asset-4"])
+        await fixture.startReceiving()
+        _ = try await fixture.pair("Pixel")
+        model.startGalleryFeed(for: try XCTUnwrap(model.targets.first { $0.phone }))
+        let queued = await fixture.until { self.fixture.staged().count == 3 }
+        XCTAssertTrue(queued)
+        let ids = host.feeds.values.first
+        XCTAssertEqual(ids?.total, 3)
+    }
+
+    func testAFeedIsNotStartedWithoutPhotoAccess() async throws {
+        fixture = try HostFixture(photos: library(count: 5, access: .denied))
+        await fixture.startReceiving()
+        _ = try await fixture.pair("Pixel")
+        model.startGalleryFeed(for: try XCTUnwrap(model.targets.first { $0.phone }))
+        let noticed = await fixture.until { self.model.photoNotice == .denied }
+        XCTAssertTrue(noticed)
+        XCTAssertTrue(host.feeds.isEmpty)
+        XCTAssertTrue(fixture.staged().isEmpty)
+    }
+
+    func testStoppingTheFeedTakesBackWhatWasQueued() async throws {
+        fixture = try HostFixture(photos: library(count: 30))
+        await fixture.startReceiving()
+        let guest = try await fixture.pair("Pixel")
+        let target = try XCTUnwrap(model.targets.first { $0.phone })
+        model.startGalleryFeed(for: target)
+        let queued = await fixture.until { self.fixture.staged().count == 20 }
+        XCTAssertTrue(queued)
+        model.stopGalleryFeed(for: target)
+        let stopped = await fixture.until { self.fixture.staged().isEmpty && self.host.feeds.isEmpty }
+        XCTAssertTrue(stopped)
+        let left = try await guest.client.outbox(wait: 0).items
+        XCTAssertTrue(left.isEmpty)
+    }
+
+    func testRemovingAGuestPhoneEndsItsFeed() async throws {
+        fixture = try HostFixture(photos: library(count: 30))
+        await fixture.startReceiving()
+        let guest = try await fixture.pair("Pixel")
+        model.startGalleryFeed(for: try XCTUnwrap(model.targets.first { $0.phone }))
+        let queued = await fixture.until { self.fixture.staged().count == 20 }
+        XCTAssertTrue(queued)
+        model.remove(phone: try XCTUnwrap(model.phones.first))
+        let gone = await fixture.until { self.fixture.staged().isEmpty && self.host.feeds[guest.id] == nil }
+        XCTAssertTrue(gone)
     }
 
     func testAPeerThatIsHostAndGuestHasTwoRows() async throws {
