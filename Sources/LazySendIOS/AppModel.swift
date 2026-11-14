@@ -87,6 +87,7 @@ final class AppModel: ObservableObject {
     private var held: Set<String> = []
     private var grace = UIBackgroundTaskIdentifier.invalid
     private let saved: SavedAssets
+    private let gallery: GalleryIndex
 
     init(env: AppEnvironment) {
         self.env = env
@@ -96,6 +97,7 @@ final class AppModel: ObservableObject {
         self.store = store
         self.timeline = timeline
         self.saved = saved
+        gallery = GalleryIndex(directory: env.support.appendingPathComponent("guest-index", isDirectory: true))
         connector = PcConnector(store: store, discovery: env.discovery)
         queue = ShareQueue(root: env.folder)
         host = HostModel(env: env, phoneId: { store.phoneId }, timeline: timeline, saved: saved)
@@ -207,6 +209,9 @@ final class AppModel: ObservableObject {
             links[id] = reached.link
             guard let collector = outboxCollector(for: id) else { return }
             do {
+                if let pc = store.get(id), let waiting = try? await reached.client.outbox(wait: 0), !waiting.more {
+                    ReceiveHandler.removeStaleParts(folder: env.documents, pcName: pc.name, keeping: Set(waiting.items.map(\.id)))
+                }
                 while true {
                     _ = try await collector.collect(api: reached.client, wait: LinkProtocol.maxOutboxWait)
                 }
@@ -226,7 +231,8 @@ final class AppModel: ObservableObject {
     private func outboxCollector(for id: String) -> OutboxCollector? {
         if let existing = collectors[id] { return existing }
         guard let pc = store.get(id) else { return nil }
-        let handler = ReceiveHandler(pcId: pc.id, pcName: pc.name, timeline: timeline, folder: env.documents, notifier: env.notifier, defaults: env.defaults, saved: saved)
+        let handler = ReceiveHandler(pcId: pc.id, pcName: pc.name, timeline: timeline, folder: env.documents, notifier: env.notifier, defaults: env.defaults, saved: saved,
+                                     gallery: gallery)
         let made = OutboxCollector(handler: handler)
         collectors[id] = made
         return made
@@ -236,6 +242,7 @@ final class AppModel: ObservableObject {
     private func lostPc(_ id: String) {
         guard let pc = store.get(id) else { return }
         store.remove(id)
+        forgetGallery(of: pc)
         collectors[id] = nil
         links[id] = nil
         timeline.add(TimelineEntry(id: "notice-" + UUID().uuidString, direction: .received, kind: .text, pcName: pc.name,
@@ -259,9 +266,15 @@ final class AppModel: ObservableObject {
             try? await reached.client.forgetSelf()
         }
         store.remove(pc.id)
+        forgetGallery(of: pc)
         collectors[pc.id] = nil
         links[pc.id] = nil
         refreshPcs()
+    }
+
+    private func forgetGallery(of pc: PairedPc) {
+        gallery.clear(pc.id)
+        ReceiveHandler.discardParts(folder: env.documents, pcName: pc.name)
     }
 
     func setSavesToPhotos(_ on: Bool) {

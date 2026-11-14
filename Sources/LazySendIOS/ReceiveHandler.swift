@@ -20,10 +20,10 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
     private var handles: [String: FileHandle] = [:]
     private var parts: [String: URL] = [:]
     private var lastReport: [String: Date] = [:]
-    // The gallery files finished lately: they have no timeline entry to say so.
-    private var finishedGallery: [String] = []
+    private let gallery: GalleryIndex
 
-    init(pcId: String, pcName: String, timeline: Timeline, folder: URL, notifier: Notifier, defaults: UserDefaults, saved: SavedAssets) {
+    init(pcId: String, pcName: String, timeline: Timeline, folder: URL, notifier: Notifier, defaults: UserDefaults, saved: SavedAssets,
+         gallery: GalleryIndex) {
         self.pcId = pcId
         self.pcName = pcName
         self.timeline = timeline
@@ -31,6 +31,7 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
         self.notifier = notifier
         self.defaults = defaults
         self.saved = saved
+        self.gallery = gallery
     }
 
     private func entryId(_ item: OutboxEntry) -> String {
@@ -46,11 +47,7 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
     }
 
     func isDone(_ item: OutboxEntry) async -> Bool {
-        if item.gallerySource != nil {
-            lock.lock()
-            defer { lock.unlock() }
-            return finishedGallery.contains(item.id)
-        }
+        if let source = item.gallerySource { return gallery.contains(pcId, source) }
         let id = entryId(item)
         return await MainActor.run { timeline.get(id)?.state == .done }
     }
@@ -187,10 +184,7 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
         if let taken = item.takenDate {
             try? fm.setAttributes([.modificationDate: taken], ofItemAtPath: target.path)
         }
-        lock.lock()
-        finishedGallery.append(item.id)
-        if finishedGallery.count > 200 { finishedGallery.removeFirst(finishedGallery.count - 200) }
-        lock.unlock()
+        if let source = item.gallerySource { gallery.add(pcId, source) }
         let row = galleryRowId
         let pcName = self.pcName
         let first = await MainActor.run { () -> Bool in
@@ -260,6 +254,27 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
         lastReport[id] = nil
         lock.unlock()
         try? handle?.close()
+    }
+
+    // The part files a computer left in its folder: named by an item's id, which keeps them apart from saved files.
+    private static func partFiles(folder: URL, pcName: String) -> [URL] {
+        let directory = folder.appendingPathComponent(FileNames.clean(pcName, fallback: "Computer"), isDirectory: true)
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+        return names.filter { $0.hasSuffix(".part") && isValidId(String($0.dropLast(5))) }.map { directory.appendingPathComponent($0) }
+    }
+
+    /// The computer was removed, so what it had begun is of no use.
+    static func discardParts(folder: URL, pcName: String) {
+        partFiles(folder: folder, pcName: pcName).forEach { try? FileManager.default.removeItem(at: $0) }
+    }
+
+    /// Parts no listed item will continue that nothing has touched for a day.
+    static func removeStaleParts(folder: URL, pcName: String, keeping listed: Set<String>, now: Date = Date()) {
+        for url in partFiles(folder: folder, pcName: pcName) where !listed.contains(String(url.lastPathComponent.dropLast(5))) {
+            guard let modified = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date,
+                  now.timeIntervalSince(modified) > 24 * 3600 else { continue }
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     static func saveToPhotos(_ url: URL, mime: String?, taken: Date? = nil, defaults: UserDefaults, saved: SavedAssets) {

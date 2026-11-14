@@ -10,7 +10,8 @@ final class ReceiveHandlerTests: XCTestCase {
         let env = AppEnvironment.temporary()
         let timeline = Timeline(file: env.support.appendingPathComponent("timeline.json"))
         let handler = ReceiveHandler(pcId: "office-pc-0001", pcName: "Office PC", timeline: timeline, folder: env.documents, notifier: .silent, defaults: env.defaults,
-                                     saved: SavedAssets(file: env.support.appendingPathComponent("saved-assets.json")))
+                                     saved: SavedAssets(file: env.support.appendingPathComponent("saved-assets.json")),
+                                     gallery: GalleryIndex(directory: env.support.appendingPathComponent("guest-index")))
         return (handler, timeline, env.documents, env)
     }
 
@@ -86,7 +87,8 @@ final class ReceiveHandlerTests: XCTestCase {
         XCTAssertEqual(timeline.get("in-item-0001")?.state, .paused)
 
         let second = ReceiveHandler(pcId: "office-pc-0001", pcName: "Office PC", timeline: timeline, folder: folder, notifier: .silent, defaults: env.defaults,
-                                      saved: SavedAssets(file: env.support.appendingPathComponent("saved-assets.json")))
+                                      saved: SavedAssets(file: env.support.appendingPathComponent("saved-assets.json")),
+                                     gallery: GalleryIndex(directory: env.support.appendingPathComponent("guest-index")))
         let have = try await second.prepareFile(item)
         XCTAssertEqual(have, 5)
         XCTAssertEqual(timeline.get("in-item-0001")?.bytes, 5)
@@ -178,9 +180,53 @@ final class ReceiveHandlerTests: XCTestCase {
         try first.write(Data("hello".utf8), for: item)
         await first.pause(item)
         let second = ReceiveHandler(pcId: "office-pc-0001", pcName: "Office PC", timeline: timeline, folder: folder, notifier: .silent, defaults: env.defaults,
-                                    saved: SavedAssets(file: env.support.appendingPathComponent("saved-assets.json")))
+                                    saved: SavedAssets(file: env.support.appendingPathComponent("saved-assets.json")),
+                                     gallery: GalleryIndex(directory: env.support.appendingPathComponent("guest-index")))
         let have = try await second.prepareFile(item)
         XCTAssertEqual(have, 5)
+    }
+
+    func testAnAssetReceivedBeforeIsDoneUnderANewItemId() async throws {
+        let (handler, _, _, _) = fixture()
+        let item = gallery("gallery-0005", name: "IMG_5.jpg", size: 1)
+        _ = try await handler.prepareFile(item)
+        try handler.write(Data([1]), for: item)
+        try await handler.finishFile(item)
+        var again = item
+        again.id = "gallery-0006"
+        let done = await handler.isDone(again)
+        XCTAssertTrue(done)
+    }
+
+    func testRemovingAComputerDeletesItsPartsAndKeepsSavedFiles() async throws {
+        let (handler, _, folder, _) = fixture()
+        let finished = gallery("gallery-0007", name: "IMG_7.jpg", size: 1)
+        _ = try await handler.prepareFile(finished)
+        try handler.write(Data([1]), for: finished)
+        try await handler.finishFile(finished)
+        let begun = gallery("gallery-0008", name: "IMG_8.jpg", size: 10)
+        _ = try await handler.prepareFile(begun)
+        XCTAssertTrue(exists(folder, "Office PC/gallery-0008.part"))
+        ReceiveHandler.discardParts(folder: folder, pcName: "Office PC")
+        XCTAssertFalse(exists(folder, "Office PC/gallery-0008.part"))
+        XCTAssertTrue(exists(folder, "Office PC/Gallery/\(Inbox.month(Date()))/IMG_7.jpg"))
+    }
+
+    func testOldPartsNoItemWillContinueAreSweptButListedAndFreshOnesStay() async throws {
+        let (_, _, folder, _) = fixture()
+        let directory = folder.appendingPathComponent("Office PC", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        for name in ["stale-part-0001", "listed-part-0001", "fresh-part-0001"] {
+            try Data([1]).write(to: directory.appendingPathComponent(name + ".part"))
+        }
+        let old = Date().addingTimeInterval(-3 * 24 * 3600)
+        for name in ["stale-part-0001", "listed-part-0001"] {
+            try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: directory.appendingPathComponent(name + ".part").path)
+        }
+        ReceiveHandler.removeStaleParts(folder: folder, pcName: "Office PC", keeping: ["listed-part-0001"])
+        XCTAssertFalse(exists(folder, "Office PC/stale-part-0001.part"))
+        XCTAssertTrue(exists(folder, "Office PC/listed-part-0001.part"))
+        XCTAssertTrue(exists(folder, "Office PC/fresh-part-0001.part"))
     }
 
     func testGalleryFileIsAcknowledgedAfterTheDownload() async throws {
