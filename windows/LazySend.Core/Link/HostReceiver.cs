@@ -30,7 +30,7 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
         {
             var reply = await client.OutboxAsync(waitSeconds, cancellation).ConfigureAwait(false);
             more = reply.More == true;
-            foreach (var item in reply.Items)
+            foreach (var item in reply.Items ?? [])
             {
                 if (!Protocol.IsValidId(item.Id) || hosts.Find(hostId) is not { } host) continue;
                 await HandleAsync(host, client, item, cancellation).ConfigureAwait(false);
@@ -56,13 +56,30 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
         }
         catch (LinkException e) when (!LeavesQueued(e))
         {
+            DropPart(host, item);
             Failed?.Invoke(this, $"{item.Name ?? "An item"} from {host.Name} could not be received: {e.Message}");
         }
         catch (LocalFailure e)
         {
+            DropPart(host, item);
             Failed?.Invoke(this, $"{item.Name ?? "An item"} from {host.Name} could not be saved: {e.Message}");
         }
         await client.AcknowledgeAsync(item.Id, cancellation).ConfigureAwait(false);
+    }
+
+    private string DirectoryOf(GuestHost host) => Path.Combine(settings.ReceiveRoot, FileNames.Clean(host.Name, "Computer"));
+
+    /// <summary>What an item that is dropped from the host's queue leaves half-downloaded is of no use.</summary>
+    private void DropPart(GuestHost host, OutboxEntry item)
+    {
+        try
+        {
+            File.Delete(Path.Combine(DirectoryOf(host), item.Id + ".part"));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            System.Diagnostics.Trace.TraceWarning($"Could not delete a part file: {e.Message}");
+        }
     }
 
     /// <summary>A refusal that goes away or is not about this item: the item stays queued.</summary>
@@ -83,7 +100,7 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
 
     private async Task DownloadAsync(GuestHost host, LinkClient client, OutboxEntry item, CancellationToken cancellation)
     {
-        string directory = Path.Combine(settings.ReceiveRoot, FileNames.Clean(host.Name, "Computer"));
+        string directory = DirectoryOf(host);
         string part = Path.Combine(directory, item.Id + ".part");
         long size = item.Size ?? -1;
         long have = Local(() =>
@@ -124,10 +141,19 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
         string path = Local(() =>
         {
             string target = Path.Combine(directory, FileNames.Unique(directory, FileNames.Clean(item.Name)));
+            // An empty file was never downloaded, so there is no part yet.
+            if (!File.Exists(part)) File.WriteAllBytes(part, []);
             File.Move(part, target);
-            Inbox.MarkAsDownloaded(target);
             return target;
         });
+        try
+        {
+            Inbox.MarkAsDownloaded(path);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            System.Diagnostics.Trace.TraceWarning($"Could not mark a received file as downloaded: {e.Message}");
+        }
         FileReceived?.Invoke(this, new ReceivedFile(host.Id, host.Name, path, size, null));
     }
 

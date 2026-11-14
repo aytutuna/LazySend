@@ -504,6 +504,25 @@ public class GuestReceiveTests
     }
 
     [Fact]
+    public async Task EmptyFileArrivesWithoutAPartFile()
+    {
+        await using var h = new Harness();
+        using var guest = new GuestRig(h);
+        var host = await guest.PairAsync();
+        string source = Path.Combine(h.Root, "nothing.txt");
+        await File.WriteAllBytesAsync(source, []);
+        h.Service.Outbox.QueueFile(guest.GuestId, source);
+        using var client = await guest.Service.Connector.ConnectAsync(host.Id, CancellationToken.None);
+
+        await guest.Service.Receiver.CollectAsync(client, host.Id, 0, CancellationToken.None);
+
+        string folder = Path.Combine(guest.Paths.DefaultReceiveRoot, "Test PC");
+        Assert.Equal(0, new FileInfo(Path.Combine(folder, "nothing.txt")).Length);
+        Assert.Empty(Directory.GetFiles(folder, "*.part"));
+        Assert.Empty(h.Service.Outbox.Pending(guest.GuestId));
+    }
+
+    [Fact]
     public async Task FileThatChangedOnTheHostIsDroppedWithAMessage()
     {
         await using var h = new Harness();
@@ -511,8 +530,11 @@ public class GuestReceiveTests
         var host = await guest.PairAsync();
         string source = Path.Combine(h.Root, "moved.txt");
         await File.WriteAllTextAsync(source, "before");
-        h.Service.Outbox.QueueFile(guest.GuestId, source);
+        var item = h.Service.Outbox.QueueFile(guest.GuestId, source);
         await File.WriteAllTextAsync(source, "after, and longer");
+        string folder = Path.Combine(guest.Paths.DefaultReceiveRoot, "Test PC");
+        Directory.CreateDirectory(folder);
+        await File.WriteAllBytesAsync(Path.Combine(folder, item.Id + ".part"), new byte[3]);
         string? failure = null;
         guest.Service.Receiver.Failed += (_, text) => failure = text;
         using var client = await guest.Service.Connector.ConnectAsync(host.Id, CancellationToken.None);
@@ -521,6 +543,7 @@ public class GuestReceiveTests
 
         Assert.Contains("moved.txt", failure);
         Assert.Empty(h.Service.Outbox.Pending(guest.GuestId));
+        Assert.Empty(Directory.GetFiles(folder, "*.part"));
     }
 }
 
