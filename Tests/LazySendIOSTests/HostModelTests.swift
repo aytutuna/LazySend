@@ -274,7 +274,8 @@ final class HostModelTests: XCTestCase {
         XCTAssertEqual(queued, 1)
         XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
         XCTAssertEqual(fixture.staged().count, 1)
-        let item = try XCTUnwrap(try await guest.client.outbox(wait: 0).items.first)
+        let pending = try await guest.client.outbox(wait: 0).items
+        let item = try XCTUnwrap(pending.first)
         XCTAssertEqual(item.name, "holiday.mp4")
         XCTAssertEqual(item.size, Int64(content.count))
         var received = Data()
