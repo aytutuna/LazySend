@@ -18,6 +18,7 @@ public sealed class GuestService : IDisposable
     private readonly HashSet<string> _reachable = [];
     private readonly CancellationTokenSource _stop = new();
     private bool _started;
+    private bool _disposed;
 
     public GuestService(HostStore hosts, ReceivedHistory history, SendSettings settings, string guestId, string guestName, string appVersion)
     {
@@ -195,11 +196,11 @@ public sealed class GuestService : IDisposable
         CancellationTokenSource watch;
         lock (_gate)
         {
-            if (!_started || _watching.ContainsKey(hostId)) return;
+            if (_disposed || !_started || _watching.ContainsKey(hostId)) return;
             watch = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
             _watching[hostId] = watch;
         }
-        _ = Task.Run(() => WatchAsync(hostId, watch.Token));
+        _ = Task.Run(() => WatchAsync(hostId, watch));
     }
 
     private void StopWatching(string hostId)
@@ -211,42 +212,62 @@ public sealed class GuestService : IDisposable
         }
     }
 
-    private async Task WatchAsync(string hostId, CancellationToken cancellation)
+    /// <summary>Keeps taking what the host queues. Whatever goes wrong, it tries again later; only a removed host or the end of the app stops it.</summary>
+    private async Task WatchAsync(string hostId, CancellationTokenSource watch)
     {
+        var cancellation = watch.Token;
         var retry = FirstRetry;
-        while (!cancellation.IsCancellationRequested)
+        try
         {
-            try
+            while (!cancellation.IsCancellationRequested)
             {
-                using var client = await Connector.ConnectAsync(hostId, cancellation).ConfigureAwait(false);
-                SetReachable(hostId, true);
-                retry = FirstRetry;
-                while (true) await Receiver.CollectAsync(client, hostId, Protocol.MaxOutboxWaitSeconds, cancellation).ConfigureAwait(false);
+                try
+                {
+                    using var client = await Connector.ConnectAsync(hostId, cancellation).ConfigureAwait(false);
+                    SetReachable(hostId, true);
+                    retry = FirstRetry;
+                    while (true) await Receiver.CollectAsync(client, hostId, Protocol.MaxOutboxWaitSeconds, cancellation).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (LinkException e) when (e.Status == 401)
+                {
+                    string? name = Hosts.Find(hostId)?.Name;
+                    SetReachable(hostId, false);
+                    try
+                    {
+                        if (Hosts.Remove(hostId) && name is not null) Forgotten?.Invoke(this, name);
+                        return;
+                    }
+                    catch (IOException)
+                    {
+                        // The entry could not be saved away; it stays and is asked again later.
+                    }
+                }
+                catch (Exception)
+                {
+                    SetReachable(hostId, false);
+                }
+                try
+                {
+                    await Task.Delay(retry, cancellation).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                retry = TimeSpan.FromTicks(Math.Min(retry.Ticks * 2, LastRetry.Ticks));
             }
-            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        }
+        finally
+        {
+            lock (_gate)
             {
-                return;
+                if (_watching.TryGetValue(hostId, out var current) && ReferenceEquals(current, watch)) _watching.Remove(hostId);
+                watch.Dispose();
             }
-            catch (LinkException e) when (e.Status == 401)
-            {
-                string? name = Hosts.Find(hostId)?.Name;
-                StopWatching(hostId);
-                if (Hosts.Remove(hostId) && name is not null) Forgotten?.Invoke(this, name);
-                return;
-            }
-            catch (Exception e) when (e is IOException or LinkException)
-            {
-                SetReachable(hostId, false);
-            }
-            try
-            {
-                await Task.Delay(retry, cancellation).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-            retry = TimeSpan.FromTicks(Math.Min(retry.Ticks * 2, LastRetry.Ticks));
         }
     }
 
@@ -261,6 +282,11 @@ public sealed class GuestService : IDisposable
 
     public void Dispose()
     {
+        lock (_gate)
+        {
+            _disposed = true;
+            foreach (var watch in _watching.Values) watch.Cancel();
+        }
         _stop.Cancel();
         _stop.Dispose();
     }

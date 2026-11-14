@@ -151,5 +151,5 @@ public sealed class HostStore
 
     /// <summary>What <c>hello</c> lists goes first, then what was known; scoped addresses cannot go in a URL, so they are left out.</summary>
     public static List<string> MergeAddresses(IEnumerable<string> fromHello, IEnumerable<string> known) =>
-        [.. fromHello.Concat(known).Where(a => !a.Contains('%')).Distinct().Take(PairingUri.MaxAddresses)];
+        [.. fromHello.Concat(known).Where(a => !a.Contains('%') && PairingUri.IsValidAddress(a)).Distinct().Take(PairingUri.MaxAddresses)];
 }

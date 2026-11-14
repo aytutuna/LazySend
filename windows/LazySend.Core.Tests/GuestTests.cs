@@ -202,12 +202,47 @@ public class GuestConnectionTests
         {
             entry.Addresses = [];
             entry.LastAddress = null;
+            entry.Port = 1;
         });
-        guest.Service.Connector.Announced = (_, _) => Task.FromResult<IReadOnlyList<string>>(["127.0.0.1"]);
+        guest.Service.Connector.Announced = (_, _) => Task.FromResult<NearbyHost?>(guest.Nearby);
 
         using var client = await guest.Service.Connector.ConnectAsync(host.Id, CancellationToken.None);
 
-        Assert.Equal("127.0.0.1", guest.Hosts.Find(host.Id)!.LastAddress);
+        var stored = guest.Hosts.Find(host.Id)!;
+        Assert.Equal("127.0.0.1", stored.LastAddress);
+        Assert.Equal(h.Port, stored.Port);
+    }
+
+    [Fact]
+    public async Task ConnectingAgainLeavesTheStoreAlone()
+    {
+        await using var h = new Harness();
+        using var guest = new GuestRig(h);
+        var host = await guest.PairAsync();
+        using (await guest.Service.Connector.ConnectAsync(host.Id, CancellationToken.None))
+        {
+        }
+        int changes = 0;
+        guest.Hosts.Changed += (_, _) => changes++;
+
+        using var client = await guest.Service.Connector.ConnectAsync(host.Id, CancellationToken.None);
+
+        Assert.Equal(0, changes);
+    }
+
+    [Fact]
+    public async Task UnreadableKeyIsNotTakenForAForgottenHost()
+    {
+        await using var h = new Harness();
+        using var guest = new GuestRig(h);
+        var host = await guest.PairAsync();
+        guest.Hosts.Update(host.Id, entry => entry.ProtectedSecret = "AAAA");
+
+        var failure = await Assert.ThrowsAsync<LinkException>(() => guest.Service.Connector.ConnectAsync(host.Id, CancellationToken.None));
+
+        Assert.Equal(0, failure.Status);
+        Assert.Contains("Connect to it again", failure.Message);
+        Assert.Single(guest.Hosts.Hosts);
     }
 
     [Fact]
@@ -574,7 +609,7 @@ public class HostStoreTests
     [Fact]
     public void AddressesMergeHelloFirstWithoutDuplicatesScopesOrMoreThanEight()
     {
-        var merged = HostStore.MergeAddresses(["10.0.0.9", "10.0.0.2"], ["10.0.0.2", "fe80::1%12", "10.0.0.3", "10.0.0.4", "10.0.0.5", "10.0.0.6", "10.0.0.7", "10.0.0.8"]);
+        var merged = HostStore.MergeAddresses(["10.0.0.9", "not an address", "10.0.0.2"], ["10.0.0.2", "fe80::1%12", "10.0.0.3", "10.0.0.4", "10.0.0.5", "10.0.0.6", "10.0.0.7", "10.0.0.8"]);
 
         Assert.Equal(["10.0.0.9", "10.0.0.2", "10.0.0.3", "10.0.0.4", "10.0.0.5", "10.0.0.6", "10.0.0.7", "10.0.0.8"], merged);
     }

@@ -30,10 +30,10 @@ public sealed partial class AppModel
         return [.. found.Where(h => h.Id != Service.Devices.DesktopId)];
     }
 
-    private async Task<IReadOnlyList<string>> AnnouncedAsync(string hostId, CancellationToken cancellation)
+    private async Task<NearbyHost?> AnnouncedAsync(string hostId, CancellationToken cancellation)
     {
         var found = await _browser.FindAsync(TimeSpan.FromSeconds(2), cancellation).ConfigureAwait(false);
-        return found.FirstOrDefault(h => h.Id == hostId)?.Addresses ?? [];
+        return found.FirstOrDefault(h => h.Id == hostId);
     }
 
     /// <summary>Selects the computer with this id in the list, once it is there.</summary>
@@ -106,7 +106,7 @@ public sealed partial class AppModel
             {
                 status = "Cancelled";
             }
-            catch (Exception e) when (e is IOException or LinkException or UnauthorizedAccessException)
+            catch (Exception e)
             {
                 status = $"Not sent: {e.Message}";
             }

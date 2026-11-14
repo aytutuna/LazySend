@@ -54,7 +54,7 @@ public sealed class HostSender(Func<CancellationToken, Task<LinkClient>> connect
             {
                 state = await PutAsync(state, buffer.AsMemory(0, length), cancellation).ConfigureAwait(false);
             }
-            catch (LinkException e) when (e.Code == ErrorCode.OffsetMismatch && e.Offset is { } offset)
+            catch (LinkException e) when (e.Code == ErrorCode.OffsetMismatch && e.Offset is { } offset && offset >= 0 && offset <= size)
             {
                 state = state with { Offset = offset };
             }
