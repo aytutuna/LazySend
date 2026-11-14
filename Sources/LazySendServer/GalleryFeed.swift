@@ -6,6 +6,8 @@ public enum GalleryFeedWait: Equatable, Sendable {
     case storage
     /// The guest has as many items waiting as the outbox holds.
     case outbox
+    /// The phone no longer lets the app read its photos.
+    case photos
 }
 
 public struct GalleryFeedProgress: Equatable, Sendable {
@@ -52,6 +54,7 @@ public final class GalleryFeed {
     private var later: [String: [GalleryItem]] = [:]
     private var retried: [String: Set<String>] = [:]
     private var waits: [String: GalleryFeedWait] = [:]
+    private var photosDenied = false
     private var loading: Set<String> = []
     // Guests whose run is being set up: the library is read before the run exists.
     private var starting: Set<String> = []
@@ -85,7 +88,7 @@ public final class GalleryFeed {
         guard let run = runs[deviceId] else { return nil }
         let count = max(sent.count(deviceId) - run.base, 0)
         return GalleryFeedProgress(sent: count, total: max(run.total, count + run.failed), done: run.done, failed: run.failed,
-                                   wait: run.done ? nil : waits[deviceId])
+                                   wait: run.done ? nil : (photosDenied ? .photos : waits[deviceId]))
     }
 
     public var running: Set<String> {
@@ -106,6 +109,13 @@ public final class GalleryFeed {
         lists[deviceId] = todo.reversed()
         save()
         await fill(deviceId)
+    }
+
+    /// Tells the feed whether the app may read the photo library; while it may not, running feeds are paused.
+    public func setPhotosAllowed(_ allowed: Bool) {
+        guard photosDenied == allowed else { return }
+        photosDenied = !allowed
+        onChange?()
     }
 
     /// Carries on the runs that were going when the app was closed, and tops the others up.
@@ -177,7 +187,7 @@ public final class GalleryFeed {
 
     /// False when the phone is too full to export the next asset and the try has to be repeated later.
     private func topUp(_ deviceId: String) async -> Bool {
-        while runs[deviceId]?.done == false, lists[deviceId] != nil {
+        while runs[deviceId]?.done == false, lists[deviceId] != nil, !photosDenied {
             let waiting = outbox.pending(deviceId).filter { $0.sourceId != nil }
             if waiting.count >= Self.queueLimit { return true }
             guard let item = lists[deviceId]?.last else {

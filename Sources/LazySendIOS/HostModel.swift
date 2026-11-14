@@ -53,6 +53,8 @@ final class HostModel: ObservableObject {
     @Published private(set) var feeds: [String: GalleryFeedProgress] = [:]
 
     var onDevicesChanged: (() -> Void)?
+    /// A running feed found that the app may no longer read the photos.
+    var onPhotosDenied: (() -> Void)?
     /// The server side exists: what was left queued for the phones can be delivered.
     var onReady: (() -> Void)?
 
@@ -563,7 +565,12 @@ final class HostModel: ObservableObject {
         Task { @MainActor in
             await self.setup?.value
             guard self.foreground, let feed = self.feed, !feed.running.isEmpty else { return }
-            guard await self.env.photos.access() != .denied else { return }
+            let allowed = await self.env.photos.access() != .denied
+            feed.setPhotosAllowed(allowed)
+            guard allowed else {
+                self.onPhotosDenied?()
+                return
+            }
             await feed.resume()
         }
     }

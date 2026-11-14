@@ -319,9 +319,9 @@ final class HostModelTests: XCTestCase {
         XCTAssertTrue(model.timeline.entries.filter { $0.direction == .sent }.allSatisfy { $0.state == .failed })
     }
 
-    private func library(count: Int, access: PhotoAccess = .allowed) -> PhotoSource {
+    private func library(count: Int, access: @escaping @Sendable () -> PhotoAccess = { .allowed }) -> PhotoSource {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("lazysend-library-" + UUID().uuidString, isDirectory: true)
-        return PhotoSource(access: { access }, items: { skipping in
+        return PhotoSource(access: { access() }, items: { skipping in
             (1...count).map { "asset-\($0)#photo" }.filter { !skipping.contains(String($0.split(separator: "#")[0])) }.map { id in
                 GalleryItem(sourceId: id, name: "IMG.jpg", mime: "image/jpeg", modified: Date(timeIntervalSince1970: 1_615_809_600), sizeHint: 3) {
                     let temp = folder.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -366,7 +366,7 @@ final class HostModelTests: XCTestCase {
     }
 
     func testAFeedIsNotStartedWithoutPhotoAccess() async throws {
-        fixture = try HostFixture(photos: library(count: 5, access: .denied))
+        fixture = try HostFixture(photos: library(count: 5, access: { .denied }))
         await fixture.startReceiving()
         _ = try await fixture.pair("Pixel")
         model.startGalleryFeed(for: try XCTUnwrap(model.targets.first { $0.phone }))
@@ -374,6 +374,24 @@ final class HostModelTests: XCTestCase {
         XCTAssertTrue(noticed)
         XCTAssertTrue(host.feeds.isEmpty)
         XCTAssertTrue(fixture.staged().isEmpty)
+    }
+
+    func testARunningFeedShowsAsPausedWhenPhotoAccessIsTakenAway() async throws {
+        final class Access: @unchecked Sendable {
+            var value = PhotoAccess.allowed
+        }
+        let access = Access()
+        fixture = try HostFixture(photos: library(count: 30, access: { access.value }))
+        await fixture.startReceiving()
+        let guest = try await fixture.pair("Pixel")
+        model.startGalleryFeed(for: try XCTUnwrap(model.targets.first { $0.phone }))
+        let queued = await fixture.until { self.fixture.staged().count == 20 }
+        XCTAssertTrue(queued)
+        access.value = .denied
+        host.sceneChanged(active: false)
+        host.sceneChanged(active: true)
+        let paused = await fixture.until { self.host.feeds[guest.id]?.wait == .photos && self.model.photoNotice == .denied }
+        XCTAssertTrue(paused)
     }
 
     func testStoppingTheFeedTakesBackWhatWasQueued() async throws {

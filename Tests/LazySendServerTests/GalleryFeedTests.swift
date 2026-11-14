@@ -275,6 +275,20 @@ final class GalleryFeedTests: XCTestCase {
         XCTAssertTrue(copies().isEmpty)
     }
 
+    func testAFeedPausesWhilePhotosCannotBeRead() async {
+        await feed.start(guest)
+        feed.setPhotosAllowed(false)
+        XCTAssertEqual(feed.progress(guest)?.wait, .photos)
+        outbox.acknowledge(guest, queued()[0].id)
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(queued().count, 19)
+        XCTAssertEqual(library.exports, 20)
+        feed.setPhotosAllowed(true)
+        await feed.resume()
+        XCTAssertEqual(queued().count, 20)
+        XCTAssertNil(feed.progress(guest)?.wait)
+    }
+
     func testTheTotalGrowsWhenTheLibraryDoes() async {
         library = FakeLibrary(folder: root, count: 2)
         makeFeed()

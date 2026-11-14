@@ -97,6 +97,8 @@ struct SendView: View {
                     .accessibilityIdentifier("send.galleryProgress")
                 if progress.wait == .storage {
                     Text("Waiting for free storage").foregroundStyle(.secondary)
+                } else if progress.wait == .photos {
+                    Text("Paused. Lazy Send needs access to your photos.").foregroundStyle(.secondary)
                 } else if progress.wait == .outbox {
                     Text("Waiting for \(target.name) to take what is queued").foregroundStyle(.secondary)
                 }

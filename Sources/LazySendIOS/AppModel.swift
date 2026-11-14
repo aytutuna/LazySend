@@ -105,6 +105,7 @@ final class AppModel: ObservableObject {
         savesToPhotos = env.defaults.bool(forKey: Keys.photos)
         host.onDevicesChanged = { [weak self] in self?.refreshPcs() }
         host.$feeds.assign(to: &$feeds)
+        host.onPhotosDenied = { [weak self] in self?.photoNotice = .denied }
         host.onReady = { [weak self] in self?.drainShareQueue() }
         if env.demo { seedDemo() }
         removeStrayCopies()
