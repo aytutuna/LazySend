@@ -227,7 +227,7 @@ public sealed partial class AppModel
                 Notice?.Invoke(this, "That text is too long to send (the limit is 1 MiB).");
                 return false;
             }
-            SendToComputer(phone, link ? TimelineKind.Link : TimelineKind.Text, sent, null,
+            SendToComputer(phone.Id, phone.Name, link ? TimelineKind.Link : TimelineKind.Text, sent, null,
                            (stop, _) => link ? Guest.SendLinkAsync(phone.Id, sent, stop) : Guest.SendTextAsync(phone.Id, sent, stop));
             return true;
         }

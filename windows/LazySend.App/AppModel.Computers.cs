@@ -20,6 +20,7 @@ public sealed partial class AppModel
         Guest.Forgotten += (_, name) => _ui.BeginInvoke(() => Notice?.Invoke(this, $"{name} no longer recognizes this PC. Connect to it again to send to it."));
         Guest.ReachabilityChanged += (_, _) => _ui.BeginInvoke(UpdateLastSeen);
         Guest.Hosts.Changed += (_, _) => _ui.BeginInvoke(RefreshPhones);
+        Guest.SendResumed += (_, resumed) => _ui.BeginInvoke(() => ShowResumed(resumed));
         Guest.Start();
     }
 
@@ -39,6 +40,13 @@ public sealed partial class AppModel
     /// <summary>Selects the computer with this id in the list, once it is there.</summary>
     public void SelectComputer(string id) => SelectPhone(Phones.FirstOrDefault(p => p.Id == id));
 
+    private void ShowResumed(ResumedSend resumed)
+    {
+        var send = resumed.Send;
+        string name = Guest.Hosts.Find(send.HostId)?.Name ?? "computer";
+        SendToComputer(send.HostId, name, TimelineKind.File, null, send.Path, (stop, progress) => resumed.Run(progress, stop), send.Size);
+    }
+
     private int SendFilesToComputer(PhoneRow computer, IEnumerable<string> paths)
     {
         int started = 0;
@@ -56,7 +64,7 @@ public sealed partial class AppModel
                 continue;
             }
             var info = new FileInfo(path);
-            SendToComputer(computer, TimelineKind.File, null, path, (stop, progress) => Guest.SendFileAsync(computer.Id, path, progress, stop), info.Length);
+            SendToComputer(computer.Id, computer.Name, TimelineKind.File, null, path, (stop, progress) => Guest.SendFileAsync(computer.Id, path, progress, stop), info.Length);
             started++;
         }
         if (problem is not null) Notice?.Invoke(this, problem);
@@ -64,16 +72,16 @@ public sealed partial class AppModel
     }
 
     /// <summary>Adds a row for what is being sent and runs <paramref name="send"/>, two at a time; the row says how it went.</summary>
-    private void SendToComputer(PhoneRow computer, TimelineKind kind, string? text, string? path,
+    private void SendToComputer(string computerId, string computerName, TimelineKind kind, string? text, string? path,
                                 Func<CancellationToken, IProgress<long>, Task> send, long size = 0)
     {
         var stop = new CancellationTokenSource();
-        var row = new TimelineItem(kind, true, computer.Id, computer.Name, DateTimeOffset.UtcNow) { Text = text, Path = path, SendStop = stop };
+        var row = new TimelineItem(kind, true, computerId, computerName, DateTimeOffset.UtcNow) { Text = text, Path = path, SendStop = stop };
         row.Heading = kind switch
         {
             TimelineKind.File => System.IO.Path.GetFileName(path) ?? "File",
-            TimelineKind.Link => $"Link to {computer.Name}",
-            _ => $"Text to {computer.Name}",
+            TimelineKind.Link => $"Link to {computerName}",
+            _ => $"Text to {computerName}",
         };
         string sizeText = kind == TimelineKind.File ? LinkDetector.FormatSize(size) + ", " : "";
         row.CanCancel = true;
@@ -95,7 +103,7 @@ public sealed partial class AppModel
                 {
                     await _ui.BeginInvoke(() => row.Detail = $"{sizeText}Sending, {Stamp(row.Time)}");
                     await send(stop.Token, progress).ConfigureAwait(false);
-                    status = $"Sent to {computer.Name}";
+                    status = $"Sent to {computerName}";
                 }
                 finally
                 {
