@@ -75,6 +75,8 @@ data class OutboxEntry(
     val name: String? = null,
     val size: Long? = null,
     val mime: String? = null,
+    val sourceId: String? = null,
+    val taken: String? = null,
 )
 
 @Serializable

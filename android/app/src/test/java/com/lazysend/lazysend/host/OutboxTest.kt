@@ -31,6 +31,16 @@ class OutboxTest {
     }
 
     @Test
+    fun anOutboxFileWrittenBeforeTheGalleryFieldsStillLoads() {
+        val file = File(dir, "old-outbox.json")
+        file.writeText("""{"items":[{"id":"item-0001","deviceId":"phone-0001","kind":"file","path":"/tmp/x.jpg","name":"x.jpg","size":3,"queued":1}]}""")
+        val item = Outbox(file, File(dir, "old-outgoing")).find("phone-0001", "item-0001")
+        assertNotNull(item)
+        assertNull(item!!.sourceId)
+        assertNull(item.taken)
+    }
+
+    @Test
     fun aFileThatCannotBeReadLeavesNoCopyAndNoItem() {
         try {
             outbox.queueFile("phone-0001", "a", null) { throw IOException("gone") }

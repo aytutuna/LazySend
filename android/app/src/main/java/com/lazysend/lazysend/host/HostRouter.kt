@@ -14,6 +14,7 @@ import com.lazysend.lazysend.link.PROTOCOL_VERSION
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
+import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -273,7 +274,9 @@ class HostRouter(
         for (item in items) {
             val bytes = (item.text?.toByteArray()?.size ?: 0) + (item.url?.toByteArray()?.size ?: 0)
             if (entries.isNotEmpty() && (entries.size >= MAX_REPLY_ITEMS || inline + bytes > MAX_REPLY_INLINE)) break
-            entries.add(OutboxEntry(item.id, item.kind, item.text, item.url, item.name, item.size, item.mime))
+            entries.add(
+                OutboxEntry(item.id, item.kind, item.text, item.url, item.name, item.size, item.mime, item.sourceId, item.taken?.let { Instant.ofEpochMilli(it).toString() }),
+            )
             inline += bytes
         }
         return HostResponse.json(200, OutboxReply(entries, if (entries.size < items.size) true else null))

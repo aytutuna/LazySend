@@ -20,6 +20,9 @@ data class OutboxItem(
     val name: String? = null,
     val size: Long? = null,
     val mime: String? = null,
+    val sourceId: String? = null,
+    /** When the asset was taken, epoch milliseconds. */
+    val taken: Long? = null,
     val queued: Long,
 )
 
