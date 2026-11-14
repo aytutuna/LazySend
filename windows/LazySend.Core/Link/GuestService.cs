@@ -171,7 +171,7 @@ public sealed class GuestService : IDisposable
     {
         try
         {
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(4));
             using var client = await Connector.ConnectAsync(hostId, timeout.Token).ConfigureAwait(false);
             await client.ForgetSelfAsync(timeout.Token).ConfigureAwait(false);
         }
