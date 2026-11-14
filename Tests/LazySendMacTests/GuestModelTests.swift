@@ -75,7 +75,7 @@ final class GuestModelFixture {
     func pairByLink() async throws -> PairedPc {
         let code = host.openPairing(addresses: ["127.0.0.1"])
         let pc = try await guest.pair(try PairingCode.parse(code.uri))
-        await assertEventually { self.model.phones.contains { $0.id == pc.id } }
+        await assertEventually { self.model.phones.contains { $0.id == PhoneRow.hostPrefix + pc.id } }
         return pc
     }
 
@@ -213,7 +213,7 @@ final class GuestModelTests: XCTestCase {
 
     func testTextAndFilesGoToTheSelectedComputerAndTheRowsSayHowItWent() async throws {
         let pc = try await fixture.pairByLink()
-        XCTAssertEqual(model.selectedPhoneId, pc.id)
+        XCTAssertEqual(model.selectedPhoneId, PhoneRow.hostPrefix + pc.id)
         XCTAssertTrue(model.sendText("hello studio"))
         let row = try XCTUnwrap(model.timeline.first)
         XCTAssertEqual(row.heading, "Text to Studio Mac")
@@ -279,7 +279,7 @@ final class GuestModelTests: XCTestCase {
 
     func testRemovingAComputerForgetsItOnBothSides() async throws {
         let pc = try await fixture.pairByLink()
-        model.remove(phone: pc.id)
+        model.remove(phone: PhoneRow.hostPrefix + pc.id)
         await assertEventually { model.phones.isEmpty }
         XCTAssertTrue(fixture.host.devices.devices.isEmpty)
         XCTAssertNil(model.selectedPhoneId)
@@ -293,6 +293,21 @@ final class GuestModelTests: XCTestCase {
         XCTAssertEqual(model.notice, "\(pc.name) no longer recognizes this Mac. Connect to it again to send to it.")
     }
 
+    func testTheSameMachineAsAPhoneAndAsAComputerKeepsTwoRows() async throws {
+        let hostId = fixture.host.devices.desktopId
+        _ = try fixture.own.devices.pair(id: hostId, name: "Studio Mac", platform: "mac", appVersion: "1", now: Date())
+        let pc = try await fixture.pairByLink()
+        await assertEventually { model.phones.count == 2 }
+        XCTAssertEqual(Set(model.phones.map(\.id)), [hostId, PhoneRow.hostPrefix + pc.id])
+        model.selectedPhoneId = PhoneRow.hostPrefix + pc.id
+        XCTAssertTrue(model.sendText("to the computer row"))
+        await assertEventually { fixture.host.history.items.first?.text == "to the computer row" }
+        XCTAssertTrue(fixture.own.outbox.pending(hostId).isEmpty)
+        model.remove(phone: PhoneRow.hostPrefix + pc.id)
+        await assertEventually { model.phones.map(\.id) == [hostId] }
+        XCTAssertEqual(fixture.own.devices.devices.map(\.id), [hostId])
+    }
+
     func testPhonesAndComputersShareTheDeviceList() async throws {
         let phoneId = newId()
         _ = try fixture.own.devices.pair(id: phoneId, name: "Pixel", platform: "android", appVersion: "1", now: Date())
@@ -300,7 +315,7 @@ final class GuestModelTests: XCTestCase {
         await assertEventually { model.phones.count == 2 }
         XCTAssertEqual(model.phones.map(\.computer), [false, true])
         XCTAssertEqual(model.selectedPhoneId, phoneId)
-        model.selectedPhoneId = pc.id
+        model.selectedPhoneId = PhoneRow.hostPrefix + pc.id
         XCTAssertEqual(model.targetTitle, "Send to Studio Mac")
     }
 

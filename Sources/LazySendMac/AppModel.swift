@@ -11,6 +11,11 @@ public struct PhoneRow: Identifiable, Equatable {
     public var lastSeen: String
     /// A computer this Mac is a guest of, not a phone paired with it.
     public var computer = false
+    /// A computer's row id starts with this, so it cannot meet the id of the same machine paired here as a phone.
+    static let hostPrefix = "host:"
+
+    /// The computer's own id, for the guest service.
+    var hostId: String { id.hasPrefix(PhoneRow.hostPrefix) ? String(id.dropFirst(PhoneRow.hostPrefix.count)) : id }
 }
 
 public enum TimelineKind: Equatable {
@@ -237,7 +242,7 @@ public final class AppModel: ObservableObject {
 
     private func refreshPhones() {
         var rows = service.devices.devices.map { PhoneRow(id: $0.id, name: $0.name, platform: $0.platform, lastSeen: AppModel.lastSeen($0.lastSeen, now: Date())) }
-        rows += (guest?.hosts.pcs ?? []).map { PhoneRow(id: $0.id, name: $0.name, platform: "computer", lastSeen: computerStatus($0.id), computer: true) }
+        rows += (guest?.hosts.pcs ?? []).map { PhoneRow(id: PhoneRow.hostPrefix + $0.id, name: $0.name, platform: "computer", lastSeen: computerStatus($0.id), computer: true) }
         phones = rows
         if selectedPhoneId == nil || !rows.contains(where: { $0.id == selectedPhoneId }) { selectedPhoneId = rows.first?.id }
         refreshSent()
@@ -256,8 +261,9 @@ public final class AppModel: ObservableObject {
     }
 
     public func remove(phone id: String) {
-        if let guest = guest, guest.hosts.get(id) != nil {
-            Task { await guest.forget(id) }
+        if id.hasPrefix(PhoneRow.hostPrefix), let guest = guest {
+            let hostId = String(id.dropFirst(PhoneRow.hostPrefix.count))
+            Task { await guest.forget(hostId) }
         } else {
             service.devices.remove(id)
         }
@@ -347,7 +353,7 @@ public final class AppModel: ObservableObject {
         let seen = phones.map { phone -> PhoneRow in
             var phone = phone
             if phone.computer {
-                phone.lastSeen = computerStatus(phone.id)
+                phone.lastSeen = computerStatus(phone.hostId)
             } else if let device = devices.first(where: { $0.id == phone.id }) {
                 phone.lastSeen = AppModel.lastSeen(device.lastSeen, now: now)
             }
@@ -580,8 +586,6 @@ public final class AppModel: ObservableObject {
         if !service.outbox.acknowledge(row.deviceId, outboxId) { refreshSent() }
     }
 
-    // MARK: Sending to a computer
-
     private func sendNote(_ text: String, to computer: PhoneRow) -> Bool {
         guard let guest = guest else { return false }
         let note: ItemRequest
@@ -593,21 +597,21 @@ public final class AppModel: ObservableObject {
         }
         let link = note.kind == "link"
         let sent = link ? note : ItemRequest(kind: "text", text: AppModel.trimmingEnd(text))
-        var row = TimelineRow(id: UUID().uuidString, kind: link ? .link : .text, sent: true, deviceId: computer.id, deviceName: computer.name,
+        var row = TimelineRow(id: UUID().uuidString, kind: link ? .link : .text, sent: true, deviceId: computer.hostId, deviceName: computer.name,
                               time: Date(), text: link ? sent.url : sent.text)
         row.heading = link ? "Link to \(computer.name)" : "Text to \(computer.name)"
-        let id = computer.id
+        let id = computer.hostId
         startSend(row, size: 0) { _ in try await guest.send(sent, to: id) }
         return true
     }
 
     private func sendFile(_ url: URL, to computer: PhoneRow) {
         guard let guest = guest else { return }
-        var row = TimelineRow(id: UUID().uuidString, kind: .file, sent: true, deviceId: computer.id, deviceName: computer.name, time: Date(),
+        var row = TimelineRow(id: UUID().uuidString, kind: .file, sent: true, deviceId: computer.hostId, deviceName: computer.name, time: Date(),
                               fileURL: url)
         row.heading = url.lastPathComponent
         let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.int64Value ?? 0
-        let id = computer.id
+        let id = computer.hostId
         startSend(row, size: size) { progress in
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
@@ -658,14 +662,12 @@ public final class AppModel: ObservableObject {
         change(&timeline[index])
     }
 
-    // MARK: Connecting to a computer
-
     public func beginConnecting() {
         guard let guest = guest, connecting == nil else { return }
         let model = ConnectModel(guest: guest, ownId: service.devices.desktopId)
         model.onPaired = { [weak self] pc in
             self?.refreshPhones()
-            self?.selectedPhoneId = pc.id
+            self?.selectedPhoneId = PhoneRow.hostPrefix + pc.id
         }
         connecting = model
     }

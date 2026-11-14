@@ -95,11 +95,27 @@ public final class ConnectModel: ObservableObject {
         message = text
     }
 
-    /// Shows the digits and waits for the user's answer; the code is sent only on yes.
+    /// Shows the digits and waits for the user's answer; the code is sent only on yes. A task cancelled before or
+    /// while it waits answers no.
     private func compare(_ digits: String) async -> Bool {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
-            comparison = continuation
-            step = .comparing(digits)
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                guard !Task.isCancelled else {
+                    continuation.resume(returning: false)
+                    return
+                }
+                comparison = continuation
+                step = .comparing(digits)
+            }
+        } onCancel: {
+            Task { @MainActor in self.dropComparison() }
+        }
+    }
+
+    private func dropComparison() {
+        if let waiting = comparison {
+            comparison = nil
+            waiting.resume(returning: false)
         }
     }
 
@@ -114,10 +130,7 @@ public final class ConnectModel: ObservableObject {
     public func cancel() {
         pairing?.cancel()
         pairing = nil
-        if let waiting = comparison {
-            comparison = nil
-            waiting.resume(returning: false)
-        }
+        dropComparison()
     }
 }
 #endif
