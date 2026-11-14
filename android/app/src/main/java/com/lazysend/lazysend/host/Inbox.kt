@@ -323,17 +323,15 @@ class Inbox(
             file.finished = clock()
             removed = !records.containsKey(file.id)
             if (!removed && file.sourceId != null) indexed = runCatching { index.add(file.deviceId, file.sourceId) }.isSuccess
-            // The index answers for a gallery file from here on, so its record has nothing left to keep.
-            if (indexed) {
-                records.remove(file.id)
-                unsend(file)
-            }
+            // The index answers for a gallery file from here on. Its record stays only when it carries a send id, so a
+            // repeat of that send is still answered as done until the record is pruned, as on the other hosts.
+            if (indexed && file.sendId == null) records.remove(file.id)
             untrack(file)
         }
         writers.remove(file.id)
         // The guest was removed while the file was finishing: the file stays, nothing is announced or recorded.
         if (removed) return
-        if (indexed) File(directory, "${file.id}.json").delete() else runCatching { save(file) }
+        if (indexed && file.sendId == null) File(directory, "${file.id}.json").delete() else runCatching { save(file) }
         onFinished(file)
     }
 

@@ -212,6 +212,19 @@ class InboxTest {
 
 
     @Test
+    fun aRepeatedSendIdOfAFinishedGalleryFileIsStillDone() {
+        val request = ItemRequest("file", name = "a.jpg", size = 3, sourceId = "s1", sendId = sendId)
+        val begun = inbox.begin(guest, request)
+        put(begun.id, 0, ByteArray(3))
+        val again = inbox.begin(guest, request)
+        assertEquals(begun.id, again.id)
+        assertEquals(3L, again.offset)
+        assertTrue(again.done)
+        assertNull(again.duplicate)
+        assertEquals(begun.id, newInbox().begin(guest, request).id)
+    }
+
+    @Test
     fun aGalleryFilesRecordGoesOnceTheIndexHasIt() {
         val request = ItemRequest("file", name = "a.jpg", size = 3, sourceId = "s1")
         val plain = inbox.begin(guest, ItemRequest("file", name = "b.txt", size = 3))
