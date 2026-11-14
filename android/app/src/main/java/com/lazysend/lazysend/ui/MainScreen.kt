@@ -30,6 +30,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lazysend.lazysend.R
+import com.lazysend.lazysend.host.FeedProgress
 import com.lazysend.lazysend.data.Direction
 import com.lazysend.lazysend.data.EntryKind
 import com.lazysend.lazysend.data.EntryState
@@ -46,6 +47,8 @@ data class MainState(
     val selected: String?,
     val entries: List<TimelineEntry>,
     val photoAccess: PhotoAccess = PhotoAccess.Full,
+    /** How far the library feed for the selected guest of this phone has got. */
+    val feed: FeedProgress? = null,
 )
 
 class MainActions(
@@ -55,6 +58,8 @@ class MainActions(
     val onSend: () -> Unit = {},
     val onSelect: (String) -> Unit = {},
     val onGallery: () -> Unit = {},
+    val onFeed: () -> Unit = {},
+    val onStopFeed: () -> Unit = {},
     val onStop: () -> Unit = {},
     val onAllowPhotos: () -> Unit = {},
     val onCopy: (String) -> Unit = {},
@@ -128,9 +133,30 @@ private fun Connection(state: MainState, actions: MainActions) {
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = actions.onSend) { Text(stringResource(R.string.send)) }
-                if (!pc.guest) OutlinedButton(onClick = actions.onGallery) { Text(stringResource(R.string.send_all_photos)) }
+                OutlinedButton(onClick = if (pc.guest) actions.onFeed else actions.onGallery, enabled = state.feed?.done != false || !pc.guest) {
+                    Text(stringResource(R.string.send_all_photos))
+                }
             }
-            if (state.photoAccess == PhotoAccess.Partial && !pc.guest) {
+            val feed = state.feed.takeIf { pc.guest }
+            if (feed != null) {
+                if (feed.done) {
+                    Text(
+                        if (feed.total == 0) stringResource(R.string.feed_nothing_new, pc.name) else stringResource(R.string.feed_done, feed.sent, pc.name),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            stringResource(R.string.feed_progress, feed.sent, feed.total, pc.name) +
+                                if (feed.lowStorage) " " + stringResource(R.string.feed_low_storage) else "",
+                            Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        TextButton(onClick = actions.onStopFeed) { Text(stringResource(R.string.stop)) }
+                    }
+                }
+            }
+            if (state.photoAccess == PhotoAccess.Partial) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.photo_access_partial), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                     TextButton(onClick = actions.onAllowPhotos) { Text(stringResource(R.string.allow_all_photos)) }

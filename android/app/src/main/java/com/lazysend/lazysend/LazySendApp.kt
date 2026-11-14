@@ -20,7 +20,9 @@ import com.lazysend.lazysend.transfer.PcConnector
 import com.lazysend.lazysend.transfer.MediaFiles
 import com.lazysend.lazysend.transfer.Receiver
 import com.lazysend.lazysend.transfer.Sender
+import com.lazysend.lazysend.ui.PhotoAccess
 import java.io.File
+import java.io.IOException
 import okhttp3.OkHttpClient
 
 class AppGraph(private val app: Application) {
@@ -30,7 +32,8 @@ class AppGraph(private val app: Application) {
     val timeline = Timeline(File(app.filesDir, "timeline.json"))
     val notifications = Notifications(app)
     val connector = PcConnector(pcs, NsdFinder(app), OkHttpClient())
-    val sender = Sender(app, connector, timeline, MediaAssets(app))
+    private val media = MediaAssets(app)
+    val sender = Sender(app, connector, timeline, media)
     val receiver = Receiver(
         connector, timeline, files, GalleryIndex(File(app.filesDir, "guest-index")), GalleryParts(File(app.filesDir, "gallery-parts.json")),
         notifications::received,
@@ -51,6 +54,8 @@ class AppGraph(private val app: Application) {
             HostIdentity(File(app.filesDir, "host/cert.der"), key.private, key.public, ::deviceName)
         },
         advertiser = HostAdvertiser(app), notifyReceived = notifications::received,
+        assets = { if (MainActivity.photoAccess(app) == PhotoAccess.None) null else media.list() },
+        openAsset = { app.contentResolver.openInputStream(it.uri) ?: throw IOException("Cannot open ${it.uri}") },
     )
 }
 

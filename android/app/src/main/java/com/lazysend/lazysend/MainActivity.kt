@@ -92,7 +92,9 @@ class MainActivity : ComponentActivity() {
             if (access != PhotoAccess.None && pendingGallery) {
                 model.selectedPc()?.let { SendService.syncGallery(this@MainActivity, it.id) }
             }
+            if (access != PhotoAccess.None && pendingFeed) model.startFeed()
             pendingGallery = false
+            pendingFeed = false
         }
         fun requestPhotos() = photoPermissions.launch(photoPermissionList())
 
@@ -139,6 +141,15 @@ class MainActivity : ComponentActivity() {
                             model.selectedPc()?.let { SendService.syncGallery(this@MainActivity, it.id) }
                         }
                     },
+                    onFeed = {
+                        if (photoAccess(this@MainActivity) == PhotoAccess.None) {
+                            pendingFeed = true
+                            requestPhotos()
+                        } else {
+                            model.startFeed()
+                        }
+                    },
+                    onStopFeed = model::stopFeed,
                     onStop = { SendService.stop(this@MainActivity) },
                     onAllowPhotos = { requestPhotos() },
                     onCopy = { copy(it) },
@@ -195,6 +206,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private var pendingGallery = false
+    private var pendingFeed = false
 
     // From Android 17 other devices on the network reach this phone only with the local network permission.
     private var localNetworkDenied by mutableStateOf(false)

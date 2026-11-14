@@ -33,6 +33,10 @@
     <string name="gallery_title">Photos and videos</string>
     <string name="gallery_progress">%1$d of %2$d · %3$s of %4$s</string>
     <string name="gallery_done">%1$d sent</string>
+    <string name="feed_progress">%1$d of %2$d sent to %3$s</string>
+    <string name="feed_low_storage">Waiting for free storage.</string>
+    <string name="feed_done">All %1$d photos and videos sent to %2$s</string>
+    <string name="feed_nothing_new">Nothing new to send to %1$s</string>
     <string name="photo_access_partial">Only the photos you allowed are sent.</string>
     <string name="allow_all_photos">Allow all</string>
     <string name="photo_permission_needed">Lazy Send needs access to your photos and videos to send them.</string>

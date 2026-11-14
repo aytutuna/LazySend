@@ -41,15 +41,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val notice = MutableStateFlow<String?>(null)
 
     val state: StateFlow<MainState> = combine(
-        combine(graph.pcs.pcs, graph.host.core.guests.guests) { pcs, guests -> pcs to guests },
+        combine(graph.pcs.pcs, graph.host.core.guests.guests, graph.host.core.feed.progress) { pcs, guests, feeds -> Triple(pcs, guests, feeds) },
         graph.timeline.entries, graph.connector.current, selected, photoAccess,
-    ) { (pcs, guests), entries, links, pick, access ->
+    ) { (pcs, guests, feeds), entries, links, pick, access ->
         val rows = pcs.map { PcRow(it.id, it.name, links[it.id]?.label) } + guests.map { PcRow(GUEST + it.id, it.name, null, guest = true) }
+        val chosen = pick?.takeIf { id -> rows.any { it.id == id } } ?: rows.firstOrNull()?.id
         MainState(
             pcs = rows,
-            selected = pick?.takeIf { id -> rows.any { it.id == id } } ?: rows.firstOrNull()?.id,
+            selected = chosen,
             entries = entries,
             photoAccess = access,
+            feed = chosen?.takeIf { it.startsWith(GUEST) }?.let { feeds[it.removePrefix(GUEST)] },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MainState(emptyList(), null, emptyList()))
 
@@ -71,6 +73,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun selectedPc(): Pc? = state.value.selected?.takeIf { !it.startsWith(GUEST) }?.let(graph.pcs::get)
 
     fun selectedGuest(): Guest? = state.value.selected?.takeIf { it.startsWith(GUEST) }?.let { graph.host.core.guests.get(it.removePrefix(GUEST)) }
+
+    /** Sends the whole library to the selected guest of this phone, a few files at a time as it picks them up. */
+    fun startFeed() {
+        val guest = selectedGuest() ?: return
+        graph.host.start()
+        graph.host.core.feed.start(guest.id)
+    }
+
+    fun stopFeed() {
+        selectedGuest()?.let { graph.host.core.feed.stop(it.id) }
+    }
 
     fun openReceive() = graph.host.open()
 
