@@ -32,7 +32,7 @@ class HostCore(
     val guests = GuestStore(File(root, "guests.json"))
     val gallery = GalleryIndex(File(root, "index"))
     val inbox = Inbox(File(root, "incoming"), files, gallery, freeSpace, clock)
-    val outbox = Outbox(File(root, "outbox.json"), File(root, "outgoing"), clock)
+    val outbox = Outbox(File(root, "outbox.json"), File(root, "outgoing"), clock, freeSpace)
     val limiter = RateLimiter()
     val router = HostRouter(guests, inbox, outbox, gallery, limiter, hostId, hostName, clock)
 

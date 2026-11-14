@@ -294,10 +294,14 @@ class HostController(
         for (uri in uris) {
             try {
                 var name = uri.lastPathSegment ?: "file"
-                resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
-                    if (it.moveToFirst()) it.getString(0)?.let { n -> name = n }
+                var size: Long? = null
+                resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use {
+                    if (it.moveToFirst()) {
+                        it.getString(0)?.let { n -> name = n }
+                        if (!it.isNull(1)) size = it.getLong(1)
+                    }
                 }
-                val item = core.outbox.queueFile(guest.id, name, resolver.getType(uri)) { resolver.openInputStream(uri) ?: throw java.io.IOException("Cannot open $uri") }
+                val item = core.outbox.queueFile(guest.id, name, resolver.getType(uri), size) { resolver.openInputStream(uri) ?: throw java.io.IOException("Cannot open $uri") }
                 queued(guest, item, EntryKind.File, item.name.orEmpty())
             } catch (e: Exception) {
                 // One file that cannot be read must not stop the ones behind it.

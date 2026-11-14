@@ -31,7 +31,12 @@ private data class OutboxFile(val items: List<OutboxItem> = emptyList())
  * acknowledges it; the copy of a file goes with it. A guest that asks with nothing queued waits and is woken when
  * something is. Safe to use from any thread.
  */
-class Outbox(private val file: File, private val copies: File, private val clock: () -> Long = System::currentTimeMillis) {
+class Outbox(
+    private val file: File,
+    private val copies: File,
+    private val clock: () -> Long = System::currentTimeMillis,
+    private val freeSpace: () -> Long = { Long.MAX_VALUE },
+) {
     private var items = loadJson(file) { OutboxFile() }.items
     private val changes = MutableStateFlow(0)
 
@@ -60,9 +65,11 @@ class Outbox(private val file: File, private val copies: File, private val clock
         return add(OutboxItem(newId(), deviceId, "link", url = url, queued = clock()))
     }
 
-    /** Copies what [open] reads into the app's storage and queues it; the copy is deleted once the guest has it. */
-    fun queueFile(deviceId: String, name: String, mime: String?, open: () -> InputStream): OutboxItem {
+    /** Copies what [open] reads (about [size] bytes, when known) into the app's storage and queues it; the copy is deleted once the guest has it. */
+    fun queueFile(deviceId: String, name: String, mime: String?, size: Long? = null, open: () -> InputStream): OutboxItem {
         check(pending(deviceId).size < MAX_QUEUED) { "Too many items wait for this device." }
+        // The copy is made here, so the 1 GiB floor holds for it as it does for what arrives.
+        check(freeSpace() - (size ?: 0) >= MIN_FREE_BYTES) { "This phone is almost out of storage." }
         val id = newId()
         val copy = File(copies, id)
         copies.mkdirs()

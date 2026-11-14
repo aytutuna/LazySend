@@ -104,4 +104,19 @@ class OutboxTest {
         }
         assertEquals(0, File(dir, "outgoing").listFiles()?.size ?: 0)
     }
+
+    @Test
+    fun aFileIsNotCopiedWhenItWouldLeaveUnderAGigabyteFree() {
+        var free = MIN_FREE_BYTES + 100
+        val tight = Outbox(File(dir, "tight.json"), File(dir, "tight"), freeSpace = { free })
+        var opened = false
+        try {
+            tight.queueFile("phone-0001", "big", null, 101) { opened = true; ByteArrayInputStream(ByteArray(1)) }
+            fail()
+        } catch (e: IllegalStateException) {
+        }
+        assertFalse(opened)
+        assertEquals(0, tight.pending("phone-0001").size)
+        assertNotNull(tight.queueFile("phone-0001", "small", null, 100) { ByteArrayInputStream(ByteArray(1)) })
+    }
 }
