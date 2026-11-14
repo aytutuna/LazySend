@@ -448,4 +448,15 @@ class HostServerTest {
             assertTrue(System.currentTimeMillis() - started < 6000)
         }
     }
+
+    @Test
+    fun aHugeWaitIsCutToTheLimitInsteadOfRefused() {
+        val credentials = host.pair()
+        host.core.outbox.queueText(credentials.deviceId, "there")
+        val answer = host.raw(
+            "GET /v1/outbox?wait=99999999999999 HTTP/1.1\r\nHost: x\r\nX-Device-Id: ${credentials.deviceId}\r\nAuthorization: Bearer ${credentials.secret}\r\n\r\n",
+        )
+        assertTrue(answer, answer.startsWith("HTTP/1.1 200"))
+        assertTrue(host.raw("GET /v1/outbox?wait=abc HTTP/1.1\r\nHost: x\r\nX-Device-Id: ${credentials.deviceId}\r\nAuthorization: Bearer ${credentials.secret}\r\n\r\n").startsWith("HTTP/1.1 400"))
+    }
 }

@@ -240,8 +240,8 @@ class HostRouter(
         val guest = authenticate(request, now)
         var wait = 0
         HostHttp.queryParameters(request.head.query)["wait"]?.let { text ->
-            if (text.isEmpty() || text.length > 6 || !text.all { it in '0'..'9' }) throw HostError.badRequest
-            wait = text.toInt()
+            if (text.isEmpty() || !text.all { it in '0'..'9' }) throw HostError.badRequest
+            wait = if (text.length > 6) 25 else text.toInt()
         }
         wait = minOf(wait, 25)
         // A guest that hangs up during the wait stops it here, so it does not hold a slot.
