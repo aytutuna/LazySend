@@ -134,6 +134,9 @@ public final class LinkServer: @unchecked Sendable {
         tcp.noDelay = true
         let parameters = NWParameters(tls: tls, tcp: tcp)
         parameters.includePeerToPeer = false
+#if os(iOS)
+        parameters.prohibitedInterfaceTypes = [.cellular]
+#endif
         // The port can be taken again at once after a restart, while closed connections still hold it.
         parameters.allowLocalEndpointReuse = true
         return parameters
@@ -253,7 +256,19 @@ public final class LinkServer: @unchecked Sendable {
                 throw error
             }
         }
-        let response = await router.handle(LinkRequest(head: head, body: body, remote: remote))
+        let request = LinkRequest(head: head, body: body, remote: remote)
+        let response: LinkResponse
+        if head.method == "GET" && head.path == Route.outbox {
+            // A guest that hangs up during the long poll frees its slot at once instead of after the wait.
+            let handler = Task { await router.handle(request) }
+            let watcher = Task {
+                if let data = try? await link.receive(maxLength: 1, timeout: 3600), data.isEmpty { handler.cancel() }
+            }
+            response = await handler.value
+            watcher.cancel()
+        } else {
+            response = await router.handle(request)
+        }
         // A send into a closed connection still completes once; a phone that already hung up never gets the secret.
         if response.written != nil, await link.peerClosed() {
             response.discard()

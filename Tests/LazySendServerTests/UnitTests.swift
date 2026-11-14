@@ -325,3 +325,27 @@ final class HostIdTests: XCTestCase {
         XCTAssertTrue(isValidId(store.desktopId))
     }
 }
+
+final class HostingInterfaceTests: XCTestCase {
+    func testAPhoneHostsOnWifiWiredAndHotspotInterfacesOnly() {
+        XCTAssertTrue(Subnet6(address: [UInt8](repeating: 1, count: 16), prefix: 64, name: "en0").probeable)
+        XCTAssertTrue(Subnet6(address: [UInt8](repeating: 1, count: 16), prefix: 64, name: "bridge100").probeable)
+        XCTAssertTrue(Subnet6(address: [UInt8](repeating: 1, count: 16), prefix: 64, name: "ap1").probeable)
+        XCTAssertFalse(Subnet6(address: [UInt8](repeating: 1, count: 16), prefix: 64, name: "pdp_ip0").probeable)
+        XCTAssertTrue(Subnet(name: "en0", address: 0xC0A8_0105, prefix: 24).probeable)
+        XCTAssertFalse(Subnet(name: "pdp_ip0", address: 0x0A00_0001, prefix: 8).probeable)
+        XCTAssertFalse(Subnet(name: "utun3", address: 0x6440_0001, prefix: 10).probeable)
+    }
+
+    func testTheInterfacesInUseAreFilteredOnAPhoneAndNotOnAComputer() {
+        let phone = Peers.hostSubnets(phone: true)
+        XCTAssertTrue(phone.allSatisfy { $0.probeable })
+        XCTAssertEqual(Peers.hostSubnets(phone: false), LocalNetworks.current())
+        XCTAssertTrue(Peers.hostSubnets6(phone: true).allSatisfy { $0.probeable })
+#if os(iOS)
+        XCTAssertTrue(Peers.onPhone)
+#else
+        XCTAssertFalse(Peers.onPhone)
+#endif
+    }
+}

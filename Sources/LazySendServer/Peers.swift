@@ -3,6 +3,25 @@ import Network
 import LazySendKit
 
 public enum Peers {
+    /// A phone hosts only on Wi-Fi, wired and hotspot interfaces, never on the mobile network; a computer on all of them.
+    public static let onPhone: Bool = {
+#if os(iOS)
+        true
+#else
+        false
+#endif
+    }()
+
+    public static func hostSubnets(phone: Bool = Peers.onPhone) -> [Subnet] {
+        let all = LocalNetworks.current()
+        return phone ? all.filter { $0.probeable } : all
+    }
+
+    public static func hostSubnets6(phone: Bool = Peers.onPhone) -> [Subnet6] {
+        let all = Subnet6.current()
+        return phone ? all.filter { $0.probeable } : all
+    }
+
     /// The address's bytes (4 or 16), an IPv4-mapped IPv6 address as its IPv4 address; nil for a name.
     static func bytes(_ host: NWEndpoint.Host) -> [UInt8]? {
         switch host {
@@ -43,7 +62,7 @@ public enum Peers {
 
     /// Every interface that is up, a USB hotspot included: IPv4 addresses with self-assigned ones last, then the
     /// global and unique-local IPv6 ones, at most `LinkProtocol.maxAddresses`.
-    public static func pairingAddresses(_ subnets: [Subnet] = LocalNetworks.current(), _ subnets6: [Subnet6] = Subnet6.current()) -> [String] {
+    public static func pairingAddresses(_ subnets: [Subnet] = Peers.hostSubnets(), _ subnets6: [Subnet6] = Peers.hostSubnets6()) -> [String] {
         let sorted = subnets.sorted { selfAssigned($0) < selfAssigned($1) }
         let v4 = sorted.map { intToIpv4($0.address) }
         return Array((v4 + subnets6.map(\.text)).prefix(LinkProtocol.maxAddresses))
@@ -56,12 +75,18 @@ public enum Peers {
 
 /// An IPv6 address of this computer and the length of its prefix.
 public struct Subnet6: Equatable, Sendable {
+    public var name = ""
     public var address: [UInt8]
     public var prefix: Int
 
-    public init(address: [UInt8], prefix: Int) {
+    public init(address: [UInt8], prefix: Int, name: String = "") {
         self.address = address
         self.prefix = prefix
+        self.name = name
+    }
+
+    public var probeable: Bool {
+        name.hasPrefix("en") || name.hasPrefix("bridge") || name.hasPrefix("ap")
     }
 
     public func contains(_ other: [UInt8]) -> Bool {
@@ -108,7 +133,7 @@ public struct Subnet6: Equatable, Sendable {
             let isGlobal = (bytes[0] & 0xE0) == 0x20
             let isUniqueLocal = (bytes[0] & 0xFE) == 0xFC
             guard isGlobal || isUniqueLocal, !result.contains(where: { $0.address == bytes }) else { continue }
-            result.append(Subnet6(address: bytes, prefix: mask.reduce(0) { $0 + $1.nonzeroBitCount }))
+            result.append(Subnet6(address: bytes, prefix: mask.reduce(0) { $0 + $1.nonzeroBitCount }, name: String(cString: item.pointee.ifa_name)))
         }
         return result
     }
@@ -123,7 +148,7 @@ public final class CachedSubnets: @unchecked Sendable {
     private var cached6: [Subnet6] = []
     private var when = Date.distantPast
 
-    public init(read: @escaping () -> [Subnet] = { LocalNetworks.current() }, read6: @escaping () -> [Subnet6] = { Subnet6.current() }) {
+    public init(read: @escaping () -> [Subnet] = { Peers.hostSubnets() }, read6: @escaping () -> [Subnet6] = { Peers.hostSubnets6() }) {
         self.read = read
         self.read6 = read6
     }
