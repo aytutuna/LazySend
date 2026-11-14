@@ -1,4 +1,3 @@
-#if os(macOS)
 import Foundation
 import dnssd
 import LazySendKit
@@ -8,13 +7,15 @@ private let registered: DNSServiceRegisterReply = { _, _, _, _, _, _, _ in
 }
 
 /// Advertises `_lazysend._tcp` on every interface for as long as it is registered, so phones on the network find
-/// this Mac by name, and so do other computers that connect to it; scanning the pairing code works without it.
-final class Advertiser {
+/// this device by name, and so do other computers that connect to it; scanning the pairing code works without it.
+public final class Advertiser {
     private let queue = DispatchQueue(label: "lazysend.advertiser")
     private var service: DNSServiceRef?
 
+    public init() {}
+
     /// The TXT record: the protocol version, the computer's id and its name, cut to 64 UTF-8 bytes and left out when empty.
-    static func txtRecord(desktopId: String, name: String) -> [UInt8] {
+    public static func txtRecord(desktopId: String, name: String) -> [UInt8] {
         var record: [UInt8] = []
         var entries = [("v", "1"), ("id", desktopId)]
         let shown = DisplayName.clean(name, maxBytes: LinkProtocol.maxTxtNameBytes)
@@ -27,7 +28,7 @@ final class Advertiser {
         return record
     }
 
-    func register(port: Int, desktopId: String, name: String) {
+    public func register(port: Int, desktopId: String, name: String) {
         unregister()
         let record = Advertiser.txtRecord(desktopId: desktopId, name: name)
         queue.sync {
@@ -42,11 +43,10 @@ final class Advertiser {
         }
     }
 
-    func unregister() {
+    public func unregister() {
         queue.sync {
             if let service = service { DNSServiceRefDeallocate(service) }
             service = nil
         }
     }
 }
-#endif
