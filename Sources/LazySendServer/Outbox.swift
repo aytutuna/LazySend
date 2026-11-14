@@ -54,7 +54,8 @@ public final class Outbox: @unchecked Sendable {
     private var waiters: [UUID: (deviceId: String, signal: AsyncStream<Void>.Continuation)] = [:]
 
     public var onChange: (() -> Void)?
-    /// Called with the item the phone just acknowledged, after `onChange`.
+    /// Called with the item the phone just acknowledged, while the queue is still locked so that nothing sees the item
+    /// gone before this has run. It must not call back into the outbox.
     public var onAcknowledged: ((OutboxItem) -> Void)?
 
     /// Where an item's file is now; the stored path unless the app resolves a bookmark.
@@ -152,14 +153,14 @@ public final class Outbox: @unchecked Sendable {
     public func acknowledge(_ deviceId: String, _ id: String) -> Bool {
         lock.lock()
         let found = file.items.first { $0.deviceId == deviceId && $0.id == id }
-        if found != nil {
+        if let item = found {
             file.items.removeAll { $0.deviceId == deviceId && $0.id == id }
             JsonFile.save(file, to: url)
+            onAcknowledged?(item)
         }
         lock.unlock()
-        guard let item = found else { return false }
+        guard found != nil else { return false }
         onChange?()
-        onAcknowledged?(item)
         return true
     }
 
