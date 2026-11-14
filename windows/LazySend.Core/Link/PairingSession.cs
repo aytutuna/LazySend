@@ -1,5 +1,6 @@
 using System.Net;
 using System.Security.Cryptography;
+using System.Text;
 
 namespace LazySend.Core;
 
@@ -28,9 +29,10 @@ public enum PairingRedeemResult
 
 /// <summary>
 /// One pairing window on the desktop: a random 128-bit token shown in the QR code, good for one
-/// pairing within <see cref="Lifetime"/>. Tokens are compared in constant time; a peer that sends
+/// pairing within <see cref="Lifetime"/>, and the session's 8-character <see cref="ShortCode"/> for a
+/// guest that cannot scan. Either is compared in constant time; a peer that sends
 /// <see cref="MaxFailedAttempts"/> wrong ones is refused for the rest of the session, and
-/// <see cref="MaxTotalFailedAttempts"/> wrong ones from anyone close it, so a token cannot be guessed. The
+/// <see cref="MaxTotalFailedAttempts"/> wrong ones from anyone close it, so neither can be guessed. The
 /// clock is passed in, so tests control it. Safe to use from any thread.
 /// </summary>
 public sealed class PairingSession
@@ -40,6 +42,9 @@ public sealed class PairingSession
     public const int MaxTotalFailedAttempts = 25;
 
     private readonly object _gate = new();
+    public const int ShortCodeLength = 8;
+    private const string CodeAlphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
     private readonly byte[] _token;
     private PairingSessionState _state = PairingSessionState.Open;
     private readonly Dictionary<IPAddress, int> _failedByPeer = [];
@@ -55,12 +60,24 @@ public sealed class PairingSession
         }
         _token = token ?? RandomNumberGenerator.GetBytes(PairingUri.TokenByteCount);
         Token = Protocol.EncodeBase64Url(_token);
+        // 256 is a multiple of 32, so masking a random byte is unbiased.
+        ShortCode = string.Create(ShortCodeLength, 0, (chars, _) =>
+        {
+            var random = RandomNumberGenerator.GetBytes(ShortCodeLength);
+            for (int i = 0; i < chars.Length; i++) chars[i] = CodeAlphabet[random[i] & 31];
+        });
         Opened = opened;
         Expires = opened + Lifetime;
     }
 
     /// <summary>The token as the pairing code carries it (base64url, 22 characters).</summary>
     public string Token { get; }
+
+    /// <summary>The short code: 8 characters of Crockford base32, no separator.</summary>
+    public string ShortCode { get; }
+
+    /// <summary>The short code as shown, XXXX-XXXX.</summary>
+    public string ShortCodeText => $"{ShortCode[..4]}-{ShortCode[4..]}";
 
     public DateTimeOffset Opened { get; }
 
@@ -117,6 +134,10 @@ public sealed class PairingSession
             byte[]? presented = Protocol.DecodeBase64Url(token);
             bool matches = presented is { Length: PairingUri.TokenByteCount }
                            && CryptographicOperations.FixedTimeEquals(presented, _token);
+            if (NormalizeShortCode(token) is { } code)
+            {
+                matches = CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(code), Encoding.ASCII.GetBytes(ShortCode));
+            }
             if (!matches)
             {
                 _failedAttempts++;
@@ -127,6 +148,24 @@ public sealed class PairingSession
             _state = PairingSessionState.Used;
             return PairingRedeemResult.Accepted;
         }
+    }
+
+    /// <summary>
+    /// A short code as typed (any case, with dashes or spaces) in its canonical form; null when it is not
+    /// 8 characters of the alphabet, which also tells it from a 22-character token.
+    /// </summary>
+    public static string? NormalizeShortCode(string? text)
+    {
+        if (text is null || text.Length > 32) return null;
+        var code = new StringBuilder(ShortCodeLength);
+        foreach (char c in text)
+        {
+            if (c is '-' or ' ') continue;
+            char upper = char.ToUpperInvariant(c);
+            if (CodeAlphabet.IndexOf(upper) < 0) return null;
+            code.Append(upper);
+        }
+        return code.Length == ShortCodeLength ? code.ToString() : null;
     }
 
     /// <summary>Closes the session: no token is accepted any more.</summary>

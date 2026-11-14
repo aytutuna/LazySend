@@ -28,10 +28,10 @@ public sealed partial class AppModel : IDisposable
         var certificate = certificates.Current();
         _thumbprint = certificate.Thumbprint;
         Service = new LinkService(paths, certificate, new LinkServerOptions { AllowPeer = LocalNetworks.IsAllowedPeer });
-        Service.Router.ApprovePairing = (request, cancellation) =>
+        Service.Router.ApprovePairing = (request, match, cancellation) =>
         {
             _ui.BeginInvoke(() => PairingRequested?.Invoke(this, request.PhoneName));
-            return Approver?.Invoke(request, cancellation) ?? Task.FromResult(false);
+            return Approver?.Invoke(request, match, cancellation) ?? Task.FromResult(false);
         };
         _network.Changed += (_, _) => _ui.BeginInvoke(RefreshNetwork);
     }
@@ -51,7 +51,7 @@ public sealed partial class AppModel : IDisposable
     public FirewallState Firewall { get; private set; } = FirewallState.Unknown;
 
     /// <summary>The window that can answer a pairing request sets this while it is open; without it a request is declined.</summary>
-    public Func<PairRequest, CancellationToken, Task<bool>>? Approver { get; set; }
+    public Func<PairRequest, string, CancellationToken, Task<bool>>? Approver { get; set; }
 
     public event EventHandler? StatusChanged;
 

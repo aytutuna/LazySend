@@ -55,6 +55,7 @@ public partial class PairWindow : Window
         string text = code.Format();
         PairingTextBox.Text = text;
         CheckCodeBox.Text = FormatCheckCode(SpkiFingerprint.CheckCode(code.FingerprintBytes ?? []));
+        ShortCodeBox.Text = _model.Service.Pairing?.ShortCodeText ?? "";
         AddressesBox.Text = code.Addresses.Count == 0 ? "No network address found" : string.Join("  ", code.Addresses);
         QrImage.Source = ZXingQrEncoder.Encode(text) is { } modules ? Draw(modules) : null;
     }
@@ -142,7 +143,7 @@ public partial class PairWindow : Window
         FooterStatus.Text = $"Paired with {device.Name}.";
     });
 
-    private Task<bool> AskAsync(PairRequest request, CancellationToken cancellation)
+    private Task<bool> AskAsync(PairRequest request, string match, CancellationToken cancellation)
     {
         var answer = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         Dispatcher.BeginInvoke(() =>
@@ -151,7 +152,7 @@ public partial class PairWindow : Window
             if (Owner is MainWindow main) main.ShowAndActivate();
             _answer = answer;
             string kind = request.Platform.Length > 0 ? $" ({request.Platform})" : "";
-            ApprovalText.Text = $"\"{PairedDeviceStore.CleanName(request.PhoneName)}\"{kind} wants to pair with this PC. Allow it only if you just scanned the code yourself.";
+            ApprovalText.Text = $"\"{PairedDeviceStore.CleanName(request.PhoneName)}\"{kind} wants to pair with this PC. Allow it only if you just scanned the code yourself and {FormatCheckCode(match)} is the code it shows too.";
             ApprovalCard.Visibility = Visibility.Visible;
             Activate();
         });
@@ -186,7 +187,7 @@ public partial class PairWindow : Window
         try
         {
             Clipboard.SetText(PairingTextBox.Text);
-            FooterStatus.Text = "Pairing text copied.";
+            FooterStatus.Text = "Pairing link copied.";
         }
         catch (System.Runtime.InteropServices.COMException)
         {

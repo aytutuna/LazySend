@@ -10,7 +10,7 @@ public class PairingTests
     {
         await using var h = new Harness();
         PairRequest? asked = null;
-        h.Service.Router.ApprovePairing = (request, _) =>
+        h.Service.Router.ApprovePairing = (request, _, _) =>
         {
             asked = request;
             return Task.FromResult(true);
@@ -47,7 +47,7 @@ public class PairingTests
     public async Task DeclinedPairingStoresNothing()
     {
         await using var h = new Harness();
-        h.Service.Router.ApprovePairing = (_, _) => Task.FromResult(false);
+        h.Service.Router.ApprovePairing = (_, _, _) => Task.FromResult(false);
         var uri = h.Service.OpenPairing(["127.0.0.1"]);
         using var phone = new Phone(h, uri.FingerprintBytes!, Protocol.NewId());
 
@@ -65,7 +65,7 @@ public class PairingTests
     {
         await using var h = new Harness();
         h.Service.Router.ApprovalTimeout = TimeSpan.FromMilliseconds(200);
-        h.Service.Router.ApprovePairing = async (_, cancellation) =>
+        h.Service.Router.ApprovePairing = async (_, _, cancellation) =>
         {
             await Task.Delay(TimeSpan.FromSeconds(30), cancellation);
             return true;
@@ -94,6 +94,103 @@ public class PairingTests
         using var right = await phone.SendAsync(HttpMethod.Post, Protocol.PairPath,
             Harness.Json(new PairRequest(uri.Token, phone.Id, "Phone", "ios", "1")), authenticated: false);
         Assert.Equal(HttpStatusCode.OK, right.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(false, "")]
+    [InlineData(true, " ")]
+    public async Task ShortCodePairsAnyCaseWithOrWithoutTheDash(bool lower, string spaces)
+    {
+        await using var h = new Harness();
+        var uri = h.Service.OpenPairing(["127.0.0.1"]);
+        string typed = h.Service.Pairing!.ShortCodeText;
+        if (lower) typed = typed.ToLowerInvariant().Replace("-", spaces);
+        using var phone = new Phone(h, uri.FingerprintBytes!, Protocol.NewId());
+
+        using var response = await phone.SendAsync(HttpMethod.Post, Protocol.PairPath,
+            Harness.Json(new PairRequest(typed, phone.Id, "Phone", "ios", "1")), authenticated: false);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Single(h.Service.Devices.Devices);
+    }
+
+    [Fact]
+    public async Task ShortCodeAndTokenShareOneUse()
+    {
+        await using var h = new Harness();
+        var uri = h.Service.OpenPairing(["127.0.0.1"]);
+        string code = h.Service.Pairing!.ShortCodeText;
+        using var first = new Phone(h, uri.FingerprintBytes!, Protocol.NewId());
+        using var second = new Phone(h, uri.FingerprintBytes!, Protocol.NewId());
+
+        using var one = await first.SendAsync(HttpMethod.Post, Protocol.PairPath,
+            Harness.Json(new PairRequest(code, first.Id, "One", "windows", "1")), authenticated: false);
+        using var two = await second.SendAsync(HttpMethod.Post, Protocol.PairPath,
+            Harness.Json(new PairRequest(uri.Token, second.Id, "Two", "ios", "1")), authenticated: false);
+
+        Assert.Equal(HttpStatusCode.OK, one.StatusCode);
+        Assert.Equal(ErrorCode.PairingClosed, await Harness.ErrorCodeAsync(two));
+        Assert.Single(h.Service.Devices.Devices);
+    }
+
+    [Fact]
+    public async Task WrongShortCodesCountAgainstThePeerLikeWrongTokens()
+    {
+        await using var h = new Harness();
+        var uri = h.Service.OpenPairing(["127.0.0.1"]);
+        string code = h.Service.Pairing!.ShortCodeText;
+        using var phone = new Phone(h, uri.FingerprintBytes!, Protocol.NewId());
+        for (int i = 0; i < PairingSession.MaxFailedAttempts; i++)
+        {
+            using var wrong = await phone.SendAsync(HttpMethod.Post, Protocol.PairPath,
+                Harness.Json(new PairRequest("0000-0000", phone.Id, "Phone", "ios", "1")), authenticated: false);
+            Assert.Equal(ErrorCode.TokenInvalid, await Harness.ErrorCodeAsync(wrong));
+        }
+
+        using var right = await phone.SendAsync(HttpMethod.Post, Protocol.PairPath,
+            Harness.Json(new PairRequest(code, phone.Id, "Phone", "ios", "1")), authenticated: false);
+
+        Assert.Equal(ErrorCode.PairingClosed, await Harness.ErrorCodeAsync(right));
+        Assert.Empty(h.Service.Devices.Devices);
+    }
+
+    [Fact]
+    public async Task ApprovalGetsTheMatchCodeOfThePathUsed()
+    {
+        await using var h = new Harness();
+        var matches = new List<string>();
+        h.Service.Router.ApprovePairing = (_, match, _) =>
+        {
+            matches.Add(match);
+            return Task.FromResult(true);
+        };
+        var uri = h.Service.OpenPairing(["127.0.0.1"]);
+        using var scanner = new Phone(h, uri.FingerprintBytes!, Protocol.NewId());
+        (await scanner.SendAsync(HttpMethod.Post, Protocol.PairPath,
+            Harness.Json(new PairRequest(uri.Token, scanner.Id, "Scanner", "ios", "1")), authenticated: false)).Dispose();
+        h.Service.OpenPairing(["127.0.0.1"]);
+        string code = h.Service.Pairing!.ShortCode;
+        using var typer = new Phone(h, uri.FingerprintBytes!, Protocol.NewId());
+        (await typer.SendAsync(HttpMethod.Post, Protocol.PairPath,
+            Harness.Json(new PairRequest(code, typer.Id, "Typer", "windows", "1")), authenticated: false)).Dispose();
+
+        Assert.Equal(SpkiFingerprint.CheckCode(uri.FingerprintBytes!), matches[0]);
+        Assert.Equal(SpkiFingerprint.MatchCode(uri.FingerprintBytes!, code), matches[1]);
+        Assert.NotEqual(matches[0], matches[1]);
+    }
+
+    [Fact]
+    public void ShortCodeIsEightCharactersWithoutAmbiguousLetters()
+    {
+        var session = new PairingSession(DateTimeOffset.UtcNow);
+
+        Assert.Equal(8, session.ShortCode.Length);
+        Assert.All(session.ShortCode, c => Assert.DoesNotContain(c, "ILOU"));
+        Assert.Equal($"{session.ShortCode[..4]}-{session.ShortCode[4..]}", session.ShortCodeText);
+        Assert.Equal(session.ShortCode, PairingSession.NormalizeShortCode(session.ShortCodeText.ToLowerInvariant()));
+        Assert.Null(PairingSession.NormalizeShortCode("ABCD-EFG"));
+        Assert.Null(PairingSession.NormalizeShortCode("ABCD-EFGI"));
+        Assert.Null(PairingSession.NormalizeShortCode(session.Token));
     }
 
     [Fact]

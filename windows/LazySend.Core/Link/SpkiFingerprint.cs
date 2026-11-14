@@ -34,6 +34,19 @@ public static class SpkiFingerprint
         uint value = BinaryPrimitives.ReadUInt32BigEndian(fingerprint);
         return (value % 1_000_000).ToString("D6", CultureInfo.InvariantCulture);
     }
+
+    /// <summary>
+    /// The check code of a pairing by short code: the same six digits, taken from SHA-256 over the
+    /// fingerprint and the canonical short code. A guest that typed the code has no fingerprint in
+    /// advance, and a key can be ground until the plain check code of the real certificate comes out;
+    /// the short code is not known when the certificate is chosen, so this cannot be ground.
+    /// </summary>
+    public static string MatchCode(ReadOnlySpan<byte> fingerprint, string shortCode)
+    {
+        if (fingerprint.Length != ByteCount) return "";
+        byte[] input = [.. fingerprint, .. System.Text.Encoding.ASCII.GetBytes(shortCode)];
+        return CheckCode(SHA256.HashData(input));
+    }
 }
 
 /// <summary>The desktop's certificate: self-signed, ECDSA P-256, valid for ten years. Keeping it between runs is the app's job.</summary>

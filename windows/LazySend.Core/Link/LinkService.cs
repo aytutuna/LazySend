@@ -26,7 +26,7 @@ public sealed class LinkService : IAsyncDisposable
         Outbox = new Outbox(paths.OutboxFile, _clock);
         Inbox = new Inbox(paths.IncomingDirectory, () => Settings.ReceiveRoot, Gallery, freeSpace, _clock);
         Limiter = new LinkRateLimiter();
-        Router = new LinkRouter(Devices, Inbox, History, Outbox, Gallery, Limiter, _clock) { CurrentPairing = () => Pairing };
+        Router = new LinkRouter(Devices, Inbox, History, Outbox, Gallery, Limiter, _clock) { CurrentPairing = () => Pairing, Fingerprint = () => Fingerprint };
         Devices.Removed += (_, id) =>
         {
             Outbox.Clear(id);

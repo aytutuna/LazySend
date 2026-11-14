@@ -41,12 +41,15 @@ public sealed class LinkRouter
     /// <summary>The pairing session open now; null when pairing is not open.</summary>
     public Func<PairingSession?> CurrentPairing { get; set; } = () => null;
 
+    /// <summary>The certificate's fingerprint now, for the match code of a pairing by short code.</summary>
+    public Func<byte[]> Fingerprint { get; set; } = () => [];
+
     /// <summary>
-    /// Asks the user whether the phone that presented a valid token may pair. Without an answer within
-    /// <see cref="ApprovalTimeout"/> the pairing is declined. The default declines too: a code is only
-    /// shown where someone can answer.
+    /// Asks the user whether the phone that presented a valid token may pair, with the six digits both
+    /// screens should show. Without an answer within <see cref="ApprovalTimeout"/> the pairing is
+    /// declined. The default declines too: a code is only shown where someone can answer.
     /// </summary>
-    public Func<PairRequest, CancellationToken, Task<bool>> ApprovePairing { get; set; } = (_, _) => Task.FromResult(false);
+    public Func<PairRequest, string, CancellationToken, Task<bool>> ApprovePairing { get; set; } = (_, _, _) => Task.FromResult(false);
 
     public TimeSpan ApprovalTimeout { get; set; } = TimeSpan.FromSeconds(120);
 
@@ -173,7 +176,11 @@ public sealed class LinkRouter
             }
             string name = PairedDeviceStore.CleanName(pair.PhoneName);
             pair = pair with { PhoneName = name.Length > 0 ? name : "Phone" };
-            var response = await ApproveAndPairAsync(pair, cancellation).ConfigureAwait(false);
+            byte[] fingerprint = Fingerprint();
+            string match = PairingSession.NormalizeShortCode(pair.Token) is { } code
+                ? SpkiFingerprint.MatchCode(fingerprint, code)
+                : SpkiFingerprint.CheckCode(fingerprint);
+            var response = await ApproveAndPairAsync(pair, match, cancellation).ConfigureAwait(false);
             settleWhenWritten = response.Written is not null;
             return response;
         }
@@ -189,7 +196,7 @@ public sealed class LinkRouter
         ApprovalSettled?.Invoke(this, EventArgs.Empty);
     }
 
-    private async Task<LinkResponse> ApproveAndPairAsync(PairRequest pair, CancellationToken cancellation)
+    private async Task<LinkResponse> ApproveAndPairAsync(PairRequest pair, string match, CancellationToken cancellation)
     {
         bool approved;
         using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation))
@@ -197,7 +204,7 @@ public sealed class LinkRouter
             timeout.CancelAfter(ApprovalTimeout);
             try
             {
-                approved = await ApprovePairing(pair, timeout.Token).ConfigureAwait(false);
+                approved = await ApprovePairing(pair, match, timeout.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (!cancellation.IsCancellationRequested)
             {

@@ -35,7 +35,7 @@ public sealed class Harness : IAsyncDisposable
     {
         var service = new LinkService(Paths, Certificate, new LinkServerOptions(), () => Now, _freeSpace);
         service.Router.DesktopName = () => "Test PC";
-        service.Router.ApprovePairing = (_, _) => Task.FromResult(true);
+        service.Router.ApprovePairing = (_, _, _) => Task.FromResult(true);
         Port = service.Start(0, IPAddress.Loopback);
         return service;
     }
