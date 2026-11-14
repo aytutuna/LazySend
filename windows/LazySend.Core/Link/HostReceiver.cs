@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace LazySend.Core;
@@ -94,6 +95,15 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
 
     private string DirectoryOf(GuestHost host) => Path.Combine(settings.ReceiveRoot, FileNames.Clean(host.Name, "Computer"));
 
+    /// <summary>A file with a source id comes from the host's photo library and is filed by month, as the host files a phone's gallery.</summary>
+    internal static string FolderOf(string hostDirectory, OutboxEntry item, DateTimeOffset now)
+    {
+        if (!GalleryIndex.IsValidSourceId(item.SourceId)) return hostDirectory;
+        return Path.Combine(hostDirectory, "Gallery", (TakenOf(item) ?? now).ToLocalTime().ToString("yyyy-MM", CultureInfo.InvariantCulture));
+    }
+
+    private static DateTimeOffset? TakenOf(OutboxEntry item) => item.Taken is { Year: >= 1980 and <= 2100 } taken ? taken : null;
+
     /// <summary>What an item that is dropped from the host's queue leaves half-downloaded is of no use.</summary>
     private void DropPart(GuestHost host, OutboxEntry item)
     {
@@ -165,7 +175,9 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
         }
         string path = Local(() =>
         {
-            string target = Path.Combine(directory, FileNames.Unique(directory, FileNames.Clean(item.Name)));
+            string folder = FolderOf(directory, item, DateTimeOffset.UtcNow);
+            Directory.CreateDirectory(folder);
+            string target = Path.Combine(folder, FileNames.Unique(folder, FileNames.Clean(item.Name)));
             // An empty file was never downloaded, so there is no part yet.
             if (!File.Exists(part)) File.WriteAllBytes(part, []);
             File.Move(part, target);
@@ -179,7 +191,18 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
         {
             System.Diagnostics.Trace.TraceWarning($"Could not mark a received file as downloaded: {e.Message}");
         }
-        FileReceived?.Invoke(this, new ReceivedFile(host.Id, host.Name, path, size, null));
+        if (TakenOf(item) is { } taken)
+        {
+            try
+            {
+                File.SetLastWriteTimeUtc(path, taken.UtcDateTime);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                System.Diagnostics.Trace.TraceWarning($"Could not set the time of a received file: {e.Message}");
+            }
+        }
+        FileReceived?.Invoke(this, new ReceivedFile(host.Id, host.Name, path, size, item.SourceId));
     }
 
     private static async Task<int> ReadWithinAsync(Stream body, byte[] buffer, CancellationToken cancellation)

@@ -641,6 +641,51 @@ public class GuestReceiveTests
     }
 
     [Fact]
+    public async Task GalleryFileIsFiledByTheMonthItWasTakenAndGetsThatTime()
+    {
+        await using var h = new Harness();
+        using var guest = new GuestRig(h);
+        var host = await guest.PairAsync();
+        string source = Path.Combine(h.Root, "IMG_0001.jpg");
+        byte[] content = RandomNumberGenerator.GetBytes(20_000);
+        await File.WriteAllBytesAsync(source, content);
+        var taken = new DateTimeOffset(2021, 3, 15, 12, 0, 0, TimeSpan.Zero);
+        h.Service.Outbox.QueueFile(guest.GuestId, source, sourceId: "asset-1", taken: taken);
+        ReceivedFile? arrived = null;
+        guest.Service.Receiver.FileReceived += (_, file) => arrived = file;
+        using var client = await guest.Service.Connector.ConnectAsync(host.Id, CancellationToken.None);
+
+        await guest.Service.Receiver.CollectAsync(client, host.Id, 0, CancellationToken.None);
+
+        string month = taken.ToLocalTime().ToString("yyyy-MM");
+        string expected = Path.Combine(guest.Paths.DefaultReceiveRoot, "Test PC", "Gallery", month, "IMG_0001.jpg");
+        Assert.Equal(expected, arrived?.Path);
+        Assert.Equal("asset-1", arrived?.SourceId);
+        Assert.Equal(content, await File.ReadAllBytesAsync(expected));
+        Assert.Equal(taken.UtcDateTime, File.GetLastWriteTimeUtc(expected));
+        Assert.Empty(h.Service.Outbox.Pending(guest.GuestId));
+        Assert.Empty(Directory.GetFiles(Path.Combine(guest.Paths.DefaultReceiveRoot, "Test PC"), "*.part"));
+    }
+
+    [Fact]
+    public async Task GalleryFileWithoutADateIsFiledByTheDayItArrived()
+    {
+        await using var h = new Harness();
+        using var guest = new GuestRig(h);
+        var host = await guest.PairAsync();
+        string source = Path.Combine(h.Root, "clip.mov");
+        await File.WriteAllBytesAsync(source, RandomNumberGenerator.GetBytes(5_000));
+        h.Service.Outbox.QueueFile(guest.GuestId, source, sourceId: "asset-2");
+        using var client = await guest.Service.Connector.ConnectAsync(host.Id, CancellationToken.None);
+
+        await guest.Service.Receiver.CollectAsync(client, host.Id, 0, CancellationToken.None);
+
+        string month = DateTimeOffset.Now.ToString("yyyy-MM");
+        Assert.True(File.Exists(Path.Combine(guest.Paths.DefaultReceiveRoot, "Test PC", "Gallery", month, "clip.mov")));
+        Assert.Empty(h.Service.Outbox.Pending(guest.GuestId));
+    }
+
+    [Fact]
     public async Task HalfDownloadedFileContinuesWhereItStopped()
     {
         await using var h = new Harness();
