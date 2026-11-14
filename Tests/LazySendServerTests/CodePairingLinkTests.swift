@@ -78,7 +78,7 @@ final class CodePairingLinkTests: XCTestCase {
         let pc = try await Pairing.pair(code: session.shortCodeText.lowercased(), with: nearby(), phoneName: "Guest Mac", appVersion: "1.0",
                                         platform: "mac", confirm: { digits in
             shown.add(digits)
-            XCTAssertEqual(session.state(at: Date()), .open)
+            XCTAssertEqual(session.state(at: harness.clock.now), .open)
             XCTAssertEqual(session.failedAttempts, 0)
             XCTAssertTrue(asked.all.isEmpty)
             XCTAssertTrue(service.devices.devices.isEmpty)
@@ -118,7 +118,7 @@ final class CodePairingLinkTests: XCTestCase {
             XCTAssertEqual(error as? PairingError, .notConfirmed)
         }
         XCTAssertTrue(asked.all.isEmpty)
-        XCTAssertEqual(session.state(at: Date()), .open)
+        XCTAssertEqual(session.state(at: harness.clock.now), .open)
         XCTAssertEqual(session.failedAttempts, 0)
         XCTAssertTrue(harness.service.devices.devices.isEmpty)
         XCTAssertTrue(store.pcs.isEmpty)
