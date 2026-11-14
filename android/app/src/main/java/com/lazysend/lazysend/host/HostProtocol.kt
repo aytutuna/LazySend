@@ -90,3 +90,17 @@ inline fun <reified T> loadJson(file: File, empty: () -> T): T {
 }
 
 inline fun <reified T> File.saveJson(value: T) = writeAtomically(LinkJson.encodeToString(value))
+
+/** A file name made safe for any file system: separators and characters some refuse become `_`, cut to 240 UTF-8 bytes keeping the extension. */
+fun cleanFileName(name: String?, fallback: String = "file"): String {
+    val text = name.orEmpty().map { if (it < ' ' || it in '\u007F'..'\u009F' || it in "/\\:*?\"<>|") '_' else it }.joinToString("").trim(' ', '.')
+    if (text.isEmpty()) return fallback
+    if (text.toByteArray().size <= MAX_FILE_NAME_BYTES) return text
+    val dot = text.lastIndexOf('.')
+    val extension = if (dot > 0 && text.length - dot <= 16) text.substring(dot) else ""
+    var stem = text.substring(0, text.length - extension.length)
+    while (stem.isNotEmpty() && (stem + extension).toByteArray().size > MAX_FILE_NAME_BYTES) stem = stem.dropLast(1)
+    return stem.trim(' ', '.').ifEmpty { fallback } + extension
+}
+
+const val MAX_FILE_NAME_BYTES = 240

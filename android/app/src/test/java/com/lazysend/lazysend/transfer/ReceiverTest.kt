@@ -11,10 +11,7 @@ import com.lazysend.lazysend.link.FakePc
 import com.lazysend.lazysend.link.OutboxEntry
 import com.lazysend.lazysend.link.TEST_SECRET
 import com.lazysend.lazysend.link.encodeBase64Url
-import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.OutputStream
-import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -24,43 +21,6 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-
-private class MemFiles : ReceivedFiles {
-    val data = HashMap<String, ByteArrayOutputStream>()
-    val created = AtomicInteger()
-
-    fun seed(bytes: Int): ReceivedFiles.Part {
-        val part = create("seed", null)
-        append(part).use { it.write(ByteArray(bytes)) }
-        return ReceivedFiles.Part(part.uri, bytes.toLong())
-    }
-
-    @Synchronized
-    override fun existing(uri: String) = data[uri]?.let { ReceivedFiles.Part(uri, it.size().toLong()) }
-
-    @Synchronized
-    override fun create(name: String, mime: String?): ReceivedFiles.Part {
-        val uri = "mem://${created.incrementAndGet()}"
-        data[uri] = ByteArrayOutputStream()
-        return ReceivedFiles.Part(uri, 0)
-    }
-
-    override fun append(part: ReceivedFiles.Part): OutputStream = object : OutputStream() {
-        override fun write(b: Int) = write(byteArrayOf(b.toByte()), 0, 1)
-
-        override fun write(b: ByteArray, off: Int, len: Int) {
-            Thread.sleep(20)
-            synchronized(this@MemFiles) { data[part.uri]!!.write(b, off, len) }
-        }
-    }
-
-    override fun finish(part: ReceivedFiles.Part) = part.uri
-
-    @Synchronized
-    override fun discard(uri: String) {
-        data.remove(uri)
-    }
-}
 
 class ReceiverTest {
     private val pc = FakePc()
