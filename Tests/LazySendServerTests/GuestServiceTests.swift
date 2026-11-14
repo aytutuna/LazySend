@@ -547,6 +547,26 @@ final class GuestServiceTests: XCTestCase {
         XCTAssertNil(fixture.files.all.first?.sourceId)
     }
 
+    func testAnAssetReceivedBeforeIsOnlyAcknowledgedEvenUnderANewItemId() async throws {
+        let pc = try await pairGuest()
+        let collector = OutboxCollector(handler: GuestReceiver(hostId: pc.id, guest: fixture.guest))
+        let first = OutboxEntry(id: "item-0007-abcdef", kind: "file", name: "IMG_3.jpg", size: 2, sourceId: "asset-7#photo")
+        let again = OutboxEntry(id: "item-0008-abcdef", kind: "file", name: "IMG_3.jpg", size: 2, sourceId: "asset-7#photo")
+        _ = try await collector.collect(api: ScriptedOutbox(items: [first], files: [first.id: Data([1, 2])]), wait: 0)
+        let api = ScriptedOutbox(items: [again], files: [:])
+        _ = try await collector.collect(api: api, wait: 0)
+        XCTAssertEqual(api.acknowledged, [again.id])
+        XCTAssertEqual(fixture.files.all.count, 1)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: hostFolder.appendingPathComponent("Gallery/\(Inbox.month(Date()))").path), ["IMG_3.jpg"])
+    }
+
+    func testForgettingAHostDropsItsReceivedAssets() async throws {
+        let pc = try await pairGuest()
+        fixture.guest.gallery.add(pc.id, "asset-8#photo")
+        await fixture.guest.forget(pc.id)
+        XCTAssertFalse(fixture.guest.gallery.contains(pc.id, "asset-8#photo"))
+    }
+
     func testAGalleryFileIsAcknowledgedAfterTheDownload() async throws {
         let pc = try await pairGuest()
         let collector = OutboxCollector(handler: GuestReceiver(hostId: pc.id, guest: fixture.guest))

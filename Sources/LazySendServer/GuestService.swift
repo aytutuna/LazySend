@@ -44,6 +44,7 @@ public final class GuestService: @unchecked Sendable {
     let history: ReceivedHistory
     let settings: SendSettings
     let pending: PendingSends
+    let gallery: GalleryIndex
     private let guestName: String
     private let appVersion: String
     private let firstRetry: TimeInterval
@@ -74,6 +75,7 @@ public final class GuestService: @unchecked Sendable {
         self.history = history
         self.settings = settings
         self.pending = pending
+        gallery = GalleryIndex(directory: settings.paths.guestIndexDirectory)
         self.guestName = guestName
         self.appVersion = appVersion
         self.firstRetry = firstRetry
@@ -166,6 +168,7 @@ public final class GuestService: @unchecked Sendable {
     private func removeLocally(_ id: String) {
         hosts.remove(id)
         pending.removeHost(id)
+        gallery.clear(id)
         lock.lock()
         collectors[id] = nil
         let receiver = receivers.removeValue(forKey: id)

@@ -15,6 +15,8 @@ public struct SendPaths: Sendable {
     var historyFile: URL { root.appendingPathComponent("history.json") }
     var incomingDirectory: URL { root.appendingPathComponent("incoming", isDirectory: true) }
     var indexDirectory: URL { root.appendingPathComponent("index", isDirectory: true) }
+    /// The gallery files received as a guest, apart from what phones sent to this computer as a host.
+    var guestIndexDirectory: URL { root.appendingPathComponent("guest-index", isDirectory: true) }
     var outboxFile: URL { root.appendingPathComponent("outbox.json") }
 }
 
@@ -25,7 +27,7 @@ struct SettingsFile: Codable {
 }
 
 public final class SendSettings: @unchecked Sendable {
-    private let paths: SendPaths
+    let paths: SendPaths
     private let lock = NSLock()
     private var file: SettingsFile
 

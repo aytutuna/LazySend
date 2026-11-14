@@ -38,6 +38,7 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
     }
 
     func isDone(_ item: OutboxEntry) async -> Bool {
+        if let source = item.gallerySource, let gallery = guest?.gallery { return gallery.contains(hostId, source) }
         if item.kind == "file" {
             lock.lock()
             defer { lock.unlock() }
@@ -129,6 +130,7 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
         if finished.count > GuestReceiver.finishedKept { finished.removeFirst(finished.count - GuestReceiver.finishedKept) }
         lock.unlock()
         Inbox.markAsDownloaded(target)
+        if let source = item.gallerySource { guest?.gallery.add(hostId, source) }
         if let taken = item.takenDate {
             try? FileManager.default.setAttributes([.modificationDate: taken], ofItemAtPath: target.path)
         }
