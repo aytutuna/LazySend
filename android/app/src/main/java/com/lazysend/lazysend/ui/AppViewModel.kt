@@ -104,7 +104,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val pc = selectedPc()
         viewModelScope.launch(Dispatchers.IO) {
             notice.value = when {
-                guest != null -> graph.host.queueText(guest, text) ?: getApplication<Application>().getString(R.string.note_sent)
+                guest != null -> graph.host.queueText(guest, text) ?: getApplication<Application>().getString(R.string.note_queued)
                 pc != null -> graph.sender.sendText(pc, text) ?: getApplication<Application>().getString(R.string.note_sent)
                 else -> return@launch
             }
