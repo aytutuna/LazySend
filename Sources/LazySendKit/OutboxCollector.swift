@@ -28,6 +28,15 @@ public struct StorageUnavailable: Error, LocalizedError {
     public var errorDescription: String? { reason }
 }
 
+extension Error {
+    /// The disk has no room, as Foundation or the system says it.
+    public var isOutOfSpace: Bool {
+        let error = self as NSError
+        return (error.domain == NSCocoaErrorDomain && error.code == CocoaError.fileWriteOutOfSpace.rawValue)
+            || (error.domain == NSPOSIXErrorDomain && error.code == Int(ENOSPC))
+    }
+}
+
 private actor AsyncLock {
     private var held = false
     private var waiters: [CheckedContinuation<Void, Never>] = []

@@ -18,6 +18,7 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
     // The files finished lately, so one the host lists again because its acknowledgement was lost is only acknowledged.
     private var finished: [String] = []
     private var reportedStorage = false
+    private var reportedFull = false
 
     init(hostId: String, guest: GuestService) {
         self.hostId = hostId
@@ -109,7 +110,20 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
     }
 
     func write(_ data: Data, for item: OutboxEntry) throws {
-        try openHandle(for: item).write(contentsOf: data)
+        do {
+            try openHandle(for: item).write(contentsOf: data)
+        } catch {
+            guard error.isOutOfSpace else { throw error }
+            // A full disk says nothing about the item: it stays queued, and the user is told once until a file gets through.
+            lock.lock()
+            let first = !reportedFull
+            reportedFull = true
+            lock.unlock()
+            if first {
+                guest?.onFailed?("Files from \(host?.name ?? "a computer") cannot be saved: this Mac is out of disk space. They stay queued there until there is room.")
+            }
+            throw StorageUnavailable(reason: error.localizedDescription)
+        }
     }
 
     func progress(_ item: OutboxEntry, bytes: Int64) {}
@@ -126,6 +140,7 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
         try FileManager.default.moveItem(at: part, to: target)
         lock.lock()
         parts[item.id] = nil
+        reportedFull = false
         finished.append(item.id)
         if finished.count > GuestReceiver.finishedKept { finished.removeFirst(finished.count - GuestReceiver.finishedKept) }
         lock.unlock()

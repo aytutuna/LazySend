@@ -21,6 +21,7 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
     private var parts: [String: URL] = [:]
     private var lastReport: [String: Date] = [:]
     private let gallery: GalleryIndex
+    private var reportedFull = false
 
     init(pcId: String, pcName: String, timeline: Timeline, folder: URL, notifier: Notifier, defaults: UserDefaults, saved: SavedAssets,
          gallery: GalleryIndex) {
@@ -126,7 +127,26 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
     }
 
     func write(_ data: Data, for item: OutboxEntry) throws {
-        try openHandle(for: item).write(contentsOf: data)
+        do {
+            try openHandle(for: item).write(contentsOf: data)
+        } catch {
+            guard error.isOutOfSpace else { throw error }
+            // A full disk says nothing about the item: it stays queued, and the user is told once until a file gets through.
+            lock.lock()
+            let first = !reportedFull
+            reportedFull = true
+            lock.unlock()
+            if first {
+                let id = "full-" + pcId
+                let name = pcName
+                Task { @MainActor in
+                    self.timeline.add(TimelineEntry(id: id, direction: .received, kind: .text, pcName: name,
+                                                    title: String(localized: "This phone is out of storage"),
+                                                    detail: String(localized: "Files stay queued on \(name) until there is room."), state: .failed))
+                }
+            }
+            throw StorageUnavailable(reason: error.localizedDescription)
+        }
     }
 
     func progress(_ item: OutboxEntry, bytes: Int64) {
@@ -147,6 +167,7 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
         closeHandle(item.id)
         lock.lock()
         let part = parts.removeValue(forKey: item.id)
+        reportedFull = false
         lock.unlock()
         guard let part = part else { throw CocoaError(.fileNoSuchFile) }
         let fm = FileManager.default
@@ -174,6 +195,7 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
         closeHandle(item.id)
         lock.lock()
         let part = parts.removeValue(forKey: item.id)
+        reportedFull = false
         lock.unlock()
         guard let part = part, let month = item.galleryFolder(in: computerFolder) else { throw CocoaError(.fileNoSuchFile) }
         let fm = FileManager.default
