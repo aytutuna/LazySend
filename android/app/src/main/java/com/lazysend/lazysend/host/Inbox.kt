@@ -58,6 +58,7 @@ class Inbox(
     private var lastPrune = 0L
 
     var onProgress: (IncomingFile, Long) -> Unit = { _, _ -> }
+    var onBegun: (IncomingFile) -> Unit = {}
     var onFinished: (IncomingFile) -> Unit = {}
 
     private class Writer {
@@ -122,10 +123,11 @@ class Inbox(
         }
         try {
             save(file)
+            onBegun(file)
             if (size == 0L) complete(file, null)
-        } catch (e: IOException) {
+        } catch (e: Exception) {
             discard(file)
-            throw failed(e)
+            throw e as? HostError ?: failed(e)
         }
         return stateOf(file)
     }

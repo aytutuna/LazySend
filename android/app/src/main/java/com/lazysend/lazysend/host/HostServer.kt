@@ -98,7 +98,8 @@ class HostServer(
 ) {
     private val connections = HashSet<HostConnection>()
     private val gate = Any()
-    private var listener: ServerSocket? = null
+    internal var listener: ServerSocket? = null
+        private set
     private var scope: CoroutineScope? = null
 
     @Volatile
