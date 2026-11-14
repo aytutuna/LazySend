@@ -204,7 +204,7 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
                 System.Diagnostics.Trace.TraceWarning($"Could not set the time of a received file: {e.Message}");
             }
         }
-        FileReceived?.Invoke(this, new ReceivedFile(host.Id, host.Name, path, size, item.SourceId));
+        FileReceived?.Invoke(this, new ReceivedFile(host.Id, host.Name, path, size, GalleryIndex.IsValidSourceId(item.SourceId) ? item.SourceId : null));
     }
 
     private static async Task<int> ReadWithinAsync(Stream body, byte[] buffer, CancellationToken cancellation)
