@@ -205,6 +205,9 @@ class RequestBody(
         private set
     private var started = false
 
+    /** Called before each read of the connection, so the server can bound how long the read may take. */
+    var beforeRead: () -> Unit = {}
+
     /** The client is holding its body back until it is told to go on, so there is nothing to read and drop. */
     val isWithheld: Boolean get() = sendContinue != null && !started
 
@@ -227,6 +230,7 @@ class RequestBody(
             bufferedUsed += take
             take
         } else {
+            beforeRead()
             input.read(b, off, want)
         }
         if (n < 0) throw EOFException("The connection ended before the body did.")

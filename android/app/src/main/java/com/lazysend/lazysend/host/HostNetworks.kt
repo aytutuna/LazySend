@@ -28,7 +28,7 @@ data class HostSubnet(val name: String, val address: InetAddress, val prefix: In
  * never on the mobile network (rmnet, ccmni and the like), and answers peers from private, link-local and unique-local
  * ranges or from the subnet of one of those interfaces. Read again at most every few seconds because every connection asks.
  */
-class HostNetworks(
+open class HostNetworks(
     private val read: () -> List<HostSubnet> = ::currentSubnets,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
@@ -46,9 +46,9 @@ class HostNetworks(
     }
 
     /** Whether a connection that arrived on [local] came in on a host interface (or loopback). */
-    fun allowsLocal(local: InetAddress): Boolean = local.isLoopbackAddress || subnets().any { it.address == local }
+    open fun allowsLocal(local: InetAddress): Boolean = local.isLoopbackAddress || subnets().any { it.address == local }
 
-    fun allowsPeer(remote: InetAddress): Boolean = isLocalAddress(remote) || subnets().any { it.contains(remote) }
+    open fun allowsPeer(remote: InetAddress): Boolean = isLocalAddress(remote) || subnets().any { it.contains(remote) }
 
     /** IPv4 first, self-assigned 169.254.x.x last of those, then IPv6; at most eight. */
     fun pairingAddresses(): List<String> {
