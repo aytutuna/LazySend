@@ -304,6 +304,12 @@ final class GalleryFeedTests: XCTestCase {
         XCTAssertNil(feed.progress(guest))
     }
 
+    func testTheCopiesAreLeftOutOfBackups() async throws {
+        await feed.start(guest)
+        let values = try outgoing.resourceValues(forKeys: [.isExcludedFromBackupKey])
+        XCTAssertEqual(values.isExcludedFromBackup, true)
+    }
+
     func testTheTotalGrowsWhenTheLibraryDoes() async {
         library = FakeLibrary(folder: root, count: 2)
         makeFeed()

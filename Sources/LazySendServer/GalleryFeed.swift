@@ -249,14 +249,35 @@ public final class GalleryFeed {
         let file = directory.appendingPathComponent(Self.safeName(item.name))
         staging.insert(folder)
         defer { staging.remove(folder) }
-        do {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // A copy across volumes can take a while, so it is not done on the main actor.
+        let source = exported.url
+        let outgoing = self.outgoing
+        let placed = await Task.detached { () -> Bool in
+            let fm = FileManager.default
             do {
-                try FileManager.default.moveItem(at: exported.url, to: file)
+                try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+                // The copies are temporary and can be large, so a backup leaves them out.
+                var values = URLResourceValues()
+                values.isExcludedFromBackup = true
+                var root = outgoing
+                try? root.setResourceValues(values)
+                do {
+                    try fm.moveItem(at: source, to: file)
+                } catch {
+                    try fm.copyItem(at: source, to: file)
+                }
+                return true
             } catch {
-                try FileManager.default.copyItem(at: exported.url, to: file)
+                return false
             }
-        } catch {
+        }.value
+        guard placed else {
+            try? FileManager.default.removeItem(at: directory)
+            failed(item, for: deviceId)
+            return
+        }
+        // The run may have been stopped while the file was being placed.
+        guard runs[deviceId]?.done == false else {
             try? FileManager.default.removeItem(at: directory)
             return
         }
