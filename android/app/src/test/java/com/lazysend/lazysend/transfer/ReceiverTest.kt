@@ -23,7 +23,12 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
+
+private class FullFiles(inner: ReceivedFiles) : ReceivedFiles by inner {
+    override fun append(part: ReceivedFiles.Part): java.io.OutputStream = throw java.io.IOException("write failed: ENOSPC (No space left on device)")
+}
 
 class ReceiverTest {
     private val pc = FakePc()
@@ -128,6 +133,27 @@ class ReceiverTest {
         assertEquals(1, files.created.get())
         assertEquals(listOf("out1", "out1"), pc.acknowledged)
         assertEquals(1, timeline.get("gallery-from-desktop-test-01")!!.count)
+    }
+
+    @Test
+    fun aFullDiskLeavesTheItemQueuedAndTellsTheUserOnce() = runBlocking {
+        val told = mutableListOf<String>()
+        val full = Receiver(PcConnector(store, null), timeline, FullFiles(files), { _, _, text -> told += text })
+        pc.outboxFile = bytes(1_000)
+        pc.outbox += OutboxEntry("out1", "file", name = "x.bin", size = 1_000)
+        pc.outbox += OutboxEntry("out2", "file", name = "IMG.jpg", size = 1_000, mime = "image/jpeg", sourceId = "local:image:3")
+
+        repeat(2) {
+            try {
+                full.collect(paired, pc.client(), 0)
+                fail("Expected the storage to be full")
+            } catch (e: StorageFullException) {
+            }
+        }
+
+        assertEquals(emptyList<String>(), pc.acknowledged)
+        assertEquals(1, told.size)
+        assertTrue(timeline.entries.value.none { it.state == EntryState.Failed })
     }
 
     @Test

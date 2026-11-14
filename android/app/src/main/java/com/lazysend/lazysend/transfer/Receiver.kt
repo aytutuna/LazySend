@@ -24,9 +24,14 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.coroutines.coroutineContext
 
-/** Takes what the PC has queued for this phone: text and links into the timeline, files into the media store. */
 private const val GALLERY_DONE_KEPT = 200
 
+/** This phone has no room left. The item stays queued on the PC and is asked for again later. */
+class StorageFullException(cause: IOException) : IOException(cause.message, cause)
+
+internal fun isOutOfSpace(e: IOException): Boolean = e.message.orEmpty().let { "ENOSPC" in it || "No space left" in it }
+
+/** Takes what the PC has queued for this phone: text and links into the timeline, files into the media store. */
 class Receiver(
     private val connector: PcConnector,
     private val timeline: Timeline,
@@ -42,6 +47,9 @@ class Receiver(
     private val galleryParts = ConcurrentHashMap<String, ReceivedFiles.Part>()
     private val galleryDone = LinkedHashSet<String>()
 
+    // Said once until a file gets through, as the item is asked for again every little while.
+    @Volatile private var fullTold = false
+
     /** Takes everything pending on [pc] once; with [wait] above 0 it holds the request open until something comes. */
     suspend fun collect(pc: Pc, client: LinkClient, wait: Int): Int {
         var taken = 0
@@ -54,7 +62,7 @@ class Receiver(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: IOException) {
-                        throw e
+                        throw if (isOutOfSpace(e)) storageFull(pc, e) else e
                     } catch (e: LinkException) {
                         // The PC is busy or failing: leave the item queued and try again later. Anything else will not get better.
                         if (e.status == 401 || e.status == 429 || e.status >= 500 || e.code == "busy") throw e
@@ -81,6 +89,8 @@ class Receiver(
             } catch (e: LinkException) {
                 if (e.status == 401) return
                 delay(5000)
+            } catch (e: StorageFullException) {
+                delay(30_000)
             } catch (e: IOException) {
                 connector.lost(pc.id)
                 delay(2000)
@@ -90,6 +100,14 @@ class Receiver(
                 delay(5000)
             }
         }
+    }
+
+    private fun storageFull(pc: Pc, e: IOException): StorageFullException {
+        if (!fullTold) {
+            fullTold = true
+            notify("storage-full".hashCode(), pc.name, "This phone is out of storage. Files stay queued on ${pc.name} until there is room.")
+        }
+        return StorageFullException(e)
     }
 
     private fun fail(pc: Pc, item: OutboxEntry, reason: String?) {
@@ -134,6 +152,7 @@ class Receiver(
         // A half-saved file that already holds every byte only needs putting in place.
         if (part.size < size) part = download(client, item, folder, part) { moved, _ -> galleryParts[item.id] = moved }
         files.finish(part, taken)
+        fullTold = false
         galleryParts.remove(item.id)
         synchronized(galleryDone) {
             galleryDone.add(item.id)
@@ -174,6 +193,7 @@ class Receiver(
             throw e
         }
         val saved = files.finish(part)
+        fullTold = false
         timeline.update(id) { it.copy(state = EntryState.Done, bytes = size, uri = saved) }
         timeline.save()
         notify(id.hashCode(), pc.name, name)
