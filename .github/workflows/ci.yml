@@ -187,6 +187,7 @@ jobs:
           xcodebuild test \
             -scheme LazySend-Package \
             -only-testing:LazySendIOSTests \
+            -only-testing:LazySendServerTests \
             -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}" \
             -resultBundlePath "$RUNNER_TEMP/ios-tests.xcresult" \
             CODE_SIGNING_ALLOWED=NO

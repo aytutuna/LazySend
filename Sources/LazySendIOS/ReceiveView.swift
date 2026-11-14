@@ -89,7 +89,11 @@ struct ReceiveView: View {
             Button("New code") { host.renewPairing() }
                 .buttonStyle(.borderedProminent)
         } else {
-            Text("Scan within \(Text(pairing.expires, style: .timer))").fontWeight(.semibold)
+            HStack(spacing: 4) {
+                Text("Scan within")
+                Text(pairing.expires, style: .timer)
+            }
+            .fontWeight(.semibold)
         }
         if pairing.pairedName != nil {
             Button("New code") { host.renewPairing() }
