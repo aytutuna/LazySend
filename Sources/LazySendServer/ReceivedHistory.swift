@@ -8,6 +8,7 @@ public struct ReceivedItem: Codable, Equatable, Identifiable, Sendable {
     public var text: String?
     public var url: String?
     public var received: Date
+    public var sendId: String?
 }
 
 struct HistoryFile: Codable {
@@ -38,14 +39,16 @@ public final class ReceivedHistory: @unchecked Sendable {
     }
 
     @discardableResult
-    func add(_ device: PairedDevice, kind: String, text: String?, url link: String?, now: Date) -> ReceivedItem {
-        add(deviceId: device.id, deviceName: device.name, kind: kind, text: text, url: link, id: newId(), now: now)
+    func add(_ device: PairedDevice, kind: String, text: String?, url link: String?, now: Date, sendId: String? = nil) -> ReceivedItem {
+        add(deviceId: device.id, deviceName: device.name, kind: kind, text: text, url: link, id: newId(), now: now, sendId: sendId)
     }
 
     /// An item of a computer this one is a guest of keeps the id the computer gave it, so a repeat is noticed.
     @discardableResult
-    func add(deviceId: String, deviceName: String, kind: String, text: String?, url link: String?, id: String, now: Date) -> ReceivedItem {
-        let item = ReceivedItem(id: id, deviceId: deviceId, deviceName: deviceName, kind: kind, text: text, url: link, received: now)
+    func add(deviceId: String, deviceName: String, kind: String, text: String?, url link: String?, id: String, now: Date,
+             sendId: String? = nil) -> ReceivedItem {
+        let item = ReceivedItem(id: id, deviceId: deviceId, deviceName: deviceName, kind: kind, text: text, url: link, received: now,
+                                sendId: sendId)
         lock.lock()
         file.items.insert(item, at: 0)
         var bytes = 0
@@ -60,6 +63,13 @@ public final class ReceivedHistory: @unchecked Sendable {
         lock.unlock()
         onChange?()
         return item
+    }
+
+    /// The item a device sent under `sendId` within the last day, if it is still in the list.
+    func findSend(_ deviceId: String, _ sendId: String, now: Date) -> ReceivedItem? {
+        lock.lock()
+        defer { lock.unlock() }
+        return file.items.first { $0.sendId == sendId && $0.deviceId == deviceId && now.timeIntervalSince($0.received) <= Inbox.doneKept }
     }
 
     @discardableResult

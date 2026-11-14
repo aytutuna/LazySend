@@ -32,6 +32,7 @@ final class IncomingFile: Codable, @unchecked Sendable {
     var modified: Date?
     var sourceId: String?
     var sha256: String?
+    var sendId: String?
     /// The folder the file ends up in, fixed when the transfer starts so changing the receive folder later strands nothing.
     var directory = ""
     var started = Date()
@@ -81,6 +82,11 @@ private struct SourceKey: Hashable {
     var source: String
 }
 
+private struct SendKey: Hashable {
+    var device: String
+    var send: String
+}
+
 /// Files from phones: begun with the item's metadata, filled in chunks into `<id>.part` in the folder they will end
 /// up in, and renamed into place when the last byte is in and the SHA-256, when given, matches. The offset a phone
 /// resumes from is the length of the part file, so what was written before a dropped connection or a restart counts.
@@ -98,6 +104,8 @@ public final class Inbox: @unchecked Sendable {
     private let lock = NSLock()
     private var files: [String: IncomingFile] = [:]
     private var bySource: [SourceKey: IncomingFile] = [:]
+    /// Every record by (phone, send id), finished ones too until they are pruned.
+    private var bySend: [SendKey: IncomingFile] = [:]
     private var writers: [String: Writer] = [:]
     private var lastPrune = Date.distantPast
 
@@ -125,9 +133,9 @@ public final class Inbox: @unchecked Sendable {
         }.sorted { $0.id < $1.id }
     }
 
-    /// Starts a file, or finds the one already started for the same source id. A source id that was received
-    /// before answers done.
-    func begin(_ device: PairedDevice, _ request: ItemRequest) throws -> ItemState {
+    /// Starts a file, or finds the one already started for the same send id or source id. A source id that was received
+    /// before answers done. `repeated` is true when the answer is the record of an earlier post with the same send id.
+    func begin(_ device: PairedDevice, _ request: ItemRequest) throws -> (state: ItemState, repeated: Bool) {
         guard let size = request.size, size >= 0 else { throw Refusal(status: 400, failure: .badRequest) }
         if let source = request.sourceId, !GalleryIndex.isValidSourceId(source) { throw Refusal(status: 400, failure: .badRequest) }
         var sha256: String?
@@ -143,8 +151,12 @@ public final class Inbox: @unchecked Sendable {
             let year = Calendar(identifier: .gregorian).component(.year, from: date)
             if (1980...2100).contains(year) { modified = date }
         }
+        if let send = request.sendId, !isValidSendId(send) { throw Refusal(status: 400, failure: .badRequest) }
+        if let sent = try findSend(device.id, request.sendId, size, sha256) {
+            return (resume(sent), true)
+        }
         if let source = request.sourceId, index.contains(device.id, source) {
-            return ItemState(id: "", offset: size, done: true, duplicate: true)
+            return (ItemState(id: "", offset: size, done: true, duplicate: true), false)
         }
         let now = clock()
         pruneIfDue(now)
@@ -164,14 +176,25 @@ public final class Inbox: @unchecked Sendable {
         file.modified = modified
         file.sourceId = request.sourceId
         file.sha256 = sha256
+        file.sendId = request.sendId
         file.directory = folder.path
         file.started = now
         // Looked up and added in one step, so two requests for the same asset cannot start two transfers. The index is
         // asked again here: a transfer that finishes between the first check and this one has left `bySource` but is in it.
         var existing: IncomingFile?
         var duplicate = false
+        var repeated = false
+        var mismatch = false
         lock.lock()
-        if let source = request.sourceId {
+        if let send = request.sendId, let known = bySend[SendKey(device: device.id, send: send)] {
+            if known.size == size && known.sha256 == sha256 {
+                existing = known
+                repeated = true
+            } else {
+                mismatch = true
+            }
+        }
+        if existing == nil && !mismatch, let source = request.sourceId {
             let known = bySource[SourceKey(device: device.id, source: source)]
             if let known = known, known.done {
                 duplicate = true
@@ -181,13 +204,11 @@ public final class Inbox: @unchecked Sendable {
                 duplicate = true
             }
         }
-        if existing == nil && !duplicate { track(file) }
+        if existing == nil && !duplicate && !mismatch { track(file) }
         lock.unlock()
-        if duplicate { return ItemState(id: "", offset: size, done: true, duplicate: true) }
-        if let existing = existing {
-            finishIfFull(existing)
-            return state(of: existing)
-        }
+        if mismatch { throw Refusal(status: 400, failure: .badRequest) }
+        if duplicate { return (ItemState(id: "", offset: size, done: true, duplicate: true), false) }
+        if let existing = existing { return (resume(existing), repeated) }
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             guard FileManager.default.createFile(atPath: partURL(file).path, contents: nil) else { throw CocoaError(.fileWriteUnknown) }
@@ -199,7 +220,29 @@ public final class Inbox: @unchecked Sendable {
             discard(file)
             throw Refusal(status: 500, failure: .serverError)
         }
+        return (state(of: file), false)
+    }
+
+    private func resume(_ file: IncomingFile) -> ItemState {
+        finishIfFull(file)
         return state(of: file)
+    }
+
+    /// The record a device made under `sendId`; throws when this post does not match it.
+    private func findSend(_ deviceId: String, _ sendId: String?, _ size: Int64, _ sha256: String?) throws -> IncomingFile? {
+        guard let sendId = sendId else { return nil }
+        lock.lock()
+        let known = bySend[SendKey(device: deviceId, send: sendId)]
+        lock.unlock()
+        if let known = known, known.size != size || known.sha256 != sha256 { throw Refusal(status: 400, failure: .badRequest) }
+        return known
+    }
+
+    /// True when a device has a file under `sendId`.
+    func hasSend(_ deviceId: String, _ sendId: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return bySend[SendKey(device: deviceId, send: sendId)] != nil
     }
 
     /// Where a file of `deviceId` stands; nil when there is no such file.
@@ -409,6 +452,10 @@ public final class Inbox: @unchecked Sendable {
         }
         lock.lock()
         files[file.id] = nil
+        if let send = file.sendId {
+            let key = SendKey(device: file.deviceId, send: send)
+            if bySend[key] === file { bySend[key] = nil }
+        }
         untrack(file)
         writers[file.id] = nil
         lock.unlock()
@@ -418,6 +465,7 @@ public final class Inbox: @unchecked Sendable {
     // With the lock held.
     private func track(_ file: IncomingFile) {
         files[file.id] = file
+        if let send = file.sendId { bySend[SendKey(device: file.deviceId, send: send)] = file }
         if !file.done, let source = file.sourceId { bySource[SourceKey(device: file.deviceId, source: source)] = file }
     }
 

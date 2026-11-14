@@ -49,6 +49,11 @@ public func isValidId(_ id: String?) -> Bool {
     }
 }
 
+/// A sender's id for one send: 16 to 64 of the characters an id has.
+func isValidSendId(_ id: String) -> Bool {
+    id.utf8.count >= 16 && isValidId(id)
+}
+
 func newId() -> String {
     UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
 }

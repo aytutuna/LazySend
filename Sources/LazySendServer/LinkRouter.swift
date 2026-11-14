@@ -388,20 +388,35 @@ public final class LinkRouter: @unchecked Sendable {
         guard let body = await request.body.readAll(), let item = try? JSONDecoder().decode(ItemRequest.self, from: body) else {
             return .error(400, .badRequest)
         }
+        if let send = item.sendId, !isValidSendId(send) { return .error(400, .badRequest) }
         switch item.kind {
         case ItemKind.text:
             guard let text = item.text, !text.isEmpty else { return .error(400, .badRequest) }
             guard text.utf8.count <= LinkProtocol.maxTextBytes else { return .error(413, .tooLarge) }
-            return stored(history.add(device, kind: ItemKind.text, text: text, url: nil, now: now))
+            if let repeated = repeatedSend(device, item, kind: ItemKind.text, now: now) { return repeated }
+            return stored(history.add(device, kind: ItemKind.text, text: text, url: nil, now: now, sendId: item.sendId))
         case ItemKind.link:
             guard isAcceptableLink(item.url) else { return .error(400, .badRequest) }
-            return stored(history.add(device, kind: ItemKind.link, text: nil, url: item.url, now: now))
+            if let repeated = repeatedSend(device, item, kind: ItemKind.link, now: now) { return repeated }
+            return stored(history.add(device, kind: ItemKind.link, text: nil, url: item.url, now: now, sendId: item.sendId))
         case ItemKind.file:
-            let state = try inbox.begin(device, item)
-            return .json(state.done ? 200 : 201, state)
+            if let send = item.sendId, history.findSend(device.id, send, now: now) != nil { return .error(400, .badRequest) }
+            let begun = try inbox.begin(device, item)
+            return .json(begun.repeated || begun.state.done ? 200 : 201, begun.state)
         default:
             return .error(400, .badRequest)
         }
+    }
+
+    /// The answer for a text or link whose send id the host has; nil when it has not. A text or link keeps no size
+    /// or hash, so only its kind can disagree with the earlier post.
+    private func repeatedSend(_ device: PairedDevice, _ item: ItemRequest, kind: String, now: Date) -> LinkResponse? {
+        guard let send = item.sendId else { return nil }
+        if let known = history.findSend(device.id, send, now: now) {
+            if known.kind != kind { return LinkResponse.error(400, .badRequest) }
+            return LinkResponse.json(200, ItemState(id: known.id, offset: 0, done: true))
+        }
+        return inbox.hasSend(device.id, send) ? LinkResponse.error(400, .badRequest) : nil
     }
 
     private func stored(_ item: ReceivedItem) -> LinkResponse {

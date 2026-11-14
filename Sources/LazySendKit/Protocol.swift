@@ -96,9 +96,10 @@ public struct ItemRequest: Codable, Equatable {
     public var modified: String?
     public var sourceId: String?
     public var sha256: String?
+    public var sendId: String?
 
     public init(kind: String, text: String? = nil, url: String? = nil, name: String? = nil, size: Int64? = nil,
-                mime: String? = nil, modified: String? = nil, sourceId: String? = nil, sha256: String? = nil) {
+                mime: String? = nil, modified: String? = nil, sourceId: String? = nil, sha256: String? = nil, sendId: String? = nil) {
         self.kind = kind
         self.text = text
         self.url = url
@@ -108,6 +109,7 @@ public struct ItemRequest: Codable, Equatable {
         self.modified = modified
         self.sourceId = sourceId
         self.sha256 = sha256
+        self.sendId = sendId
     }
 }
 
