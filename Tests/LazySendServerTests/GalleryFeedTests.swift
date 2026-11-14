@@ -258,6 +258,23 @@ final class GalleryFeedTests: XCTestCase {
         XCTAssertEqual(library.exports, 1)
     }
 
+    func testRemovingTheGuestWhileTheLibraryIsBeingReadCancelsTheStart() async {
+        let slow = library!
+        feed = GalleryFeed(outbox: outbox, indexDirectory: root.appendingPathComponent("feed-index"),
+                           stateURL: root.appendingPathComponent("feeds.json"), outgoing: outgoing, library: {
+                               try? await Task.sleep(nanoseconds: 300_000_000)
+                               return slow.items()
+                           })
+        let starting = Task { await self.feed.start(self.guest) }
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        feed.reconcile(paired: [])
+        await starting.value
+        XCTAssertNil(feed.progress(guest))
+        XCTAssertTrue(queued().isEmpty)
+        XCTAssertEqual(library.exports, 0)
+        XCTAssertTrue(copies().isEmpty)
+    }
+
     func testTheTotalGrowsWhenTheLibraryDoes() async {
         library = FakeLibrary(folder: root, count: 2)
         makeFeed()

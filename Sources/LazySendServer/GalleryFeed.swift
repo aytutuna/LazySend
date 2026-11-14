@@ -53,6 +53,8 @@ public final class GalleryFeed {
     private var retried: [String: Set<String>] = [:]
     private var waits: [String: GalleryFeedWait] = [:]
     private var loading: Set<String> = []
+    // Guests whose run is being set up: the library is read before the run exists.
+    private var starting: Set<String> = []
     private var filling: Set<String> = []
     private var refill: Set<String> = []
     private var staging: Set<String> = []
@@ -96,8 +98,10 @@ public final class GalleryFeed {
     }
 
     public func start(_ deviceId: String) async {
-        guard runs[deviceId]?.done != false else { return }
+        guard runs[deviceId]?.done != false, starting.insert(deviceId).inserted else { return }
         let todo = await candidates(for: deviceId)
+        // Removing the guest while the library was being read cancels the start.
+        guard starting.remove(deviceId) != nil else { return }
         runs[deviceId] = Run(total: todo.count, base: sent.count(deviceId))
         lists[deviceId] = todo.reversed()
         save()
@@ -120,6 +124,7 @@ public final class GalleryFeed {
 
     /// Ends the run and takes back what was queued and not yet acknowledged, with its copies.
     public func stop(_ deviceId: String) {
+        starting.remove(deviceId)
         runs[deviceId] = nil
         lists[deviceId] = nil
         later[deviceId] = nil
@@ -137,7 +142,7 @@ public final class GalleryFeed {
 
     /// Drops what belongs to guests that are no longer paired.
     public func reconcile(paired: Set<String>) {
-        for deviceId in runs.keys where !paired.contains(deviceId) { forget(deviceId) }
+        for deviceId in Set(runs.keys).union(starting) where !paired.contains(deviceId) { forget(deviceId) }
     }
 
     private func acknowledged(_ item: OutboxItem) {
