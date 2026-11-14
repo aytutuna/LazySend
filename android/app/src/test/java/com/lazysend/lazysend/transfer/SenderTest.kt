@@ -45,6 +45,15 @@ class SenderTest {
     }
 
     @Test
+    fun aNoteGoesWithASendIdThatTheTimelineKeeps() = runBlocking {
+        assertEquals(null, sender().sendText(paired, "hello"))
+
+        val sent = pc.items.single()
+        assertEquals(22, sent.sendId!!.length)
+        assertEquals(sent.sendId, timeline.entries.value.single().sendId)
+    }
+
+    @Test
     fun anAssetThatCannotBeReadIsSkippedNotRetried() = runBlocking {
         val gone = Asset("external_primary:image:1", Uri.parse("content://nothing/1"), "gone.jpg", 10, "image/jpeg", 0)
 

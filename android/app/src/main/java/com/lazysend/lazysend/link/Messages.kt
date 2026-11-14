@@ -1,5 +1,6 @@
 package com.lazysend.lazysend.link
 
+import java.security.SecureRandom
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -52,6 +53,9 @@ data class ItemRequest(
     val sha256: String? = null,
     val sendId: String? = null,
 )
+
+/** The id a sender picks once per thing it sends, so a repeated post of it is recognised: 16 random bytes, 22 characters. */
+fun newSendId(): String = encodeBase64Url(ByteArray(16).also { SecureRandom().nextBytes(it) })
 
 @Serializable
 data class ItemState(val id: String, val offset: Long, val done: Boolean, val duplicate: Boolean? = null)

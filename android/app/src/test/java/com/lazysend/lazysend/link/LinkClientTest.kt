@@ -7,6 +7,7 @@ import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.fail
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -77,6 +78,19 @@ class LinkClientTest {
         assertTrue(client.postItem(ItemRequest("text", text = "hello there")).done)
         assertTrue(client.postItem(ItemRequest("link", url = "https://example.com/a")).done)
         assertEquals(listOf("hello there", "https://example.com/a"), pc.texts)
+    }
+
+    @Test
+    fun aSendIdGoesWithTextAndFilePosts() = runTest {
+        val id = newSendId()
+        assertEquals(22, id.length)
+        assertNotEquals(id, newSendId())
+        pc.client().postItem(ItemRequest("text", text = "hi", sendId = id))
+        val data = bytes(5000)
+        pc.chunkDrops += FakePc.Drop.AnswerLost
+        uploader().sendFile(fileRequest(data).copy(sendId = id), source(data))
+        assertTrue(pc.items.all { it.sendId == id })
+        assertEquals(2, pc.items.size)
     }
 
     @Test

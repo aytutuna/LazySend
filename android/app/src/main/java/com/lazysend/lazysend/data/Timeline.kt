@@ -32,6 +32,8 @@ data class TimelineEntry(
     /** Where a received file was saved, or the half-saved file of a download in progress. */
     val uri: String? = null,
     val mime: String? = null,
+    /** What the PC knows this send by, kept so a repeated post of it is not a second item. Null on entries from older versions. */
+    val sendId: String? = null,
 )
 
 /** Sent and received things, newest first, kept in a JSON file. */

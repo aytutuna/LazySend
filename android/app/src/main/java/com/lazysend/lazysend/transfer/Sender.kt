@@ -16,6 +16,7 @@ import com.lazysend.lazysend.link.LinkClient
 import com.lazysend.lazysend.link.LinkException
 import com.lazysend.lazysend.link.Uploader
 import com.lazysend.lazysend.link.missingIds
+import com.lazysend.lazysend.link.newSendId
 import com.lazysend.lazysend.link.sha256Hex
 import java.io.IOException
 import java.io.InputStream
@@ -53,11 +54,12 @@ class Sender(
     suspend fun sendText(pc: Pc, text: String): String? {
         val trimmed = text.trim()
         val isLink = trimmed.length <= 8192 && Regex("https?://\\S+").matches(trimmed)
-        val item = if (isLink) ItemRequest("link", url = trimmed) else ItemRequest("text", text = text)
+        val sendId = newSendId()
+        val item = if (isLink) ItemRequest("link", url = trimmed, sendId = sendId) else ItemRequest("text", text = text, sendId = sendId)
         if (text.toByteArray().size > 1024 * 1024) return "That is more than the 1 MB a note can hold. Send it as a file instead."
         val entry = TimelineEntry(
             UUID.randomUUID().toString(), clock(), Direction.Sent, if (isLink) EntryKind.Link else EntryKind.Text, pc.name,
-            if (isLink) trimmed else text, state = EntryState.Active,
+            if (isLink) trimmed else text, state = EntryState.Active, sendId = sendId,
         )
         timeline.add(entry)
         return try {
@@ -111,7 +113,10 @@ class Sender(
 
     private suspend fun sendOne(pc: Pc, uri: Uri) {
         val id = UUID.randomUUID().toString()
-        timeline.add(TimelineEntry(id, clock(), Direction.Sent, EntryKind.File, pc.name, uri.lastPathSegment ?: "file", state = EntryState.Active))
+        val sendId = newSendId()
+        timeline.add(
+            TimelineEntry(id, clock(), Direction.Sent, EntryKind.File, pc.name, uri.lastPathSegment ?: "file", state = EntryState.Active, sendId = sendId),
+        )
         try {
             val meta = withContext(Dispatchers.IO) { describe(uri) }
             timeline.update(id) { it.copy(title = meta.name, totalBytes = meta.size, mime = meta.mime) }
@@ -119,7 +124,7 @@ class Sender(
             val source = DataSource { offset -> open(uri, offset) }
             shown.value = SendProgress(meta.name, pc.name, 0, meta.size)
             val hash = withContext(Dispatchers.IO) { sha256Hex(source) }
-            val request = ItemRequest("file", name = meta.name, size = meta.size, mime = meta.mime, modified = meta.modified, sha256 = hash)
+            val request = ItemRequest("file", name = meta.name, size = meta.size, mime = meta.mime, modified = meta.modified, sha256 = hash, sendId = sendId)
             var lastReport = 0L
             Uploader(refresher(pc, first)).sendFile(request, source) { sent ->
                 val now = System.nanoTime()
