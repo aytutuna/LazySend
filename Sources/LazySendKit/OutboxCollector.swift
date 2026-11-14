@@ -16,6 +16,18 @@ public protocol OutboxHandler: Sendable {
     func fail(_ item: OutboxEntry, reason: String) async
 }
 
+/// The handler cannot store anything right now (the receive folder is missing, denied or on a volume that is not
+/// there). The item stays queued on the computer and is asked for again later.
+public struct StorageUnavailable: Error, LocalizedError {
+    public let reason: String
+
+    public init(reason: String) {
+        self.reason = reason
+    }
+
+    public var errorDescription: String? { reason }
+}
+
 private actor AsyncLock {
     private var held = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
@@ -91,6 +103,8 @@ public final class OutboxCollector: @unchecked Sendable {
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as LinkError where OutboxCollector.leavesQueued(error) {
+            throw error
+        } catch is StorageUnavailable {
             throw error
         } catch {
             // One item that cannot be stored must not stop the ones behind it, and it will not get better.

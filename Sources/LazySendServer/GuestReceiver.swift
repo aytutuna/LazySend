@@ -3,12 +3,21 @@ import LazySendKit
 
 /// Stores what one host has queued for this computer. Texts and links go into the received history under the item's
 /// own id, so a repeat is noticed. A file is written as `<id>.part` in `<receive folder>/<host name>/`, which a dropped
-/// download continues, then renamed, marked as downloaded and reported.
+/// download continues, then renamed, marked as downloaded and reported. A receive folder that cannot be used leaves the
+/// item queued on the host.
 final class GuestReceiver: OutboxHandler, @unchecked Sendable {
+    static let finishedKept = 200
+    static let staleAfter: TimeInterval = 24 * 3600
+
     private weak var guest: GuestService?
     private let hostId: String
     private let lock = NSLock()
     private var handles: [String: FileHandle] = [:]
+    // Where each file in progress is being written, fixed when it starts so a rename of the host cannot strand it.
+    private var parts: [String: URL] = [:]
+    // The files finished lately, so one the host lists again because its acknowledgement was lost is only acknowledged.
+    private var finished: [String] = []
+    private var reportedStorage = false
 
     init(hostId: String, guest: GuestService) {
         self.hostId = hostId
@@ -29,7 +38,12 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
     }
 
     func isDone(_ item: OutboxEntry) async -> Bool {
-        guard item.kind != "file", let history = guest?.history else { return false }
+        if item.kind == "file" {
+            lock.lock()
+            defer { lock.unlock() }
+            return finished.contains(item.id)
+        }
+        guard let history = guest?.history else { return false }
         return history.items.contains { $0.id == item.id }
     }
 
@@ -50,22 +64,41 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
 
     func prepareFile(_ item: OutboxEntry) async throws -> Int64 {
         let part = try partURL(for: item)
-        let fm = FileManager.default
-        try fm.createDirectory(at: part.deletingLastPathComponent(), withIntermediateDirectories: true)
         closeHandle(item.id)
         var have: Int64 = 0
-        if fm.fileExists(atPath: part.path) {
-            let attributes = try? fm.attributesOfItem(atPath: part.path)
-            have = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
-        } else if !fm.createFile(atPath: part.path, contents: nil) {
-            throw CocoaError(.fileWriteUnknown)
+        let handle: FileHandle
+        do {
+            let fm = FileManager.default
+            try fm.createDirectory(at: part.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if fm.fileExists(atPath: part.path) {
+                let attributes = try? fm.attributesOfItem(atPath: part.path)
+                have = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
+            } else if !fm.createFile(atPath: part.path, contents: nil) {
+                throw CocoaError(.fileWriteUnknown)
+            }
+            handle = try FileHandle(forWritingTo: part)
+            _ = try handle.seekToEnd()
+        } catch {
+            reportStorage(error)
+            throw StorageUnavailable(reason: error.localizedDescription)
         }
-        let handle = try FileHandle(forWritingTo: part)
-        _ = try handle.seekToEnd()
         lock.lock()
         handles[item.id] = handle
+        parts[item.id] = part
+        reportedStorage = false
         lock.unlock()
         return have
+    }
+
+    // Said once until storage works again, as the item is asked for every few seconds.
+    private func reportStorage(_ error: Error) {
+        lock.lock()
+        let first = !reportedStorage
+        reportedStorage = true
+        lock.unlock()
+        if first {
+            guest?.onFailed?("Files from \(host?.name ?? "a computer") cannot be saved in the receive folder (\(error.localizedDescription)). They stay queued there until it works.")
+        }
     }
 
     func resetFile(_ item: OutboxEntry) throws {
@@ -82,10 +115,18 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
 
     func finishFile(_ item: OutboxEntry) async throws {
         closeHandle(item.id)
-        let part = try partURL(for: item)
+        lock.lock()
+        let started = parts[item.id]
+        lock.unlock()
+        guard let part = started else { throw CocoaError(.fileNoSuchFile) }
         let folder = part.deletingLastPathComponent()
         let target = folder.appendingPathComponent(FileNames.unique(in: folder, name: FileNames.clean(item.name)))
         try FileManager.default.moveItem(at: part, to: target)
+        lock.lock()
+        parts[item.id] = nil
+        finished.append(item.id)
+        if finished.count > GuestReceiver.finishedKept { finished.removeFirst(finished.count - GuestReceiver.finishedKept) }
+        lock.unlock()
         Inbox.markAsDownloaded(target)
         guard let host = host else { return }
         guest?.onFileReceived?(ReceivedFile(deviceId: host.id, deviceName: host.name, url: target, size: item.size ?? 0, sourceId: nil))
@@ -98,8 +139,42 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
     /// What an item that is dropped from the host's queue leaves half-downloaded is of no use.
     func fail(_ item: OutboxEntry, reason: String) async {
         closeHandle(item.id)
-        if let part = try? partURL(for: item) { try? FileManager.default.removeItem(at: part) }
+        lock.lock()
+        let part = parts.removeValue(forKey: item.id)
+        lock.unlock()
+        if let part = part { try? FileManager.default.removeItem(at: part) }
         guest?.onFailed?("\(item.name ?? "An item") from \(host?.name ?? "a computer") could not be received: \(reason)")
+    }
+
+    /// The host was removed, so what it had begun is of no use either.
+    func discardParts() {
+        lock.lock()
+        let open = Array(handles.values)
+        let started = Array(parts.values)
+        handles = [:]
+        parts = [:]
+        lock.unlock()
+        open.forEach { try? $0.close() }
+        started.forEach { try? FileManager.default.removeItem(at: $0) }
+    }
+
+    /// Part files in the host's folder that no listed item will continue and that nothing has touched for a day. The
+    /// folder is named after the host, so a phone of the same name may share it; its parts are younger or are
+    /// removed by the same rule on its own side.
+    func removeStaleParts(keeping listed: Set<String>) {
+        guard let folder = try? directory(), let names = try? FileManager.default.contentsOfDirectory(atPath: folder.path) else { return }
+        lock.lock()
+        let active = Set(parts.keys)
+        lock.unlock()
+        let now = Date()
+        for name in names where name.hasSuffix(".part") {
+            let id = String(name.dropLast(5))
+            let url = folder.appendingPathComponent(name)
+            guard isValidId(id), !listed.contains(id), !active.contains(id),
+                  let modified = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date,
+                  now.timeIntervalSince(modified) > GuestReceiver.staleAfter else { continue }
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     private func openHandle(for item: OutboxEntry) throws -> FileHandle {

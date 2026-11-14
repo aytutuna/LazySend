@@ -11,6 +11,12 @@ namespace LazySend.Core;
 public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendSettings settings)
 {
     private static readonly TimeSpan IdleTimeout = TimeSpan.FromSeconds(30);
+    private const int FinishedKept = 200;
+
+    private readonly object _gate = new();
+    private readonly Queue<string> _finishedOrder = new();
+    private readonly HashSet<string> _finished = [];
+    private bool _storageReported;
 
     public event EventHandler<ReceivedItem>? TextReceived;
     public event EventHandler<ReceivedFile>? FileReceived;
@@ -50,7 +56,9 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
                     AddText(host, item);
                     break;
                 case ItemKind.File:
+                    if (WasFinished(host.Id, item.Id)) break;
                     await DownloadAsync(host, client, item, cancellation).ConfigureAwait(false);
+                    RememberFinished(host.Id, item.Id);
                     break;
             }
         }
@@ -65,6 +73,23 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
             Failed?.Invoke(this, $"{item.Name ?? "An item"} from {host.Name} could not be saved: {e.Message}");
         }
         await client.AcknowledgeAsync(item.Id, cancellation).ConfigureAwait(false);
+    }
+
+    private bool WasFinished(string hostId, string itemId)
+    {
+        lock (_gate) return _finished.Contains(hostId + "/" + itemId);
+    }
+
+    /// <summary>A file whose acknowledgement is lost is listed again; remembering the lately finished ones lets it be only acknowledged.</summary>
+    private void RememberFinished(string hostId, string itemId)
+    {
+        lock (_gate)
+        {
+            string key = hostId + "/" + itemId;
+            if (!_finished.Add(key)) return;
+            _finishedOrder.Enqueue(key);
+            while (_finishedOrder.Count > FinishedKept) _finished.Remove(_finishedOrder.Dequeue());
+        }
     }
 
     private string DirectoryOf(GuestHost host) => Path.Combine(settings.ReceiveRoot, FileNames.Clean(host.Name, "Computer"));
@@ -103,7 +128,7 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
         string directory = DirectoryOf(host);
         string part = Path.Combine(directory, item.Id + ".part");
         long size = item.Size ?? -1;
-        long have = Local(() =>
+        long have = Storage(() =>
         {
             Directory.CreateDirectory(directory);
             return File.Exists(part) ? new FileInfo(part).Length : 0;
@@ -120,7 +145,7 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
             if (size < 0) throw new LocalFailure("the computer did not say how big it is.");
             // Without a Range answer the whole file comes again.
             if (download.Status == 200) have = 0;
-            await using var output = Local(() => new FileStream(part, have > 0 ? FileMode.Append : FileMode.Create, FileAccess.Write, FileShare.Read, 1, FileOptions.Asynchronous));
+            await using var output = Storage(() => new FileStream(part, have > 0 ? FileMode.Append : FileMode.Create, FileAccess.Write, FileShare.Read, 1, FileOptions.Asynchronous));
             var buffer = new byte[81920];
             while (true)
             {
@@ -168,6 +193,29 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
         catch (OperationCanceledException) when (!cancellation.IsCancellationRequested)
         {
             throw new IOException("The download stalled.");
+        }
+    }
+
+    /// <summary>
+    /// The receive folder or the part file cannot be used (missing, denied, on a drive that is not there). That says nothing
+    /// about the item, so it stays queued on the host and is asked for again later; the user is told once until it works.
+    /// </summary>
+    private T Storage<T>(Func<T> step)
+    {
+        try
+        {
+            T result = step();
+            _storageReported = false;
+            return result;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            if (!_storageReported)
+            {
+                _storageReported = true;
+                Failed?.Invoke(this, $"Files cannot be saved in the receive folder ({e.Message}). They stay queued on the other computer until it works.");
+            }
+            throw new IOException(e.Message, e);
         }
     }
 
