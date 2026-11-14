@@ -101,6 +101,7 @@ final class AppModel: ObservableObject {
         host = HostModel(env: env, phoneId: { store.phoneId }, timeline: timeline, saved: saved)
         savesToPhotos = env.defaults.bool(forKey: Keys.photos)
         host.onDevicesChanged = { [weak self] in self?.refreshPcs() }
+        host.onReady = { [weak self] in self?.drainShareQueue() }
         if env.demo { seedDemo() }
         removeStrayCopies()
         refreshPcs()
@@ -601,7 +602,7 @@ final class AppModel: ObservableObject {
     // A picked file is ours already and is moved; one from the document picker is copied while access to it lasts.
     nonisolated static func stage(_ url: URL, scoped: Bool, into folder: URL, name: String? = nil) throws -> URL {
         let fm = FileManager.default
-        let target = folder.appendingPathComponent(name ?? url.lastPathComponent)
+        let target = folder.appendingPathComponent(FileNames.clean(name ?? url.lastPathComponent))
         do {
             try fm.createDirectory(at: folder, withIntermediateDirectories: true)
             if scoped {
@@ -695,7 +696,7 @@ final class AppModel: ObservableObject {
     func drainShareQueue() {
         for item in queue.items() where !queued.contains(item.id) {
             if let phone = HostedPhones.id(ofTarget: item.pcId) {
-                guard host.devices.contains(where: { $0.id == phone }) else {
+                guard host.isPairedOnDisk(phone) else {
                     queue.remove(item.id)
                     continue
                 }

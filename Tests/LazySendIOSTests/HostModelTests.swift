@@ -360,8 +360,88 @@ final class HostModelTests: XCTestCase {
         let guest = try await fixture.pair("Pixel")
         await fixture.tearDown()
         let again = AppModel(env: fixture.env)
+        await again.host.settle()
         XCTAssertEqual(again.phones.map(\.id), [guest.id])
         XCTAssertEqual(again.host.devices.map(\.name), ["Pixel"])
+    }
+
+    private func queuedShare(_ model: AppModel, target: String, name: String = "photo.jpg") throws {
+        let file = fixture.env.documents.appendingPathComponent("data-" + UUID().uuidString)
+        try Data(repeating: 5, count: 300).write(to: file)
+        try model.queue.add(QueuedItem(id: "share-" + UUID().uuidString.prefix(8).lowercased(), pcId: target, kind: "file", name: name,
+                                       mime: "image/jpeg"), file: file, move: true)
+    }
+
+    func testAShareStaysQueuedWhileTheHostIsNotReady() async throws {
+        var env = AppEnvironment.temporary()
+        env.identity = { throw SelfSignedCertificateError("No certificate here.") }
+        let hostFolder = env.folder.appendingPathComponent("Host", isDirectory: true)
+        try FileManager.default.createDirectory(at: hostFolder, withIntermediateDirectories: true)
+        let saved = #"{"desktopId":"abc12345","devices":[{"id":"phone-0001","name":"Pixel"}]}"#
+        try Data(saved.utf8).write(to: hostFolder.appendingPathComponent("devices.json"))
+        let model = AppModel(env: env)
+        await model.host.settle()
+        XCTAssertNotNil(model.host.problem)
+        try model.queue.add(QueuedItem(id: "share-0010", pcId: HostedPhones.target("phone-0001"), kind: "text", text: "wait for me"))
+        model.drainShareQueue()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(model.queue.items().map(\.id), ["share-0010"])
+    }
+
+    func testAShareStaysQueuedWhenItsCopyFails() async throws {
+        await fixture.startReceiving()
+        let guest = try await fixture.pair("Pixel")
+        // A file where the folder for the copies should be makes every copy fail.
+        try FileManager.default.createDirectory(at: fixture.outgoing.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data().write(to: fixture.outgoing)
+        try queuedShare(model, target: HostedPhones.target(guest.id))
+        model.drainShareQueue()
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertEqual(model.queue.items().count, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: model.queue.dataURL(try XCTUnwrap(model.queue.items().first).id).path))
+        let pending = try await guest.client.outbox(wait: 0).items
+        XCTAssertTrue(pending.isEmpty)
+    }
+
+    func testTheNameOfAFileFromTheShareSheetIsMadeSafe() async throws {
+        await fixture.startReceiving()
+        let guest = try await fixture.pair("Pixel")
+        try queuedShare(model, target: HostedPhones.target(guest.id), name: "../evil:name.jpg")
+        model.drainShareQueue()
+        let queued = await fixture.until { model.queue.items().isEmpty }
+        XCTAssertTrue(queued)
+        let pending = try await guest.client.outbox(wait: 0).items
+        XCTAssertEqual(pending.first?.name, "_evil_name.jpg")
+        XCTAssertEqual(fixture.staged().count, 1)
+    }
+
+    func testAKeyThatChangedDropsTheHostedPairingsAndTheirQueue() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("lazysend-host-" + UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let copy = root.appendingPathComponent("Outgoing/one", isDirectory: true)
+        try FileManager.default.createDirectory(at: copy, withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: copy.appendingPathComponent("a.bin"))
+        try Data("{}".utf8).write(to: root.appendingPathComponent("devices.json"))
+        try Data("{}".utf8).write(to: root.appendingPathComponent("outbox.json"))
+        try Data("old".utf8).write(to: root.appendingPathComponent("fingerprint.txt"))
+        XCTAssertFalse(HostModel.forgetPairingsIfKeyChanged(in: root, fingerprint: "old"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("devices.json").path))
+        XCTAssertTrue(HostModel.forgetPairingsIfKeyChanged(in: root, fingerprint: "new"))
+        for name in ["devices.json", "outbox.json", "Outgoing"] {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent(name).path), name)
+        }
+        XCTAssertEqual(try String(contentsOf: root.appendingPathComponent("fingerprint.txt"), encoding: .utf8), "new")
+    }
+
+    func testPairingsFromAnotherKeyAreNotKeptAtLaunch() async throws {
+        await fixture.startReceiving()
+        _ = try await fixture.pair("Pixel")
+        await fixture.tearDown()
+        try Data("another-key".utf8).write(to: fixture.env.folder.appendingPathComponent("Host/fingerprint.txt"))
+        let again = AppModel(env: fixture.env)
+        await again.host.settle()
+        XCTAssertTrue(again.phones.isEmpty)
+        XCTAssertTrue(again.host.devices.isEmpty)
     }
 }
 #endif

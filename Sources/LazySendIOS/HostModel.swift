@@ -2,6 +2,8 @@
 import Foundation
 import LazySendKit
 import LazySendServer
+import Security
+import UIKit
 import UniformTypeIdentifiers
 
 struct HostPairing: Equatable {
@@ -49,6 +51,8 @@ final class HostModel: ObservableObject {
     @Published private(set) var problem: String?
 
     var onDevicesChanged: (() -> Void)?
+    /// The server side exists: what was left queued for the phones can be delivered.
+    var onReady: (() -> Void)?
 
     private let env: AppEnvironment
     private let phoneId: () -> String
@@ -62,13 +66,22 @@ final class HostModel: ObservableObject {
     private var approvalAnswer: CheckedContinuation<Bool, Never>?
     private var ticker: Task<Void, Never>?
     private var staging: Set<String> = []
+    private var setup: Task<Void, Never>?
+    private var building: Task<LinkService?, Never>?
+    private var restartDelay: TimeInterval = 1
+    private var grace = UIBackgroundTaskIdentifier.invalid
 
     init(env: AppEnvironment, phoneId: @escaping () -> String, timeline: Timeline, saved: SavedAssets) {
         self.env = env
         self.phoneId = phoneId
         self.timeline = timeline
         self.saved = saved
-        if !HostedPhones.read(in: root).isEmpty { _ = makeService() }
+        if !HostedPhones.read(in: root).isEmpty {
+            setup = Task { @MainActor in
+                _ = await self.prepare()
+                self.reconcile()
+            }
+        }
     }
 
     private var root: URL {
@@ -88,15 +101,36 @@ final class HostModel: ObservableObject {
         return receiving || !devices.isEmpty || approval != nil || service.router.awaitingApproval > 0
     }
 
-    private func makeService() -> LinkService? {
+    private func prepare() async -> LinkService? {
         if let service = service { return service }
+        if let building = building { return await building.value }
+        let task = Task { @MainActor in await self.build() }
+        building = task
+        let made = await task.value
+        building = nil
+        return made
+    }
+
+    // The key is made off the main thread, since the Keychain can take a moment at launch.
+    private func build() async -> LinkService? {
         let id = phoneId()
         guard isValidId(id) else {
             problem = String(localized: "This phone's keychain is locked. Unlock the phone and try again.")
             return nil
         }
+        let identity: SecIdentity
         do {
-            let made = try LinkService(paths: SendPaths(root: root, defaultReceiveRoot: env.documents), identity: try env.identity(), desktopId: id)
+            let make = env.identity
+            identity = try await Task.detached { try make() }.value
+        } catch {
+            problem = (error as? SelfSignedCertificateError)?.message ?? error.localizedDescription
+            return nil
+        }
+        do {
+            if let der = SelfSignedCertificate.der(of: identity), let fingerprint = SpkiFingerprint.of(der) {
+                HostModel.forgetPairingsIfKeyChanged(in: root, fingerprint: Base64Url.encode(fingerprint))
+            }
+            let made = try LinkService(paths: SendPaths(root: root, defaultReceiveRoot: env.documents), identity: identity, desktopId: id)
             let name = env.phoneName
             made.router.desktopName = { name }
             if let addresses = env.addresses { made.router.addresses = addresses }
@@ -105,11 +139,32 @@ final class HostModel: ObservableObject {
             devices = made.devices.devices
             problem = nil
             settleSent()
+            onDevicesChanged?()
+            onReady?()
             return made
         } catch {
-            problem = (error as? SelfSignedCertificateError)?.message ?? error.localizedDescription
+            problem = error.localizedDescription
             return nil
         }
+    }
+
+    /// A backup restored on another phone brings the pairings without the key they were made for, which stays on the
+    /// first phone. The guests would pin a key that is gone, so they are dropped and have to pair again.
+    @discardableResult
+    static func forgetPairingsIfKeyChanged(in root: URL, fingerprint: String) -> Bool {
+        let file = root.appendingPathComponent("fingerprint.txt")
+        let fm = FileManager.default
+        let known = (try? String(contentsOf: file, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var dropped = false
+        if known != fingerprint {
+            for name in ["devices.json", "outbox.json", "Outgoing"] where fm.fileExists(atPath: root.appendingPathComponent(name).path) {
+                try? fm.removeItem(at: root.appendingPathComponent(name))
+                dropped = true
+            }
+            try? fm.createDirectory(at: root, withIntermediateDirectories: true)
+            try? fingerprint.write(to: file, atomically: true, encoding: .utf8)
+        }
+        return dropped
     }
 
     private func wire(_ service: LinkService) {
@@ -153,8 +208,27 @@ final class HostModel: ObservableObject {
             service?.closePairing()
             pairing = nil
             settleApproval(false)
+            holdForStop()
         }
         reconcile()
+    }
+
+    // The app is suspended soon after it leaves the screen; the listener is given the time to close properly.
+    private func holdForStop() {
+        guard env.background, grace == .invalid else { return }
+        grace = UIApplication.shared.beginBackgroundTask(withName: "stop host") { [weak self] in
+            MainActor.assumeIsolated { self?.endGrace() }
+        }
+        Task { @MainActor in
+            await self.settle()
+            self.endGrace()
+        }
+    }
+
+    private func endGrace() {
+        guard grace != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(grace)
+        grace = .invalid
     }
 
     func beginReceiving() {
@@ -163,16 +237,18 @@ final class HostModel: ObservableObject {
             demoPairing()
             return
         }
-        guard makeService() != nil else { return }
-        if ticker == nil {
-            ticker = Task { @MainActor in
-                while !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: 1_000_000_000)
-                    self.refresh()
+        setup = Task { @MainActor in
+            guard await self.prepare() != nil, self.receiving else { return }
+            if self.ticker == nil {
+                self.ticker = Task { @MainActor in
+                    while !Task.isCancelled {
+                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                        self.refresh()
+                    }
                 }
             }
+            self.reconcile()
         }
-        reconcile()
     }
 
     func endReceiving() {
@@ -193,6 +269,7 @@ final class HostModel: ObservableObject {
 
     /// Waits for the server to be in the state the model wants.
     func settle() async {
+        await setup?.value
         while let task = reconciling { await task.value }
     }
 
@@ -217,6 +294,7 @@ final class HostModel: ObservableObject {
             do {
                 let port = try await service.start()
                 problem = nil
+                restartDelay = 1
                 env.advertiser?.register(port: port, desktopId: service.devices.desktopId, name: env.phoneName)
             } catch {
                 problem = String(localized: "Lazy Send could not start listening: \(error.localizedDescription)")
@@ -229,10 +307,14 @@ final class HostModel: ObservableObject {
         if listening && receiving && foreground && pairing == nil { openPairing(service) }
     }
 
+    // A listener that failed is started again after a pause that doubles up to 30 seconds while it keeps failing.
     private func restart() async {
         env.advertiser?.unregister()
         await service?.stop()
         listening = false
+        let wait = restartDelay
+        restartDelay = min(restartDelay * 2, 30)
+        try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
         reconcile()
     }
 
@@ -274,11 +356,9 @@ final class HostModel: ObservableObject {
     func ask(_ request: PairRequest, match: String) async -> Bool {
         await withTaskCancellationHandler {
             await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
-                Task { @MainActor in
-                    self.settleApproval(false)
-                    self.approvalAnswer = continuation
-                    self.approval = HostApproval(name: PairedDeviceStore.cleanName(request.phoneName), platform: request.platform, match: match)
-                }
+                settleApproval(false)
+                approvalAnswer = continuation
+                approval = HostApproval(name: PairedDeviceStore.cleanName(request.phoneName), platform: request.platform, match: match)
             }
         } onCancel: {
             Task { @MainActor in self.settleApproval(false) }
@@ -286,6 +366,7 @@ final class HostModel: ObservableObject {
     }
 
     func answerApproval(_ allow: Bool) {
+        if env.demo, allow, let shown = approval { pairing?.pairedName = shown.name }
         settleApproval(allow)
     }
 
@@ -340,18 +421,23 @@ final class HostModel: ObservableObject {
         let request = try ItemRequest.note(text)
         let item: OutboxItem
         do {
-            if request.kind == "link", let url = request.url {
-                item = try service.outbox.queueLink(id, url)
-            } else {
-                item = try service.outbox.queueText(id, text.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression))
-            }
+            item = try queue(request, text, for: id, in: service)
         } catch OutboxError.tooMany {
             throw HostSendError.tooMany(device.name)
-        } catch {
-            throw NoteError.tooLarge
         }
-        addSent(item, kind: request.kind == "link" ? .link : .text, title: request.url ?? request.text ?? text, device: device)
+        addSent(item, kind: item.kind == "link" ? .link : .text, title: item.url ?? item.text ?? text, device: device)
         return item
+    }
+
+    // An address the outbox does not take goes as text.
+    private func queue(_ request: ItemRequest, _ text: String, for id: String, in service: LinkService) throws -> OutboxItem {
+        if request.kind == "link", let url = request.url {
+            do {
+                return try service.outbox.queueLink(id, url)
+            } catch OutboxError.badLink {
+            }
+        }
+        return try service.outbox.queueText(id, text.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression))
     }
 
     /// Queues the files for the phone. Each is copied into the app first (a picked file is moved), so it stays
@@ -426,7 +512,11 @@ final class HostModel: ObservableObject {
     }
 
     /// What the share sheet left for a phone: queued for it, the way the app sends the same things.
+    /// False keeps the item queued for another try: the host is not ready, or the copy failed. True means it was taken
+    /// or cannot be sent at all (the phone is no longer paired, a file that is gone, a text the outbox refuses).
     func deliver(_ item: QueuedItem, dataURL: URL, to id: String) async -> Bool {
+        guard service != nil else { return false }
+        if item.kind == "file" && !FileManager.default.fileExists(atPath: dataURL.path) { return true }
         do {
             if item.kind == "file" {
                 try await sendFiles([dataURL], to: id, scoped: true, names: [item.name ?? "file"])
@@ -436,11 +526,17 @@ final class HostModel: ObservableObject {
                 try sendNote(item.text ?? "", to: id)
             }
             return true
-        } catch HostSendError.tooMany {
-            return false
-        } catch {
+        } catch HostSendError.notPaired {
             return true
+        } catch is NoteError {
+            return true
+        } catch {
+            return false
         }
+    }
+
+    func isPairedOnDisk(_ id: String) -> Bool {
+        HostedPhones.read(in: root).contains { $0.id == id }
     }
 
     private func demoPairing() {
@@ -450,6 +546,9 @@ final class HostModel: ObservableObject {
         pairing = HostPairing(link: code.uri, shortCode: "7KQ2-M9XD", match: SpkiFingerprint.matchCode(fingerprint, shortCode: "7KQ2M9XD"),
                               check: code.checkCode, expires: Date().addingTimeInterval(PairingSession.lifetime))
         listening = true
+        if ProcessInfo.processInfo.arguments.contains("-demoApproval") {
+            approval = HostApproval(name: "Pixel 9", platform: "android", match: code.checkCode)
+        }
     }
 }
 #endif

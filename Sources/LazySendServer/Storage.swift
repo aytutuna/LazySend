@@ -121,12 +121,12 @@ enum JsonFile {
 }
 
 /// Names from phones made safe as file and folder names.
-enum FileNames {
+public enum FileNames {
     static let maxBytes = 240
 
     /// A name that can be created: separators, ':' and control characters become '_', leading and trailing dots
     /// and spaces go, and the stem is cut so the whole is at most `maxBytes` UTF-8 bytes (room for " (2)").
-    static func clean(_ name: String?, fallback: String = "file") -> String {
+    public static func clean(_ name: String?, fallback: String = "file") -> String {
         var text = ""
         for scalar in (name ?? "").unicodeScalars {
             let bad = scalar.value < 0x20 || (0x7F...0x9F).contains(scalar.value) || "/\\:".unicodeScalars.contains(scalar)
