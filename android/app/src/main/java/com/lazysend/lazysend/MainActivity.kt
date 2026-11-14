@@ -101,7 +101,7 @@ class MainActivity : ComponentActivity() {
                     try {
                         awaitCancellation()
                     } finally {
-                        model.pauseReceive()
+                        if (!isChangingConfigurations) model.pauseReceive()
                     }
                 }
             }

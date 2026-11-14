@@ -127,9 +127,14 @@ class HostController(
         paused = false
         start()
         if (shown.value.running) {
-            core.openPairing()
+            ensurePairing()
             publish()
         }
+    }
+
+    // A screen that comes back, a rotation included, finds the code it left rather than a new one.
+    private fun ensurePairing() {
+        if (core.pairing.value?.stateAt(clock()) != SessionState.Open) core.openPairing()
     }
 
     /** The app went out of view with the Receive screen open: the code stays good until it runs out, and only what waits is declined. */
@@ -218,7 +223,7 @@ class HostController(
         advertiser?.register(port, core.hostId(), core.hostName())
         shown.value = ReceiveState(running = true, port = port)
         if (screenOpen) {
-            core.openPairing()
+            ensurePairing()
             publish()
         }
         return server

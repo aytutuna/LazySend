@@ -202,4 +202,17 @@ class HostControllerTest {
         val failure = runCatching { client.pair(code.token, "phone-test-0001", "x", "1") }.exceptionOrNull()
         assertTrue(failure is com.lazysend.lazysend.link.LinkException || failure is java.io.IOException)
     }
+
+    @Test
+    fun openingAgainKeepsTheCodeAndTheServer() = runBlocking {
+        val host = controller()
+        host.open()
+        waitFor { host.state.value.pairing != null }
+        val before = host.state.value
+        val server = host.currentServer
+        host.open()
+        assertEquals(before.pairing!!.link, host.state.value.pairing!!.link)
+        assertEquals(before.port, host.state.value.port)
+        assertTrue(server === host.currentServer)
+    }
 }
