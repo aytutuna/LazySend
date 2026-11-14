@@ -18,9 +18,15 @@ public struct OutboxItem: Codable, Equatable, Identifiable, Sendable {
     public var taken: Date?
     public var queued = Date()
 
+    // A date outside 1980 to 2100 is left out, as a guest would not use it.
+    private var plausibleTaken: Date? {
+        guard let taken = taken, (1980...2100).contains(Calendar(identifier: .gregorian).component(.year, from: taken)) else { return nil }
+        return taken
+    }
+
     var entry: OutboxEntry {
         OutboxEntry(id: id, kind: kind, text: text, url: url, name: name, size: size, mime: mime, sourceId: sourceId,
-                    taken: taken.map { ISO8601DateFormatter().string(from: $0) })
+                    taken: plausibleTaken.map { ISO8601DateFormatter().string(from: $0) })
     }
 
     var inlineBytes: Int {

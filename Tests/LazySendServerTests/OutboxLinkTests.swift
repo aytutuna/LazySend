@@ -36,6 +36,15 @@ final class OutboxLinkTests: XCTestCase {
         XCTAssertNil(item.entry.taken)
     }
 
+    func testATakenDateOutsideTheUsableYearsIsLeftOut() {
+        var item = OutboxItem(kind: "file", name: "x.jpg", sourceId: "asset-1")
+        item.taken = Date(timeIntervalSince1970: 1_615_809_600)
+        XCTAssertEqual(item.entry.taken, "2021-03-15T12:00:00Z")
+        item.taken = Date(timeIntervalSince1970: 300_000_000_000)
+        XCTAssertNil(item.entry.taken)
+        XCTAssertEqual(item.entry.sourceId, "asset-1")
+    }
+
     func testPollReturnsPendingItemsAtOnce() async throws {
         try outbox.queueText(phone.id, "first")
         try outbox.queueLink(phone.id, "https://example.com/")
