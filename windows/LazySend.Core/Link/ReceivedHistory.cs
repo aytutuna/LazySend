@@ -39,9 +39,10 @@ public sealed class ReceivedHistory
         }
     }
 
-    public ReceivedItem Add(PairedDevice device, string kind, string? text, string? url, DateTimeOffset now)
+    /// <param name="id">The item's id; new when null. A host's outbox items keep theirs, so one that arrives twice is noticed.</param>
+    public ReceivedItem Add(PairedDevice device, string kind, string? text, string? url, DateTimeOffset now, string? id = null)
     {
-        var item = new ReceivedItem(Protocol.NewId(), device.Id, device.Name, kind, text, url, now);
+        var item = new ReceivedItem(id ?? Protocol.NewId(), device.Id, device.Name, kind, text, url, now);
         lock (_gate)
         {
             _file.Items.Insert(0, item);

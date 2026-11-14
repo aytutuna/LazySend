@@ -4,8 +4,13 @@
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>LazySend.Core</RootNamespace>
     <Description>Platform-neutral core of Lazy Send: the phone link's server, pairing, and the stores for what
-phones send and what waits for them. No UI; the one Windows-specific step is marking received files as downloaded.</Description>
+phones send and what waits for them, and the client for connecting to another computer. No UI; the Windows-specific steps
+are marking received files as downloaded and protecting the secrets of the computers this one is a guest of.</Description>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
+  </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="LazySend.Core.Tests" />
