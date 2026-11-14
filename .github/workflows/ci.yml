@@ -181,7 +181,7 @@ jobs:
           PY
       - name: Boot the simulator
         run: xcrun simctl bootstatus "${{ steps.simulator.outputs.udid }}" -b
-      # The iPhone hosts with the server, so its tests run here too; GuestServiceTests are the Mac's own guest code.
+      # The iPhone hosts with the server, so its tests run here too
       - name: Unit tests on the Simulator
         run: |
           set -o pipefail
@@ -189,7 +189,6 @@ jobs:
             -scheme LazySend-Package \
             -only-testing:LazySendIOSTests \
             -only-testing:LazySendServerTests \
-            -skip-testing:LazySendServerTests/GuestServiceTests \
             -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}" \
             -resultBundlePath "$RUNNER_TEMP/ios-tests.xcresult" \
             CODE_SIGNING_ALLOWED=NO

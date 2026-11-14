@@ -216,6 +216,8 @@ final class GuestServiceTests: XCTestCase {
         fixture.guest.start()
         let dropped = await waitUntil { fixture.hosts.pcs.isEmpty }
         XCTAssertTrue(dropped)
+        let told = await waitUntil { !fixture.forgotten.all.isEmpty }
+        XCTAssertTrue(told)
         XCTAssertEqual(fixture.forgotten.all, [pc.name])
         XCTAssertNil(fixture.hosts.secret(for: pc.id))
     }
@@ -262,7 +264,7 @@ final class GuestServiceTests: XCTestCase {
         let arrived = await waitUntil { !fixture.texts.all.isEmpty }
         XCTAssertTrue(arrived)
         // A watcher still polling with the old secret would be refused by now and would drop the new entry.
-        try await Task.sleep(nanoseconds: 1_500_000_000)
+        try await Task.sleep(nanoseconds: 3_000_000_000)
         XCTAssertEqual(fixture.hosts.pcs.count, 1)
         XCTAssertTrue(fixture.forgotten.all.isEmpty)
         XCTAssertNotNil(fixture.hosts.secret(for: second.id))
