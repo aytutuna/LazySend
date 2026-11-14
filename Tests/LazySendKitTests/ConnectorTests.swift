@@ -13,7 +13,7 @@ final class ConnectorTests: XCTestCase {
         return store
     }
 
-    private func quiet(announced: [String: [String]] = [:], probed: [String] = []) -> Discovery {
+    private func quiet(announced: [String: NearbyHost] = [:], probed: [String] = []) -> Discovery {
         Discovery(announced: { _ in announced }, subnets: { [Subnet(name: "en0", address: ipv4ToInt("127.0.0.9")!, prefix: 8)] }, probe: { _, _ in probed })
     }
 
@@ -38,9 +38,22 @@ final class ConnectorTests: XCTestCase {
     func testFindsTheComputerByAnnouncement() async throws {
         let pc = try FakePc()
         let store = try store(for: pc, addresses: [])
-        let connector = PcConnector(store: store, discovery: quiet(announced: [pc.desktopId: ["127.0.0.1"]]))
+        let announced = [pc.desktopId: NearbyHost(id: pc.desktopId, name: "Test PC", addresses: ["127.0.0.1"], port: pc.server.port)]
+        let connector = PcConnector(store: store, discovery: quiet(announced: announced))
         let reach = await connector.connect(store.pcs[0])
         XCTAssertEqual(reach.reached?.host, "127.0.0.1")
+    }
+
+    func testFollowsTheComputerToTheAnnouncedPort() async throws {
+        let pc = try FakePc()
+        let store = try store(for: pc, addresses: ["127.0.0.1"])
+        store.update(pc.desktopId) { $0.port = 9 }
+        let announced = [pc.desktopId: NearbyHost(id: pc.desktopId, name: "Test PC", addresses: ["127.0.0.1"], port: pc.server.port)]
+        let connector = PcConnector(store: store, discovery: quiet(announced: announced))
+        let reach = await connector.connect(store.pcs[0])
+        XCTAssertEqual(reach.reached?.client.endpoint.port, pc.server.port)
+        XCTAssertEqual(store.pcs[0].port, pc.server.port)
+        XCTAssertEqual(store.pcs[0].lastAddress, "127.0.0.1")
     }
 
     func testFindsTheComputerByProbingTheLocalSubnets() async throws {

@@ -35,17 +35,21 @@ public final class PcStore: @unchecked Sendable {
     private let file: URL
     private let secrets: SecretStore
     private let repairs: Bool
+    private let fixedPhone: String?
     private let lock = NSLock()
     private var list: [PairedPc]
     private var phone = ""
     private var settled = false
 
     /// A store that `repairs` rewrites an unreadable state with a new phone id; one that does not (the share
-    /// extension's) only reads, so a Keychain it cannot reach never costs the app its pairings.
-    public init(file: URL, secrets: SecretStore, repairs: Bool = true) {
+    /// extension's) only reads, so a Keychain it cannot reach never costs the app its pairings. A computer passes
+    /// its own id as `phoneId`: it is not kept in the Keychain, and a secret that cannot be read there costs no
+    /// pairing either, it only leaves that computer unreachable until the user connects to it again.
+    public init(file: URL, secrets: SecretStore, repairs: Bool = true, phoneId: String? = nil) {
         self.file = file
         self.secrets = secrets
         self.repairs = repairs
+        fixedPhone = phoneId
         let saved = (try? Data(contentsOf: file)).flatMap { try? JSONDecoder().decode(Saved.self, from: $0) }
         list = saved?.pcs ?? []
         lock.lock()
@@ -57,6 +61,11 @@ public final class PcStore: @unchecked Sendable {
     // locked until the first unlock after a restart) says nothing, so it is asked again on the next use.
     private func settle() {
         guard !settled else { return }
+        if let fixed = fixedPhone {
+            phone = fixed
+            settled = true
+            return
+        }
         var unreadable = false
         let stored: String?
         do {

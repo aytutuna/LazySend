@@ -5,6 +5,8 @@ public enum LinkProtocol {
     public static let defaultPort = 52734
     public static let serviceType = "_lazysend._tcp"
     public static let txtIdKey = "id"
+    public static let txtNameKey = "n"
+    public static let maxTxtNameBytes = 64
     public static let chunkBytes = 8 * 1024 * 1024
     public static let galleryBatch = 1000
     public static let maxOutboxWait = 25

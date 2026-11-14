@@ -21,11 +21,11 @@ public enum Reach: Sendable {
 
 /// What looking around needs from the system; the app uses `live`, tests their own.
 public struct Discovery: Sendable {
-    public var announced: @Sendable (TimeInterval) async -> [String: [String]]
+    public var announced: @Sendable (TimeInterval) async -> [String: NearbyHost]
     public var subnets: @Sendable () -> [Subnet]
     public var probe: @Sendable ([String], Int) async -> [String]
 
-    public init(announced: @escaping @Sendable (TimeInterval) async -> [String: [String]], subnets: @escaping @Sendable () -> [Subnet],
+    public init(announced: @escaping @Sendable (TimeInterval) async -> [String: NearbyHost], subnets: @escaping @Sendable () -> [Subnet],
                 probe: @escaping @Sendable ([String], Int) async -> [String]) {
         self.announced = announced
         self.subnets = subnets
@@ -42,7 +42,7 @@ public struct Discovery: Sendable {
 public actor PcConnector {
     private struct Search {
         let at: Date
-        let announced: [String: [String]]
+        let announced: [String: NearbyHost]
         let probed: [Int: [String]]
     }
 
@@ -67,33 +67,35 @@ public actor PcConnector {
         let credentials = Credentials(deviceId: store.phoneId, secret: secret)
         let discovery = self.discovery
         let store = self.store
-        let probe: @Sendable (String) async -> Reach? = { host in
-            await PcConnector.attempt(pc, host: host, session: session, credentials: credentials, store: store, subnets: discovery.subnets())
+        let probe: @Sendable (String, Int) async -> Reach? = { host, port in
+            await PcConnector.attempt(pc, host: host, port: port, session: session, credentials: credentials, store: store, subnets: discovery.subnets())
         }
         var forgotten = false
         var tried = Set<String>()
-        func attempt(_ hosts: [String]) async -> Reached? {
-            let fresh = hosts.filter { !tried.contains($0) }
-            tried.formUnion(hosts)
-            let answer = await PcConnector.race(fresh, probe)
+        func attempt(_ hosts: [String], port: Int) async -> Reached? {
+            let fresh = hosts.filter { !tried.contains("\($0):\(port)") }
+            tried.formUnion(hosts.map { "\($0):\(port)" })
+            let answer = await PcConnector.race(fresh) { await probe($0, port) }
             if case .forgotten? = answer { forgotten = true }
             return answer?.reached
         }
         let known = AddressBook.order(lastAddress: pc.lastAddress, known: pc.addresses)
-        if let reached = await attempt(known) {
+        if let reached = await attempt(known, port: pc.port) {
             failedSearches = 0
             return .reached(reached)
         }
         if forgotten { return .forgotten }
         if !search { return .unreachable }
         let (around, fresh) = await lookAround(userAction: userAction)
-        let announced = AddressBook.order(lastAddress: nil, known: around.announced[pc.id] ?? [])
-        if let reached = await attempt(announced) {
+        // A computer that took another port (its own was busy) says so in its announcement.
+        let nearby = around.announced[pc.id]
+        let announced = AddressBook.order(lastAddress: nil, known: nearby?.addresses ?? [])
+        if let reached = await attempt(announced, port: nearby?.port ?? pc.port) {
             failedSearches = 0
             return .reached(reached)
         }
         let probed = AddressBook.order(lastAddress: nil, known: around.probed[pc.port] ?? [])
-        if let reached = await attempt(probed) {
+        if let reached = await attempt(probed, port: pc.port) {
             failedSearches = 0
             return .reached(reached)
         }
@@ -124,6 +126,21 @@ public actor PcConnector {
         return await PcConnector.race(AddressBook.order(lastAddress: nil, known: addresses), probe)?.reached
     }
 
+    /// Meets a computer whose key is not known yet (its short code was typed): the first address that answers
+    /// `health` as Lazy Send, with the fingerprint of the certificate it presented. Each address gets a session of its
+    /// own, so the fingerprint is the one of the address that answered.
+    public func reachUnpinned(addresses: [String], port: Int) async -> (reached: Reached, fingerprint: Data)? {
+        let subnets = discovery.subnets()
+        let probe: @Sendable (String) async -> Reach? = { host in
+            let client = LinkClient(endpoint: Endpoint(host: host, port: port), session: PinnedSession(), credentials: nil)
+            guard let health = try? await client.health(), health.service == LinkProtocol.serviceName, client.seen != nil else { return nil }
+            return .reached(Reached(client: client, host: host, link: LocalNetworks.kind(of: host, in: subnets)))
+        }
+        guard let reached = await PcConnector.race(AddressBook.order(lastAddress: nil, known: addresses), probe)?.reached,
+              let fingerprint = reached.client.seen else { return nil }
+        return (reached, fingerprint)
+    }
+
     private func session(for pc: PairedPc) -> PinnedSession {
         let key = pc.id + pc.fingerprint
         if let existing = sessions[key] { return existing }
@@ -152,9 +169,9 @@ public actor PcConnector {
         return Search(at: clock(), announced: announced, probed: probed)
     }
 
-    private nonisolated static func attempt(_ pc: PairedPc, host: String, session: PinnedSession, credentials: Credentials,
+    private nonisolated static func attempt(_ pc: PairedPc, host: String, port: Int, session: PinnedSession, credentials: Credentials,
                                             store: PcStore, subnets: [Subnet]) async -> Reach? {
-        let client = LinkClient(endpoint: Endpoint(host: host, port: pc.port), session: session, credentials: credentials)
+        let client = LinkClient(endpoint: Endpoint(host: host, port: port), session: session, credentials: credentials)
         let hello: Hello
         do {
             hello = try await client.hello()
@@ -165,6 +182,7 @@ public actor PcConnector {
         }
         store.update(pc.id) {
             $0.lastAddress = host
+            $0.port = port
             $0.addresses = AddressBook.merged(hello: hello.addresses, known: $0.addresses)
         }
         return .reached(Reached(client: client, host: host, link: LocalNetworks.kind(of: host, in: subnets)))
