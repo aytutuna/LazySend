@@ -65,8 +65,25 @@ class Notifications(private val context: Context) {
             .addAction(0, context.getString(R.string.stop), stop)
             .build()
 
+    fun hostingPaused() {
+        val notification = NotificationCompat.Builder(context, RECEIVED)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(context.getString(R.string.hosting_paused))
+            .setContentIntent(openApp())
+            .setAutoCancel(true)
+            .build()
+        try {
+            NotificationManagerCompat.from(context).notify(PAUSED_ID, notification)
+        } catch (e: SecurityException) {
+            // Notifications are off for the app.
+        }
+    }
+
+    fun clearPaused() = NotificationManagerCompat.from(context).cancel(PAUSED_ID)
+
     private companion object {
         const val TRANSFERS = "transfers"
         const val RECEIVED = "received"
+        const val PAUSED_ID = 2
     }
 }

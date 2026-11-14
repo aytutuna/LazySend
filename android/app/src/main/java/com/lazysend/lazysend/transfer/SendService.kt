@@ -81,8 +81,9 @@ class SendService : Service() {
 
     // Android 15 limits how long a data sync service may run in a day; what is half done is paused and can be resumed.
     override fun onTimeout(startId: Int, fgsType: Int) {
+        if (graph.host.keepAlive.value) notifications.hostingPaused()
         gate.cancelSends()
-        graph.host.stop()
+        graph.host.suspendHosting()
         finish()
     }
 

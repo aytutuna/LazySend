@@ -79,6 +79,7 @@
     <string name="dont_allow">Don\'t allow</string>
     <string name="receiving_on">Receiving on %1$s</string>
     <string name="receiving">Receiving</string>
+    <string name="hosting_paused">Receiving paused — open Lazy Send to continue</string>
     <string name="guest_row">Paired with this phone</string>
     <string name="guest_delivery">What you send is delivered when it next checks in.</string>
     <string name="remove_guest_body">%1$s is forgotten here, and what waited for it is dropped.</string>

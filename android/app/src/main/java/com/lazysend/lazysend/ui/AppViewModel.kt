@@ -76,6 +76,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun pauseReceive() = graph.host.pause()
 
+    /** The app is in front: hosting that was wanted and ended without the person stopping it starts again. */
+    fun resumeHosting() {
+        graph.notifications.clearPaused()
+        graph.host.resumeIfWanted()
+    }
+
     fun leaveReceive() = graph.host.leave()
 
     fun stopReceiving() = graph.host.stop()

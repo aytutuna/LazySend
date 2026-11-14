@@ -215,4 +215,27 @@ class HostControllerTest {
         assertEquals(before.port, host.state.value.port)
         assertTrue(server === host.currentServer)
     }
+
+    @Test
+    fun hostingThatWasWantedStartsAgainOnlyWhenTheSystemEndedIt() = runBlocking {
+        val host = controller()
+        host.open()
+        waitFor { host.state.value.pairing != null }
+        pairGuest(host)
+        host.leave()
+        host.suspendHosting()
+        waitFor { !host.state.value.running }
+
+        val back = controller()
+        assertFalse(back.state.value.running)
+        back.resumeIfWanted()
+        waitFor { back.state.value.running }
+        back.stop()
+        waitFor { !back.state.value.running }
+
+        val after = controller()
+        after.resumeIfWanted()
+        runBlocking { delay(300) }
+        assertFalse(after.state.value.running)
+    }
 }

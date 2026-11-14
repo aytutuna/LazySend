@@ -54,7 +54,12 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         lifecycleScope.launch { repeatOnLifecycle(Lifecycle.State.STARTED) { model.watch() } }
         // The service that keeps hosting going with the screen off can only be started from the front.
-        lifecycleScope.launch { repeatOnLifecycle(Lifecycle.State.STARTED) { model.keepHosting.collect { if (it) SendService.keepHosting(this@MainActivity) } } }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                model.resumeHosting()
+                model.keepHosting.collect { if (it) SendService.keepHosting(this@MainActivity) }
+            }
+        }
         setContent { LazySendTheme { App() } }
     }
 

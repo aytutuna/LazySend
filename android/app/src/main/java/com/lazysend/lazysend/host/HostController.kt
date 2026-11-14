@@ -64,6 +64,7 @@ class HostController(
 ) {
     val core = HostCore(root, files, hostId, hostName, freeSpace, clock)
     private val fingerprintFile = File(root, "fingerprint.txt")
+    private val hostingFile = File(root, "hosting")
     private val shown = MutableStateFlow(ReceiveState())
     private var supervisor: Job? = null
     @Volatile
@@ -152,11 +153,22 @@ class HostController(
         if (core.guests.guests.value.isEmpty()) stop()
     }
 
-    /** The person stopped receiving. */
-    fun stop() {
+    /** The person stopped receiving, or there is nobody left to receive for. */
+    fun stop() = halt(forget = true)
+
+    /** The system ended the service for its time budget: hosting stays wanted, and resumes when the app is in front again. */
+    fun suspendHosting() = halt(forget = false)
+
+    /** Starts hosting again when it was wanted and a guest is paired; called while the app is in front, since only then may a service start. */
+    fun resumeIfWanted() {
+        if (hostingFile.exists() && core.guests.guests.value.isNotEmpty()) start()
+    }
+
+    private fun halt(forget: Boolean) {
         screenOpen = false
         paused = false
         core.closePairing()
+        if (forget) hostingFile.delete()
         wanted.value = false
         supervisor?.cancel()
         retiring = supervisor
@@ -172,6 +184,7 @@ class HostController(
     fun start() {
         if (supervisor?.isActive == true) return
         wanted.value = true
+        runCatching { hostingFile.apply { parentFile?.mkdirs() }.writeText("1") }
         val previous = retiring
         supervisor = scope.launch {
             // The run being stopped puts its state and announcement away first, so it cannot undo this one.
