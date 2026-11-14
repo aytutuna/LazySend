@@ -55,7 +55,12 @@ public partial class PairWindow : Window
         string text = code.Format();
         PairingTextBox.Text = text;
         CheckCodeBox.Text = FormatCheckCode(SpkiFingerprint.CheckCode(code.FingerprintBytes ?? []));
-        ShortCodeBox.Text = _model.Service.Pairing?.ShortCodeText ?? "";
+        if (_model.Service.Pairing is { } session)
+        {
+            ShortCodeBox.Text = session.ShortCodeText;
+            // What a computer that typed the code works out for itself; it must match before the code is sent.
+            MatchBox.Text = FormatCheckCode(SpkiFingerprint.MatchCode(code.FingerprintBytes ?? [], session.ShortCode));
+        }
         AddressesBox.Text = code.Addresses.Count == 0 ? "No network address found" : string.Join("  ", code.Addresses);
         QrImage.Source = ZXingQrEncoder.Encode(text) is { } modules ? Draw(modules) : null;
     }

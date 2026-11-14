@@ -23,13 +23,15 @@ public sealed class GuestRig : IDisposable
     public string GuestId { get; }
     public GuestService Service { get; }
 
+    public static Task<bool> Yes(string match) => Task.FromResult(true);
+
     public NearbyHost Nearby => new(Host.Service.Devices.DesktopId, "Test PC", ["127.0.0.1"], Host.Port);
 
     /// <summary>Pairs by the host's short code and returns the host entry.</summary>
     public async Task<GuestHost> PairAsync()
     {
         Host.Service.OpenPairing(["127.0.0.1"]);
-        return await Service.PairWithCodeAsync(Nearby, Host.Service.Pairing!.ShortCodeText, _ => { }, CancellationToken.None);
+        return await Service.PairWithCodeAsync(Nearby, Host.Service.Pairing!.ShortCodeText, Yes, CancellationToken.None);
     }
 
     public void Dispose() => Service.Dispose();
@@ -52,7 +54,11 @@ public class GuestPairingTests
         h.Service.OpenPairing(["127.0.0.1"]);
         string code = h.Service.Pairing!.ShortCode;
 
-        var host = await guest.Service.PairWithCodeAsync(guest.Nearby, code.ToLowerInvariant(), match => guestSaw = match, CancellationToken.None);
+        var host = await guest.Service.PairWithCodeAsync(guest.Nearby, code.ToLowerInvariant(), match =>
+        {
+            guestSaw = match;
+            return Task.FromResult(true);
+        }, CancellationToken.None);
 
         Assert.Equal(SpkiFingerprint.MatchCode(h.Service.Fingerprint, code), guestSaw);
         Assert.Equal(guestSaw, hostSaw);
@@ -64,6 +70,30 @@ public class GuestPairingTests
         Assert.Equal(guest.GuestId, paired.Id);
         Assert.Equal("windows", paired.Platform);
         Assert.Equal("Guest PC", paired.Name);
+    }
+
+    [Fact]
+    public async Task AnswerNoSendsNothingAndLeavesTheCodeUsable()
+    {
+        await using var h = new Harness();
+        using var guest = new GuestRig(h);
+        h.Service.OpenPairing(["127.0.0.1"]);
+        string code = h.Service.Pairing!.ShortCode;
+        string? asked = null;
+
+        var refused = await Assert.ThrowsAsync<LinkException>(() => guest.Service.PairWithCodeAsync(guest.Nearby, code, match =>
+        {
+            asked = match;
+            return Task.FromResult(false);
+        }, CancellationToken.None));
+
+        Assert.Equal(SpkiFingerprint.MatchCode(h.Service.Fingerprint, code), asked);
+        Assert.Equal(ErrorCode.Declined, refused.Code);
+        Assert.Empty(guest.Hosts.Hosts);
+        Assert.Empty(h.Service.Devices.Devices);
+        Assert.Equal(0, h.Service.Pairing!.FailedAttempts);
+        await guest.Service.PairWithCodeAsync(guest.Nearby, code, GuestRig.Yes, CancellationToken.None);
+        Assert.Single(guest.Hosts.Hosts);
     }
 
     [Fact]
@@ -107,9 +137,9 @@ public class GuestPairingTests
         using var guest = new GuestRig(h);
         h.Service.OpenPairing(["127.0.0.1"]);
 
-        var refused = await Assert.ThrowsAsync<LinkException>(() => guest.Service.PairWithCodeAsync(guest.Nearby, "0000-0000", _ => { }, CancellationToken.None));
-        var malformed = await Assert.ThrowsAsync<LinkException>(() => guest.Service.PairWithCodeAsync(guest.Nearby, "nope", _ => { }, CancellationToken.None));
-        await guest.Service.PairWithCodeAsync(guest.Nearby, h.Service.Pairing!.ShortCodeText, _ => { }, CancellationToken.None);
+        var refused = await Assert.ThrowsAsync<LinkException>(() => guest.Service.PairWithCodeAsync(guest.Nearby, "0000-0000", GuestRig.Yes, CancellationToken.None));
+        var malformed = await Assert.ThrowsAsync<LinkException>(() => guest.Service.PairWithCodeAsync(guest.Nearby, "nope", GuestRig.Yes, CancellationToken.None));
+        await guest.Service.PairWithCodeAsync(guest.Nearby, h.Service.Pairing!.ShortCodeText, GuestRig.Yes, CancellationToken.None);
 
         Assert.Equal(ErrorCode.TokenInvalid, refused.Code);
         Assert.Equal(ErrorCode.TokenInvalid, malformed.Code);
@@ -124,7 +154,7 @@ public class GuestPairingTests
         h.Service.Router.ApprovePairing = (_, _, _) => Task.FromResult(false);
         h.Service.OpenPairing(["127.0.0.1"]);
 
-        var refused = await Assert.ThrowsAsync<LinkException>(() => guest.Service.PairWithCodeAsync(guest.Nearby, h.Service.Pairing!.ShortCode, _ => { }, CancellationToken.None));
+        var refused = await Assert.ThrowsAsync<LinkException>(() => guest.Service.PairWithCodeAsync(guest.Nearby, h.Service.Pairing!.ShortCode, GuestRig.Yes, CancellationToken.None));
 
         Assert.Equal(ErrorCode.Declined, refused.Code);
         Assert.Empty(guest.Hosts.Hosts);
@@ -138,7 +168,7 @@ public class GuestPairingTests
         h.Service.OpenPairing(["127.0.0.1"]);
         var other = guest.Nearby with { Id = Protocol.NewId() };
 
-        await Assert.ThrowsAsync<LinkException>(() => guest.Service.PairWithCodeAsync(other, h.Service.Pairing!.ShortCode, _ => { }, CancellationToken.None));
+        await Assert.ThrowsAsync<LinkException>(() => guest.Service.PairWithCodeAsync(other, h.Service.Pairing!.ShortCode, GuestRig.Yes, CancellationToken.None));
 
         Assert.Empty(guest.Hosts.Hosts);
     }

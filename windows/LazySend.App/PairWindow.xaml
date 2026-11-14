@@ -65,7 +65,10 @@
                             <TextBlock x:Name="ShortCodeLabel" Text="Code to type on a computer" Style="{StaticResource DetailLabelText}" Margin="0,10,0,4" />
                             <TextBox x:Name="ShortCodeBox" Style="{StaticResource DetailBox}" FontSize="20"
                                      AutomationProperties.LabeledBy="{Binding ElementName=ShortCodeLabel}" />
-                            <TextBlock x:Name="CheckLabel" Text="Check code" Style="{StaticResource DetailLabelText}" Margin="0,4,0,4" />
+                            <TextBlock x:Name="MatchLabel" Text="The other computer then shows" Style="{StaticResource DetailLabelText}" Margin="0,4,0,4" />
+                            <TextBox x:Name="MatchBox" Style="{StaticResource DetailBox}"
+                                     AutomationProperties.LabeledBy="{Binding ElementName=MatchLabel}" />
+                            <TextBlock x:Name="CheckLabel" Text="Check code for a phone" Style="{StaticResource DetailLabelText}" Margin="0,4,0,4" />
                             <TextBox x:Name="CheckCodeBox" Style="{StaticResource DetailBox}"
                                      AutomationProperties.LabeledBy="{Binding ElementName=CheckLabel}" />
                             <TextBlock x:Name="AddressesLabel" Text="This PC is reachable at" Style="{StaticResource DetailLabelText}" Margin="0,4,0,4" />

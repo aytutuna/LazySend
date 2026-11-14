@@ -1,4 +1,3 @@
-using System.IO;
 using System.Windows;
 using LazySend.Core;
 
@@ -6,13 +5,15 @@ namespace LazySend.App;
 
 /// <summary>
 /// Pairs this PC, as a guest, with another computer running Lazy Send: the computers nearby to pick from and the
-/// code the other one shows, or its pasted link. Shows the six digits the other computer must show too, then waits
-/// for its user to allow it.
+/// code the other one shows, or its pasted link. With a code, the six digits worked out here are shown first and
+/// the code is sent only once the user says the other computer shows the same; then the other computer's user
+/// is asked too.
 /// </summary>
 public partial class ConnectWindow : Window
 {
     private readonly AppModel _model;
     private readonly CancellationTokenSource _closing = new();
+    private TaskCompletionSource<bool>? _answer;
     private bool _pairing;
 
     public ConnectWindow(AppModel model)
@@ -20,7 +21,11 @@ public partial class ConnectWindow : Window
         _model = model;
         InitializeComponent();
         Loaded += async (_, _) => await LookAsync();
-        Closed += (_, _) => _closing.Cancel();
+        Closed += (_, _) =>
+        {
+            _closing.Cancel();
+            _answer?.TrySetResult(false);
+        };
     }
 
     private async Task LookAsync()
@@ -50,7 +55,7 @@ public partial class ConnectWindow : Window
     {
         if (_pairing) return;
         string input = CodeBox.Text.Trim();
-        Func<Action<string>, Task<GuestHost>> pair;
+        Func<Task<GuestHost>> pair;
         if (input.StartsWith(PairingUri.Scheme + ":", StringComparison.OrdinalIgnoreCase))
         {
             if (PairingUri.TryParse(input, out var error) is not { } link)
@@ -58,7 +63,7 @@ public partial class ConnectWindow : Window
                 FooterStatus.Text = error!.Message;
                 return;
             }
-            pair = show => _model.Guest.PairWithLinkAsync(link, show, _closing.Token);
+            pair = () => _model.Guest.PairWithLinkAsync(link, ShowMatch, _closing.Token);
         }
         else if (Nearby.SelectedItem is not NearbyHost host)
         {
@@ -72,12 +77,54 @@ public partial class ConnectWindow : Window
         }
         else
         {
-            pair = show => _model.Guest.PairWithCodeAsync(host, input, show, _closing.Token);
+            pair = () => _model.Guest.PairWithCodeAsync(host, input, AskMatchAsync, _closing.Token);
         }
         await PairAsync(pair);
     }
 
-    private async Task PairAsync(Func<Action<string>, Task<GuestHost>> pair)
+    /// <summary>Shows the digits of a pairing whose fingerprint came in a link, and that the other computer is being asked.</summary>
+    private void ShowMatch(string match) => Dispatcher.BeginInvoke(() =>
+    {
+        MatchText.Text = PairWindow.FormatCheckCode(match);
+        MatchHelp.Text = "Waiting for the other computer. Its screen should show these same digits. Choose Allow there only if they match.";
+        MatchCard.Visibility = Visibility.Visible;
+        FooterStatus.Text = "Waiting for the other computer to allow it…";
+    });
+
+    /// <summary>Asks whether the other computer shows these digits next to its code; the code goes out only on yes.</summary>
+    private Task<bool> AskMatchAsync(string match)
+    {
+        var answer = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Dispatcher.BeginInvoke(() =>
+        {
+            _answer = answer;
+            MatchText.Text = PairWindow.FormatCheckCode(match);
+            MatchHelp.Text = "Does the other computer show these same digits under its code? If not, choose No: another computer may be answering, and nothing is sent to it.";
+            MatchChoice.Visibility = Visibility.Visible;
+            MatchCard.Visibility = Visibility.Visible;
+            FooterStatus.Text = "Compare the digits with the other computer.";
+        });
+        return answer.Task;
+    }
+
+    private void Yes_Click(object sender, RoutedEventArgs e) => Answer(true);
+
+    private void No_Click(object sender, RoutedEventArgs e) => Answer(false);
+
+    private void Answer(bool matches)
+    {
+        if (_answer is not { } answer) return;
+        _answer = null;
+        MatchChoice.Visibility = Visibility.Collapsed;
+        if (matches)
+        {
+            MatchHelp.Text = "Waiting for the other computer to allow it. Choose Allow there.";
+            FooterStatus.Text = "Waiting for the other computer to allow it…";
+        }
+        answer.TrySetResult(matches);
+    }
+
+    private async Task PairAsync(Func<Task<GuestHost>> pair)
     {
         _pairing = true;
         ConnectButton.IsEnabled = false;
@@ -86,13 +133,7 @@ public partial class ConnectWindow : Window
         FooterStatus.Text = "Connecting…";
         try
         {
-            var host = await pair(match => Dispatcher.BeginInvoke(() =>
-            {
-                MatchText.Text = PairWindow.FormatCheckCode(match);
-                MatchHelp.Text = "Waiting for the other computer. Its screen should show these same digits. Choose Allow there only if they match.";
-                MatchCard.Visibility = Visibility.Visible;
-                FooterStatus.Text = "Waiting for the other computer to allow it…";
-            }));
+            var host = await pair();
             _model.SelectComputer(host.Id);
             MatchHelp.Text = $"This PC is connected to {host.Name}. Files and text you send go straight to it, and what it sends arrives here.";
             FooterStatus.Text = $"Connected to {host.Name}.";
@@ -104,9 +145,10 @@ public partial class ConnectWindow : Window
         {
             return;
         }
-        catch (Exception e) when (e is IOException or LinkException or InvalidOperationException)
+        catch (Exception e)
         {
             MatchCard.Visibility = Visibility.Collapsed;
+            MatchChoice.Visibility = Visibility.Collapsed;
             FooterStatus.Text = e.Message;
         }
         _pairing = false;

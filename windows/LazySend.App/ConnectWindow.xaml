@@ -50,6 +50,10 @@
                         <TextBlock x:Name="MatchText" Style="{StaticResource SubtitleText}" FontFamily="Cascadia Mono, Consolas" />
                         <TextBlock x:Name="MatchHelp" Style="{StaticResource SecondaryBodyText}" TextWrapping="Wrap" Margin="0,4,0,0"
                                    AutomationProperties.LiveSetting="Assertive" />
+                        <StackPanel x:Name="MatchChoice" Orientation="Horizontal" Margin="0,8,0,0" Visibility="Collapsed">
+                            <Button Content="Yes, they match" MinWidth="96" Style="{StaticResource AccentButtonStyle}" Click="Yes_Click" />
+                            <Button Content="No" MinWidth="96" Margin="8,0,0,0" Click="No_Click" />
+                        </StackPanel>
                     </StackPanel>
                 </Border>
             </StackPanel>

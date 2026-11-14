@@ -44,7 +44,13 @@ Tokens are compared in constant time. Five wrong tokens from one address refuse 
 
 A session also has a short code for a guest that cannot scan: 8 characters from `0123456789ABCDEFGHJKMNPQRSTVWXYZ` (Crockford base32, no I, L, O or U), shown as `XXXX-XXXX`. `POST /v1/pair` takes it as `token` in place of the 22-character token. Case, dashes and spaces are ignored, and it is compared in constant time. It belongs to the same session, so either one uses the session up, and it works within the same 5 minutes and under the same limits on wrong tokens, which is what makes 40 bits enough.
 
-A guest that typed the short code has no fingerprint yet. It asks `GET /v1/health` at the host's addresses in turn, takes the fingerprint of the certificate it meets and pins the pairing request to it. To make a man in the middle visible, both screens show a match code that the user compares before allowing:
+A guest that typed the short code has no fingerprint yet. To make a man in the middle visible, a match code is compared on both screens, and the order matters because the code itself is a secret that a computer pretending to be the host would learn:
+
+1. The guest asks `GET /v1/health` at the host's addresses in turn, takes the fingerprint of the certificate it meets and works out the match code from it and the code it was given.
+2. The guest shows the match code and asks the user whether the host's screen shows the same digits next to its short code. The host works them out as soon as the session opens, from its own fingerprint, and shows them with the code. On no, the guest stops and sends nothing.
+3. Only on yes does the guest send `POST /v1/pair` with the code, over a connection pinned to the fingerprint it met. The host still asks its user before it answers, and shows the digits again.
+
+The match code is:
 
 - Paired from a QR code or a pasted link, the guest holds the fingerprint already, and both screens show the check code phones show: the first four bytes of the fingerprint as a big-endian number modulo one million, six digits with leading zeros.
 - Paired by short code, the same six digits are taken from SHA-256 over the 32 fingerprint bytes followed by the 8 canonical characters of the short code. The certificate is chosen before the code is known, so a man in the middle cannot grind a key until the plain check code of the real certificate comes out, as it could if the digits came from the fingerprint alone.

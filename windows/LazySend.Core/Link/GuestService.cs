@@ -58,23 +58,28 @@ public sealed class GuestService : IDisposable
     /// the host shows too, before it asks its user, who answers within two minutes.
     /// </summary>
     public Task<GuestHost> PairWithLinkAsync(PairingUri link, Action<string> showMatch, CancellationToken cancellation) =>
-        PairAsync(link.DesktopId, link.Name, link.Addresses, link.Port, link.FingerprintBytes, link.Token, fingerprint => SpkiFingerprint.CheckCode(fingerprint), showMatch, cancellation);
+        PairAsync(link.DesktopId, link.Name, link.Addresses, link.Port, link.FingerprintBytes, link.Token, fingerprint => SpkiFingerprint.CheckCode(fingerprint),
+                  match =>
+                  {
+                      showMatch(match);
+                      return Task.FromResult(true);
+                  }, cancellation);
 
     /// <summary>
     /// Pairs with a computer found on the network by the code its screen shows. There is no fingerprint to check
-    /// the certificate against yet, so it is trusted as first met; <paramref name="showMatch"/> gets the six digits
-    /// that agree with the host's screen only when the certificate is the host's own.
+    /// the certificate against yet, so it is trusted as first met. <paramref name="confirm"/> gets the six digits that agree
+    /// with the host's screen only when the certificate is the host's own, and the code is not sent unless it answers yes.
     /// </summary>
-    public Task<GuestHost> PairWithCodeAsync(NearbyHost host, string code, Action<string> showMatch, CancellationToken cancellation)
+    public Task<GuestHost> PairWithCodeAsync(NearbyHost host, string code, Func<string, Task<bool>> confirm, CancellationToken cancellation)
     {
         string canonical = PairingSession.NormalizeShortCode(code)
                            ?? throw new LinkException(403, ErrorCode.TokenInvalid, "A code is 8 letters and digits, like 7KQ2-M9XD.");
         return PairAsync(host.Id, host.Name, host.Addresses, host.Port, null, canonical, fingerprint => SpkiFingerprint.MatchCode(fingerprint, canonical),
-                         showMatch, cancellation);
+                         confirm, cancellation);
     }
 
     private async Task<GuestHost> PairAsync(string hostId, string fallbackName, IReadOnlyList<string> addresses, int port, byte[]? pin, string token,
-                                            Func<byte[], string> matchOf, Action<string> showMatch, CancellationToken cancellation)
+                                            Func<byte[], string> matchOf, Func<string, Task<bool>> confirm, CancellationToken cancellation)
     {
         string? reached = null;
         byte[]? fingerprint = pin;
@@ -94,7 +99,10 @@ public sealed class GuestService : IDisposable
             break;
         }
         if (reached is null || fingerprint is null) throw new IOException("Could not reach that computer. Both need to be on the same network.");
-        showMatch(matchOf(fingerprint));
+        if (!await confirm(matchOf(fingerprint)).ConfigureAwait(false))
+        {
+            throw new LinkException(403, ErrorCode.Declined, "Cancelled: the digits did not match, so nothing was sent.");
+        }
 
         // What was met first is the pin of the pairing itself, so the host that asks its user is the one whose digits were shown.
         using var client = new LinkClient(reached, port, fingerprint, null);
@@ -123,7 +131,7 @@ public sealed class GuestService : IDisposable
         {
             Hosts.Add(host, answer.DeviceSecret);
         }
-        catch (Exception e) when (e is IOException or InvalidOperationException)
+        catch (Exception e) when (e is IOException or InvalidOperationException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
         {
             await ForgetAtAsync(reached, port, fingerprint, answer.DeviceSecret).ConfigureAwait(false);
             throw;
