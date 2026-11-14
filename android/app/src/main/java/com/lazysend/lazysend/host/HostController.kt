@@ -77,9 +77,13 @@ class HostController(
 
     val state: StateFlow<ReceiveState> get() = shown
 
-    /** The server is up and a guest is paired, so something has to keep this process alive. */
+    // Hosting is wanted from start to stop, also while the server comes back after a failure.
+    private val wanted = MutableStateFlow(false)
+    private var retiring: Job? = null
+
+    /** Hosting is wanted and a guest is paired, so something has to keep this process alive. */
     val keepAlive: StateFlow<Boolean> =
-        combine(shown, core.guests.guests) { s, g -> s.running && g.isNotEmpty() }.stateIn(scope, SharingStarted.Eagerly, false)
+        combine(wanted, core.guests.guests) { w, g -> w && g.isNotEmpty() }.stateIn(scope, SharingStarted.Eagerly, false)
 
     init {
         core.inbox.onBegun = { file -> if (file.sourceId == null) begun(file) }
@@ -96,13 +100,14 @@ class HostController(
             timeline.update("out-${item.id}") { it.copy(state = EntryState.Done, detail = "", bytes = it.totalBytes) }
             timeline.save()
         }
+        core.onGuestRemoved = { if (core.guests.guests.value.isEmpty() && !screenOpen) stop() }
         core.router.addresses = { networks.pairingAddresses() }
         scope.launch {
             // A guest pairing while the screen is open is a person to wait on; the window refreshes with the network.
             while (isActive) {
                 if (screenOpen && shown.value.running) {
                     val session = core.pairing.value
-                    if ((session == null || session.stateAt(clock()) != SessionState.Open) && core.approval.value == null) core.openPairing()
+                    if ((session == null || session.stateAt(clock()) in listOf(SessionState.Used, SessionState.Expired)) && core.approval.value == null) core.openPairing()
                     publish()
                 }
                 delay(2000)
@@ -132,7 +137,9 @@ class HostController(
     fun stop() {
         screenOpen = false
         core.closePairing()
+        wanted.value = false
         supervisor?.cancel()
+        retiring = supervisor
         supervisor = null
     }
 
@@ -144,7 +151,11 @@ class HostController(
     @Synchronized
     fun start() {
         if (supervisor?.isActive == true) return
+        wanted.value = true
+        val previous = retiring
         supervisor = scope.launch {
+            // The run being stopped puts its state and announcement away first, so it cannot undo this one.
+            previous?.join()
             var wait = 1000L
             while (isActive) {
                 val failed = CompletableDeferred<Throwable>()

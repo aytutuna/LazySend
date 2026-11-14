@@ -35,6 +35,12 @@ class Outbox(private val file: File, private val copies: File, private val clock
     private var items = loadJson(file) { OutboxFile() }.items
     private val changes = MutableStateFlow(0)
 
+    init {
+        // A copy no entry points to is left from a process that died while copying.
+        val kept = items.mapNotNull { it.path }.toSet()
+        copies.listFiles()?.filter { it.path !in kept }?.forEach { it.delete() }
+    }
+
     /** How many items wait, so a screen can show it. */
     val count: Int @Synchronized get() = items.size
 

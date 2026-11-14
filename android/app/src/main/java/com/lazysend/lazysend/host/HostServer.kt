@@ -165,6 +165,9 @@ class HostServer(
                     continue
                 }
                 closed = true
+                runCatching { listener.close() }
+                synchronized(gate) { connections.toList() }.forEach { it.abort() }
+                work.cancel()
                 onFailed(e)
                 return
             }

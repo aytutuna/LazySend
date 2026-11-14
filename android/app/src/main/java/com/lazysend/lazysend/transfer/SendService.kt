@@ -19,7 +19,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -49,7 +48,7 @@ class SendService : Service() {
             }
         }.onEach { getSystemService(android.app.NotificationManager::class.java).notify(NOTIFICATION_ID, it) }.launchIn(scope)
         // Hosting ended, by the person or for good: nothing keeps the service but a send in progress.
-        graph.host.keepAlive.drop(1).onEach { if (!it && running.get() == 0) finish() }.launchIn(scope)
+        graph.host.keepAlive.onEach { if (!it && running.get() == 0) finish() }.launchIn(scope)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

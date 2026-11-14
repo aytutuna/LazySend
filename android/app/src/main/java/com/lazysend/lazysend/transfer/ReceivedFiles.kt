@@ -57,7 +57,7 @@ class MediaFiles(private val context: Context) : ReceivedFiles {
     override fun finish(part: ReceivedFiles.Part, modified: Long?): String {
         if (part.uri.startsWith("file:")) {
             val partial = File(Uri.parse(part.uri).path!!)
-            val done = unique(File(partial.parentFile, partial.name.removeSuffix(".part")))
+            val done = unique(File(partial.parentFile, partial.name.removeSuffix(".part").dropLast(9)))
             partial.renameTo(done)
             if (modified != null) done.setLastModified(modified)
             MediaScannerConnection.scanFile(context, arrayOf(done.path), null, null)
@@ -107,7 +107,7 @@ class MediaFiles(private val context: Context) : ReceivedFiles {
     private fun createLegacy(name: String, folder: String): ReceivedFiles.Part {
         val root = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), RECEIVED_FOLDER)
         val directory = (if (folder.isEmpty()) root else File(root, folder)).also { it.mkdirs() }
-        val file = File(directory, "$name.part")
+        val file = File(directory, "$name.${java.util.UUID.randomUUID().toString().take(8)}.part")
         file.delete()
         file.createNewFile()
         return ReceivedFiles.Part(Uri.fromFile(file).toString(), 0)

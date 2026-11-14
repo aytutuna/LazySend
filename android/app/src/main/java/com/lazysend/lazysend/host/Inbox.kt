@@ -158,8 +158,7 @@ class Inbox(
 
         val writer = writers.computeIfAbsent(id) { Writer() }
         if (!writer.gate.tryAcquire()) {
-            writer.stop?.invoke()
-            if (!writer.gate.tryAcquire(TAKE_OVER_SECONDS, TimeUnit.SECONDS)) throw HostError.busy
+            if (!takeOver(writer)) throw HostError.busy
         }
         writer.stop = abort
         try {
@@ -237,14 +236,23 @@ class Inbox(
         for (file in mine) {
             // A chunk still coming in is stopped first, so its part can be deleted.
             val writer = writers.computeIfAbsent(file.id) { Writer() }
-            writer.stop?.invoke()
-            val held = writer.gate.tryAcquire(TAKE_OVER_SECONDS, TimeUnit.SECONDS)
+            val held = takeOver(writer)
             try {
                 discard(file)
             } finally {
                 if (held) writer.gate.release()
             }
         }
+    }
+
+    // The request holding the writer may not have registered its abort yet, so it is asked again until the wait is over.
+    private fun takeOver(writer: Writer): Boolean {
+        val until = System.nanoTime() + TAKE_OVER_SECONDS * 1_000_000_000L
+        while (!writer.gate.tryAcquire(100, TimeUnit.MILLISECONDS)) {
+            writer.stop?.invoke()
+            if (System.nanoTime() > until) return false
+        }
+        return true
     }
 
     // Finishes a file whose part is already full but never got through complete. Skipped while a chunk is being written.

@@ -137,7 +137,8 @@ class HostRouter(
         val session = currentPairing() ?: throw HostError.pairingClosed
         val pair = json<PairBody>(request.body.readAll())
         if (!isValidId(pair.phoneId)) throw HostError.badRequest
-        return request.whileConnected {
+        val name = cleanName(pair.phoneName).ifEmpty { "Phone" }
+        val approved = request.whileConnected {
             when (session.redeem(pair.token, now, request.peer)) {
                 Redeem.Accepted -> Unit
                 Redeem.WrongToken -> {
@@ -148,13 +149,15 @@ class HostRouter(
                 Redeem.AlreadyUsed -> throw HostError.tokenUsed
                 Redeem.Closed -> throw HostError.pairingClosed
             }
-            val name = cleanName(pair.phoneName).ifEmpty { "Phone" }
             val fingerprint = fingerprint()
             val code = PairingSession.normalizeShortCode(pair.token)
             val digits = Fingerprint.spaced(if (code != null) Fingerprint.matchCode(fingerprint, code) else Fingerprint.checkCode(fingerprint))
             // Without an answer in time the pairing is declined.
-            val approved = withTimeoutOrNull(approvalTimeoutMs) { approve(pair, digits) } ?: false
-            if (!approved) throw HostError.declined
+            withTimeoutOrNull(approvalTimeoutMs) { approve(pair, digits) } ?: false
+        }
+        // Stored only once the guest is known to still be there, outside the wait that a hang-up cancels.
+        if (!approved || request.peerGone) throw HostError.declined
+        return run {
             val secret = try {
                 guests.pair(pair.phoneId, name, cleanName(pair.platform), cleanName(pair.appVersion), clock())
             } catch (e: TooManyGuests) {
@@ -165,6 +168,7 @@ class HostRouter(
             // The guest counts as paired once it has the secret; when the answer never got to it, it is forgotten again.
             HostResponse.json(200, PairResponse(PROTOCOL_VERSION, hostId(), hostName(), secret)).withWritten { delivered ->
                 if (!delivered) {
+                    guests.get(pair.phoneId)?.let(onGuestRemoved)
                     guests.remove(pair.phoneId)
                 } else {
                     guests.get(pair.phoneId)?.let(onGuestPaired)
@@ -266,7 +270,7 @@ class HostRouter(
             range.startsWith("bytes=") && range.endsWith('-') && range.length in 8..22 && it.all { c -> c in '0'..'9' }
         }?.toLong() ?: return HostResponse.error(HostError.rangeNotSatisfiable, "Content-Range" to "bytes */$size")
         if (size == 0L) partial = false
-        if (start > size || (partial && start == size && size > 0)) {
+        if (size > 0 && start >= size) {
             return HostResponse.error(HostError.rangeNotSatisfiable, "Content-Range" to "bytes */$size")
         }
         val stream = try {
