@@ -9,10 +9,12 @@ import com.lazysend.lazysend.data.EntryState
 import com.lazysend.lazysend.data.Timeline
 import com.lazysend.lazysend.data.TimelineEntry
 import com.lazysend.lazysend.link.DEFAULT_PORT
+import com.lazysend.lazysend.transfer.Asset
 import com.lazysend.lazysend.transfer.LinkKind
 import com.lazysend.lazysend.transfer.ReceivedFiles
 import com.lazysend.lazysend.transfer.Subnet
 import java.io.File
+import java.io.InputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -61,8 +63,10 @@ class HostController(
     private val preferredPort: Int = DEFAULT_PORT,
     private val clock: () -> Long = System::currentTimeMillis,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    assets: () -> List<Asset>? = { null },
+    openAsset: (Asset) -> InputStream = { throw java.io.IOException("No library.") },
 ) {
-    val core = HostCore(root, files, hostId, hostName, freeSpace, clock)
+    val core = HostCore(root, files, hostId, hostName, freeSpace, clock, assets, openAsset, scope)
     private val fingerprintFile = File(root, "fingerprint.txt")
     private val hostingFile = File(root, "hosting")
     private val loaded = CompletableDeferred<Unit>()
@@ -212,6 +216,7 @@ class HostController(
                     continue
                 }
                 wait = 1000L
+                core.feed.resume()
                 try {
                     failed.await()
                 } finally {

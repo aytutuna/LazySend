@@ -1,8 +1,13 @@
 package com.lazysend.lazysend.host
 
+import com.lazysend.lazysend.transfer.Asset
 import com.lazysend.lazysend.transfer.ReceivedFiles
 import java.io.File
+import java.io.InputStream
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -28,12 +33,16 @@ class HostCore(
     val hostName: () -> String,
     freeSpace: () -> Long,
     private val clock: () -> Long = System::currentTimeMillis,
+    assets: () -> List<Asset>? = { null },
+    openAsset: (Asset) -> InputStream = { throw java.io.IOException("No library.") },
+    scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
     val guests = GuestStore(File(root, "guests.json"))
     val gallery = GalleryIndex(File(root, "index"))
     val inbox = Inbox(File(root, "incoming"), files, gallery, freeSpace, clock)
     val outbox = Outbox(File(root, "outbox.json"), File(root, "outgoing"), clock, freeSpace)
     val sent = SendLog(File(root, "sent.json"), clock)
+    val feed = GalleryFeed(outbox, GalleryIndex(File(root, "feed-index")), File(root, "feeds.json"), scope, assets, openAsset)
     val limiter = RateLimiter()
     val router = HostRouter(guests, inbox, outbox, gallery, sent, limiter, hostId, hostName, clock)
 
@@ -65,6 +74,7 @@ class HostCore(
             }
         }
         router.onGuestRemoved = { removeGuest(it.id) }
+        feed.reconcile(guests.guests.value.map { it.id }.toSet())
     }
 
     fun openPairing(): PairingSession = PairingSession(clock()).also { fresh ->
@@ -89,6 +99,7 @@ class HostCore(
         guests.remove(id)
         inbox.removeDevice(id)
         sent.removeDevice(id)
+        feed.forget(id)
         outbox.clear(id)
         onGuestRemoved(guest)
     }
@@ -98,6 +109,7 @@ class HostCore(
         guests.guests.value.forEach {
             inbox.removeDevice(it.id)
             sent.removeDevice(it.id)
+            feed.forget(it.id)
         }
         guests.clear()
         outbox.clearAll()
