@@ -171,4 +171,35 @@ class HostControllerTest {
         assertEquals(2, after.count { it.direction == Direction.Sent && it.state == EntryState.Done })
         assertFalse(after.any { it.direction == Direction.Sent && it.state == EntryState.Active })
     }
+
+    @Test
+    fun pausingKeepsTheCodeGoodAndDeclinesOnlyWhatWaits() = runBlocking {
+        val host = controller()
+        host.open()
+        waitFor { host.state.value.pairing != null }
+        val link = host.state.value.pairing!!.link
+        host.pause()
+        // The code was shared from this screen, so it still pairs a device while the app is out of view.
+        val code = PairingCode.parse(link)
+        val client = LinkClient(Endpoint("127.0.0.1", code.port), code.pin, null)
+        val reply = async { runCatching { client.pair(code.token, "phone-test-0001", "Guest phone", "1.0") } }
+        val asked = host.core.approval.filterNotNull().first()
+        host.pause()
+        assertFalse(reply.await().isSuccess)
+        assertEquals(false, asked.answer.await())
+        assertTrue(host.state.value.running)
+    }
+
+    @Test
+    fun leavingClosesTheCode() = runBlocking {
+        val host = controller()
+        host.open()
+        waitFor { host.state.value.pairing != null }
+        val code = PairingCode.parse(host.state.value.pairing!!.link)
+        host.pause()
+        host.leave()
+        val client = LinkClient(Endpoint("127.0.0.1", code.port), code.pin, null)
+        val failure = runCatching { client.pair(code.token, "phone-test-0001", "x", "1") }.exceptionOrNull()
+        assertTrue(failure is com.lazysend.lazysend.link.LinkException || failure is java.io.IOException)
+    }
 }

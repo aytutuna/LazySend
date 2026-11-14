@@ -74,6 +74,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun openReceive() = graph.host.open()
 
+    fun pauseReceive() = graph.host.pause()
+
     fun leaveReceive() = graph.host.leave()
 
     fun stopReceiving() = graph.host.stop()

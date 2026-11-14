@@ -70,6 +70,9 @@ class HostController(
     private var screenOpen = false
 
     @Volatile
+    private var paused = false
+
+    @Volatile
     private var key: HostIdentity? = null
 
     @Volatile
@@ -105,8 +108,11 @@ class HostController(
         scope.launch {
             // A guest pairing while the screen is open is a person to wait on; the window refreshes with the network.
             while (isActive) {
-                if (screenOpen && shown.value.running) {
-                    val session = core.pairing.value
+                val session = core.pairing.value
+                if (paused && core.guests.guests.value.isEmpty() && (session == null || session.stateAt(clock()) != SessionState.Open)) {
+                    // The person is away and the code has run out: nothing is left to wait for.
+                    stop()
+                } else if (screenOpen && !paused && shown.value.running) {
                     if ((session == null || session.stateAt(clock()) in listOf(SessionState.Used, SessionState.Expired)) && core.approval.value == null) core.openPairing()
                     publish()
                 }
@@ -118,6 +124,7 @@ class HostController(
     /** The Receive screen opened: listens, and shows a code. */
     fun open() {
         screenOpen = true
+        paused = false
         start()
         if (shown.value.running) {
             core.openPairing()
@@ -125,9 +132,16 @@ class HostController(
         }
     }
 
+    /** The app went out of view with the Receive screen open: the code stays good until it runs out, and only what waits is declined. */
+    fun pause() {
+        paused = true
+        core.declinePending()
+    }
+
     /** The person left the Receive screen: no code is shown and what waits for an answer is declined. */
     fun leave() {
         screenOpen = false
+        paused = false
         core.closePairing()
         shown.value = shown.value.copy(pairing = null)
         if (core.guests.guests.value.isEmpty()) stop()
@@ -136,6 +150,7 @@ class HostController(
     /** The person stopped receiving. */
     fun stop() {
         screenOpen = false
+        paused = false
         core.closePairing()
         wanted.value = false
         supervisor?.cancel()

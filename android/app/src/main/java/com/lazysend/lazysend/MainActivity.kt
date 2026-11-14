@@ -93,7 +93,7 @@ class MainActivity : ComponentActivity() {
         val files = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris -> send(uris) }
         val photos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris -> send(uris) }
 
-        // Receiving runs while this screen is in front; going back or leaving the app closes the code and declines what waits.
+        // Receiving runs while this screen is in front. Leaving the app only declines what waits; the code is closed when the person goes back.
         LaunchedEffect(screen) {
             if (screen == Screen.Receive) {
                 repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -101,14 +101,18 @@ class MainActivity : ComponentActivity() {
                     try {
                         awaitCancellation()
                     } finally {
-                        model.leaveReceive()
+                        model.pauseReceive()
                     }
                 }
             }
         }
         val receive by model.receive.collectAsState()
 
-        if (screen != Screen.Main) BackHandler { screen = Screen.Main }
+        fun goMain() {
+            if (screen == Screen.Receive) model.leaveReceive()
+            screen = Screen.Main
+        }
+        if (screen != Screen.Main) BackHandler { goMain() }
         when (screen) {
             Screen.Main -> MainScreen(
                 state,
@@ -165,9 +169,9 @@ class MainActivity : ComponentActivity() {
                 onShare = { share(it) },
                 onStop = {
                     model.stopReceiving()
-                    screen = Screen.Main
+                    goMain()
                 },
-                onBack = { screen = Screen.Main },
+                onBack = { goMain() },
             )
             Screen.Pcs -> PcsScreen(
                 state.pcs,
