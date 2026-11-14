@@ -51,6 +51,8 @@ fun ReceiveScreen(
     onNewCode: () -> Unit,
     onStop: () -> Unit,
     onBack: () -> Unit,
+    localNetworkDenied: Boolean = false,
+    onAllowNetwork: () -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -66,6 +68,10 @@ fun ReceiveScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             val host = ui.host
+            if (localNetworkDenied) {
+                Text(stringResource(R.string.receive_local_network), color = MaterialTheme.colorScheme.error)
+                Button(onClick = onAllowNetwork) { Text(stringResource(R.string.allow)) }
+            }
             val pairing = host.pairing
             when {
                 host.error != null -> Text(host.error, color = MaterialTheme.colorScheme.error)

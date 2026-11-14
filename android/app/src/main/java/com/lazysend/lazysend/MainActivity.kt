@@ -66,6 +66,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         model.photoAccess(photoAccess(this))
+        localNetworkDenied = isLocalNetworkDenied(this)
     }
 
     @Composable
@@ -75,7 +76,7 @@ class MainActivity : ComponentActivity() {
         val pair by model.pair.collectAsState()
         val notice by model.notice.collectAsState()
 
-        val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
+        val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { localNetworkDenied = isLocalNetworkDenied(this@MainActivity) }
         LaunchedEffect(Unit) {
             val wanted = buildList {
                 if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
@@ -173,6 +174,8 @@ class MainActivity : ComponentActivity() {
                 onCopy = { copy(it) },
                 onShare = { share(it) },
                 onNewCode = model::newCode,
+                localNetworkDenied = localNetworkDenied,
+                onAllowNetwork = { permissions.launch(arrayOf(LOCAL_NETWORK)) },
                 onStop = {
                     model.stopReceiving()
                     goMain()
@@ -192,6 +195,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private var pendingGallery = false
+
+    // From Android 17 other devices on the network reach this phone only with the local network permission.
+    private var localNetworkDenied by mutableStateOf(false)
 
     private fun send(uris: List<Uri>) {
         model.selectedGuest()?.let { return SendService.queueFiles(this, it.id, uris) }
@@ -227,6 +233,9 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK"
+
+        fun isLocalNetworkDenied(context: Context) =
+            Build.VERSION.SDK_INT >= 37 && ContextCompat.checkSelfPermission(context, LOCAL_NETWORK) != PackageManager.PERMISSION_GRANTED
 
         fun photoPermissionList(): Array<String> = when {
             Build.VERSION.SDK_INT >= 34 -> arrayOf(
