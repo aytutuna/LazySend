@@ -21,13 +21,13 @@ public final class LinkService: @unchecked Sendable {
     public let server: LinkServer
     public let fingerprint: Data
 
-    public init(paths: SendPaths, identity: SecIdentity, options: LinkServerOptions? = nil, clock: @escaping () -> Date = { Date() },
+    public init(paths: SendPaths, identity: SecIdentity, desktopId: String? = nil, options: LinkServerOptions? = nil, clock: @escaping () -> Date = { Date() },
                 freeSpace: @escaping (URL) -> Int64 = Inbox.volumeFreeBytes) throws {
         guard let der = SelfSignedCertificate.der(of: identity), let fingerprint = SpkiFingerprint.of(der) else {
             throw LinkServerError.unusableIdentity
         }
         let settings = SendSettings(paths: paths)
-        let devices = PairedDeviceStore(url: paths.devicesFile)
+        let devices = PairedDeviceStore(url: paths.devicesFile, desktopId: desktopId)
         let gallery = GalleryIndex(directory: paths.indexDirectory)
         let history = ReceivedHistory(url: paths.historyFile)
         let outbox = Outbox(url: paths.outboxFile, clock: clock)

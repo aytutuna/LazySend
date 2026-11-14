@@ -304,3 +304,24 @@ final class RateLimiterTests: XCTestCase {
         XCTAssertTrue(limiter.isBlocked(host, now: start))
     }
 }
+
+final class HostIdTests: XCTestCase {
+    func testAGivenIdReplacesTheOneInTheFileAndStaysAfterARestart() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("lazysend-id-" + UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("devices.json")
+        let first = PairedDeviceStore(url: file)
+        XCTAssertNotEqual(first.desktopId, "0123456789abcdef0123456789abcdef")
+        let given = PairedDeviceStore(url: file, desktopId: "0123456789abcdef0123456789abcdef")
+        XCTAssertEqual(given.desktopId, "0123456789abcdef0123456789abcdef")
+        XCTAssertEqual(PairedDeviceStore(url: file).desktopId, "0123456789abcdef0123456789abcdef")
+    }
+
+    func testAnIdThatIsNotAnIdIsIgnored() {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("lazysend-id-" + UUID().uuidString + ".json")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let store = PairedDeviceStore(url: file, desktopId: "a b")
+        XCTAssertNotEqual(store.desktopId, "a b")
+        XCTAssertTrue(isValidId(store.desktopId))
+    }
+}

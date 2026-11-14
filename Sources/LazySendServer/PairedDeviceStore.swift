@@ -37,10 +37,16 @@ public final class PairedDeviceStore: @unchecked Sendable {
     public var onChange: (() -> Void)?
     public var onRemoved: ((String) -> Void)?
 
-    public init(url: URL) {
+    /// `desktopId` is for a host that has an id already (a phone's own); it replaces the one in the file.
+    public init(url: URL, desktopId: String? = nil) {
         self.url = url
         file = JsonFile.load(DevicesFile.self, from: url) ?? DevicesFile()
-        if !isValidId(file.desktopId) {
+        if let desktopId = desktopId, isValidId(desktopId) {
+            if file.desktopId != desktopId {
+                file.desktopId = desktopId
+                JsonFile.save(file, to: url)
+            }
+        } else if !isValidId(file.desktopId) {
             file.desktopId = (0..<16).map { _ in String(format: "%02x", UInt8.random(in: 0...255)) }.joined()
             JsonFile.save(file, to: url)
         }
