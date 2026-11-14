@@ -43,7 +43,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Lazy Send reads the pairing code on your computer's screen.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Lazy Send looks for your computer on your local network, so you can send things to it and receive things from it.</string>
+	<string>Lazy Send looks for your computer on your local network, so you can send things to it and receive things from it, and lets other phones on the network connect to this one while the app is open.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Lazy Send saves the photos and videos your computer sends to your photo library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

@@ -1,6 +1,8 @@
 #if os(iOS)
 import Foundation
 import LazySendKit
+import LazySendServer
+import Security
 import UIKit
 import UserNotifications
 
@@ -48,6 +50,11 @@ struct AppEnvironment {
     var appVersion: String
     var background: Bool
     var demo: Bool
+    /// The certificate this phone hosts with, made on first use.
+    var identity: () throws -> SecIdentity
+    var advertiser: Advertiser?
+    /// The addresses a pairing code and `hello` list; nil for the ones the phone has.
+    var addresses: (() -> [String])?
 
     static let quiet = Discovery(announced: { _ in [:] }, subnets: { [] }, probe: { _, _ in [] })
 
@@ -68,7 +75,10 @@ struct AppEnvironment {
             phoneName: UIDevice.current.name,
             appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0",
             background: true,
-            demo: false)
+            demo: false,
+            identity: { try HostCertificate(hostName: UIDevice.current.name).current() },
+            advertiser: Advertiser(),
+            addresses: nil)
     }
 
     static func temporary(demo: Bool = false, notifier: Notifier = .silent) -> AppEnvironment {
@@ -87,7 +97,10 @@ struct AppEnvironment {
             phoneName: "Test phone",
             appVersion: "1.0",
             background: false,
-            demo: demo)
+            demo: demo,
+            identity: { throw SelfSignedCertificateError("No certificate in this build.") },
+            advertiser: nil,
+            addresses: nil)
     }
 }
 #endif
