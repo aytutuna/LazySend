@@ -426,7 +426,7 @@ public final class AppModel: ObservableObject {
 
     /// A gallery row is done once nothing has arrived for a while and the phone has nothing more in progress.
     func finishGalleries(now: Date) {
-        let busy = Set(service.inbox.transfers.filter { $0.isGallery }.map(\.deviceId))
+        let busy = Set(service.inbox.transfers.filter { $0.isGallery }.map(\.deviceId)).union(guest?.hostsReceivingGallery ?? [])
         for index in timeline.indices where timeline[index].kind == .gallery && timeline[index].active {
             guard now.timeIntervalSince(timeline[index].lastArrival) > AppModel.galleryIdle, !busy.contains(timeline[index].deviceId) else { continue }
             timeline[index].active = false

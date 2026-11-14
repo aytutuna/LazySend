@@ -82,6 +82,13 @@ public final class GuestService: @unchecked Sendable {
         self.lastRetry = lastRetry
     }
 
+    /// The hosts a gallery file is coming in from now.
+    public var hostsReceivingGallery: Set<String> {
+        lock.lock()
+        defer { lock.unlock() }
+        return Set(receivers.filter { $0.value.isReceivingGallery }.keys)
+    }
+
     public func isReachable(_ hostId: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }

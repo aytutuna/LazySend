@@ -15,6 +15,8 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
     private var handles: [String: FileHandle] = [:]
     // Where each file in progress is being written, fixed when it starts so a rename of the host cannot strand it.
     private var parts: [String: URL] = [:]
+    // The gallery files being written, so the timeline keeps one row open across slow files.
+    private var galleryActive = Set<String>()
     // The files finished lately, so one the host lists again because its acknowledgement was lost is only acknowledged.
     private var finished: [String] = []
     private var reportedStorage = false
@@ -87,6 +89,7 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
         lock.lock()
         handles[item.id] = handle
         parts[item.id] = part
+        if item.gallerySource != nil { galleryActive.insert(item.id) }
         reportedStorage = false
         lock.unlock()
         return have
@@ -140,6 +143,7 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
         try FileManager.default.moveItem(at: part, to: target)
         lock.lock()
         parts[item.id] = nil
+        galleryActive.remove(item.id)
         reportedFull = false
         finished.append(item.id)
         if finished.count > GuestReceiver.finishedKept { finished.removeFirst(finished.count - GuestReceiver.finishedKept) }
@@ -153,8 +157,17 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
         guest?.onFileReceived?(ReceivedFile(deviceId: host.id, deviceName: host.name, url: target, size: item.size ?? 0, sourceId: item.gallerySource))
     }
 
+    var isReceivingGallery: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return !galleryActive.isEmpty
+    }
+
     func pause(_ item: OutboxEntry) async {
         closeHandle(item.id)
+        lock.lock()
+        galleryActive.remove(item.id)
+        lock.unlock()
     }
 
     /// What an item that is dropped from the host's queue leaves half-downloaded is of no use.
@@ -162,6 +175,7 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
         closeHandle(item.id)
         lock.lock()
         let part = parts.removeValue(forKey: item.id)
+        galleryActive.remove(item.id)
         lock.unlock()
         if let part = part { try? FileManager.default.removeItem(at: part) }
         guest?.onFailed?("\(item.name ?? "An item") from \(host?.name ?? "a computer") could not be received: \(reason)")
@@ -174,6 +188,7 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
         let started = Array(parts.values)
         handles = [:]
         parts = [:]
+        galleryActive = []
         lock.unlock()
         open.forEach { try? $0.close() }
         started.forEach { try? FileManager.default.removeItem(at: $0) }

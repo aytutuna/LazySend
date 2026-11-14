@@ -567,6 +567,17 @@ final class GuestServiceTests: XCTestCase {
         XCTAssertFalse(fixture.guest.gallery.contains(pc.id, "asset-8#photo"))
     }
 
+    func testAGalleryFileInProgressKeepsItsHostBusy() async throws {
+        let pc = try await pairGuest()
+        let receiver = GuestReceiver(hostId: pc.id, guest: fixture.guest)
+        let item = OutboxEntry(id: "item-0009-abcdef", kind: "file", name: "IMG_9.jpg", size: 2, sourceId: "asset-9#photo")
+        _ = try await receiver.prepareFile(item)
+        XCTAssertTrue(receiver.isReceivingGallery)
+        try receiver.write(Data([1, 2]), for: item)
+        try await receiver.finishFile(item)
+        XCTAssertFalse(receiver.isReceivingGallery)
+    }
+
     func testOnlyAFullDiskIsToldApart() {
         XCTAssertTrue(CocoaError(.fileWriteOutOfSpace).isOutOfSpace)
         XCTAssertTrue(POSIXError(.ENOSPC).isOutOfSpace)
