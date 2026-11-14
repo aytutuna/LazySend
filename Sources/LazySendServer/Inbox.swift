@@ -541,9 +541,15 @@ public final class Inbox: @unchecked Sendable {
         while !FileManager.default.fileExists(atPath: probe.path), probe.pathComponents.count > 1 {
             probe = probe.deletingLastPathComponent()
         }
+#if os(iOS)
+        // The plain figure leaves out what the system clears when it needs room, which is what a big file may take.
+        let values = try? probe.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        guard let free = values?.volumeAvailableCapacityForImportantUsage else { return Int64.max }
+#else
         guard let free = (try? probe.resourceValues(forKeys: [.volumeAvailableCapacityKey]))?.volumeAvailableCapacity else {
             return Int64.max
         }
+#endif
         return Int64(free)
     }
 }
