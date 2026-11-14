@@ -25,6 +25,7 @@ private final class GuestFixture {
     let paths: SendPaths
     let secrets = MemorySecrets()
     let hosts: PcStore
+    let settings: SendSettings
     let guest: GuestService
     let texts = Events<ReceivedItem>()
     let files = Events<ReceivedFile>()
@@ -37,9 +38,10 @@ private final class GuestFixture {
     init(root: URL, guestId: String) {
         paths = SendPaths(root: root.appendingPathComponent("guest-state"), defaultReceiveRoot: root.appendingPathComponent("guest-received"))
         hosts = PcStore(file: paths.root.appendingPathComponent("hosts.json"), secrets: secrets, phoneId: guestId)
+        settings = SendSettings(paths: paths)
         let quiet = Discovery(announced: { _ in [:] }, subnets: { [] }, probe: { _, _ in [] })
         guest = GuestService(hosts: hosts, connector: PcConnector(store: hosts, discovery: quiet), history: ReceivedHistory(url: paths.historyFile),
-                             settings: SendSettings(paths: paths), guestName: "Guest Mac", appVersion: "1.0", firstRetry: 0.2, lastRetry: 0.5)
+                             settings: settings, guestName: "Guest Mac", appVersion: "1.0", firstRetry: 0.2, lastRetry: 0.5)
         let texts = self.texts, files = self.files, failures = self.failures, forgotten = self.forgotten, changes = self.changes
         guest.onTextReceived = { texts.add($0) }
         guest.onFileReceived = { files.add($0) }
@@ -244,6 +246,85 @@ final class GuestServiceTests: XCTestCase {
             XCTAssertTrue(error is HostKeyUnreadable)
         }
         XCTAssertEqual(fixture.hosts.pcs.count, 1)
+    }
+
+    func testPairingAgainKeepsWatchingWithTheNewSecret() async throws {
+        let first = try await pairGuest()
+        fixture.guest.start()
+        let reachable = await waitUntil { fixture.guest.isReachable(first.id) }
+        XCTAssertTrue(reachable)
+        let before = fixture.hosts.secret(for: first.id)
+        let second = try await pairGuest()
+        XCTAssertNotEqual(fixture.hosts.secret(for: second.id), before)
+        _ = try outbox.queueText(guestId, "after the second pairing")
+        let arrived = await waitUntil { !fixture.texts.all.isEmpty }
+        XCTAssertTrue(arrived)
+        // A watcher still polling with the old secret would be refused by now and would drop the new entry.
+        try await Task.sleep(nanoseconds: 1_500_000_000)
+        XCTAssertEqual(fixture.hosts.pcs.count, 1)
+        XCTAssertTrue(fixture.forgotten.all.isEmpty)
+        XCTAssertNotNil(fixture.hosts.secret(for: second.id))
+    }
+
+    func testAnUnusableReceiveFolderLeavesTheItemQueuedUntilItWorks() async throws {
+        _ = try await pairGuest()
+        let blocker = harness.root.appendingPathComponent("not-a-folder")
+        try Data().write(to: blocker)
+        fixture.settings.setReceiveRoot(blocker)
+        _ = try queueFile("kept.txt", bytes(2000))
+        fixture.guest.start()
+        let told = await waitUntil { !fixture.failures.all.isEmpty }
+        XCTAssertTrue(told)
+        try await Task.sleep(nanoseconds: 800_000_000)
+        XCTAssertEqual(outbox.pending(guestId).count, 1)
+        XCTAssertTrue(fixture.files.all.isEmpty)
+        XCTAssertEqual(fixture.failures.all.count, 1)
+        fixture.settings.setReceiveRoot(nil)
+        let arrived = await waitUntil { !fixture.files.all.isEmpty }
+        XCTAssertTrue(arrived)
+        let acknowledged = await waitUntil { outbox.pending(guestId).isEmpty }
+        XCTAssertTrue(acknowledged)
+    }
+
+    func testAFinishedFileListedAgainIsOnlyAcknowledged() async throws {
+        let pc = try await pairGuest()
+        let receiver = GuestReceiver(hostId: pc.id, guest: fixture.guest)
+        let item = OutboxEntry(id: "item-0001-abcdef", kind: "file", name: "a.txt", size: 3)
+        let before = await receiver.isDone(item)
+        XCTAssertFalse(before)
+        let have = try await receiver.prepareFile(item)
+        XCTAssertEqual(have, 0)
+        try receiver.write(Data([1, 2, 3]), for: item)
+        try await receiver.finishFile(item)
+        let after = await receiver.isDone(item)
+        XCTAssertTrue(after)
+        XCTAssertEqual(fixture.files.all.count, 1)
+    }
+
+    func testRemovingAHostDeletesWhatItHadBegun() async throws {
+        let pc = try await pairGuest()
+        let receiver = GuestReceiver(hostId: pc.id, guest: fixture.guest)
+        let item = OutboxEntry(id: "item-0002-abcdef", kind: "file", name: "b.txt", size: 10)
+        _ = try await receiver.prepareFile(item)
+        try receiver.write(Data([1, 2, 3]), for: item)
+        let part = hostFolder.appendingPathComponent(item.id + ".part")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: part.path))
+        receiver.discardParts()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: part.path))
+    }
+
+    func testOldPartFilesNoItemWillContinueAreCleanedWhenWatchingStarts() async throws {
+        _ = try await pairGuest()
+        try FileManager.default.createDirectory(at: hostFolder, withIntermediateDirectories: true)
+        let stale = hostFolder.appendingPathComponent("stale-part-0001.part")
+        let fresh = hostFolder.appendingPathComponent("fresh-part-0001.part")
+        try Data([1]).write(to: stale)
+        try Data([1]).write(to: fresh)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-3 * 24 * 3600)], ofItemAtPath: stale.path)
+        fixture.guest.start()
+        let cleaned = await waitUntil { !FileManager.default.fileExists(atPath: stale.path) }
+        XCTAssertTrue(cleaned)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fresh.path))
     }
 
     func testForgettingAHostTellsItAndDropsItHere() async throws {

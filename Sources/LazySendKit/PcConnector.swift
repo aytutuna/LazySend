@@ -141,6 +141,11 @@ public actor PcConnector {
         return (reached, fingerprint)
     }
 
+    /// Lets go of what is kept for a computer that was removed.
+    public func forget(_ pcId: String) {
+        sessions = sessions.filter { !$0.key.hasPrefix(pcId) }
+    }
+
     private func session(for pc: PairedPc) -> PinnedSession {
         let key = pc.id + pc.fingerprint
         if let existing = sessions[key] { return existing }

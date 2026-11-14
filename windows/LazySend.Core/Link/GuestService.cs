@@ -137,6 +137,8 @@ public sealed class GuestService : IDisposable
             await ForgetAtAsync(reached, port, fingerprint, answer.DeviceSecret).ConfigureAwait(false);
             throw;
         }
+        // Pairing again replaced the secret, so a watcher polling with the old one starts over.
+        StopWatching(host.Id);
         Watch(host.Id);
         return host;
     }
@@ -217,12 +219,14 @@ public sealed class GuestService : IDisposable
     {
         var cancellation = watch.Token;
         var retry = FirstRetry;
+        string? secret = null;
         try
         {
             while (!cancellation.IsCancellationRequested)
             {
                 try
                 {
+                    secret = Hosts.Secret(hostId);
                     using var client = await Connector.ConnectAsync(hostId, cancellation).ConfigureAwait(false);
                     SetReachable(hostId, true);
                     retry = FirstRetry;
@@ -232,7 +236,7 @@ public sealed class GuestService : IDisposable
                 {
                     return;
                 }
-                catch (LinkException e) when (e.Status == 401)
+                catch (LinkException e) when (e.Status == 401 && Hosts.Secret(hostId) == secret)
                 {
                     string? name = Hosts.Find(hostId)?.Name;
                     SetReachable(hostId, false);

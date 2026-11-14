@@ -28,6 +28,7 @@ public final class GuestService: @unchecked Sendable {
     private let lock = NSLock()
     private var watchers: [String: Task<Void, Never>] = [:]
     private var collectors: [String: OutboxCollector] = [:]
+    private var receivers: [String: GuestReceiver] = [:]
     private var reachable = Set<String>()
     private var running = false
 
@@ -101,7 +102,14 @@ public final class GuestService: @unchecked Sendable {
         }
     }
 
+    // Pairing again replaces the secret, so what was watching with the old one starts over with the new.
     private func paired(_ pc: PairedPc) {
+        lock.lock()
+        let old = watchers.removeValue(forKey: pc.id)
+        collectors[pc.id] = nil
+        receivers[pc.id] = nil
+        lock.unlock()
+        old?.cancel()
         onChange?()
         watch(pc.id)
     }
@@ -119,26 +127,30 @@ public final class GuestService: @unchecked Sendable {
         hosts.remove(id)
         lock.lock()
         collectors[id] = nil
+        let receiver = receivers.removeValue(forKey: id)
         reachable.remove(id)
         let task = watchers.removeValue(forKey: id)
         lock.unlock()
         task?.cancel()
+        receiver?.discardParts()
+        let connector = self.connector
+        Task { await connector.forget(id) }
         onChange?()
     }
 
-    /// The host no longer knows this computer.
-    private func lost(_ id: String) {
-        guard let pc = hosts.get(id) else { return }
+    /// The host answered 401 to `secret`. It counts only while that is still the secret kept: pairing again in the
+    /// meantime replaced it, and the host's refusal was for the old one.
+    private func lost(_ id: String, using secret: String?) {
+        guard let pc = hosts.get(id), hosts.secret(for: id) == secret else { return }
         removeLocally(id)
         onForgotten?(pc.name)
     }
-
-    // MARK: Sending
 
     /// A text or a link (what `ItemRequest.note` made of it).
     public func send(_ note: ItemRequest, to id: String) async throws {
         var failures = 0
         while true {
+            let secret = hosts.secret(for: id)
             do {
                 _ = try await client(for: id, search: failures == 0).postItem(note)
                 return
@@ -146,7 +158,7 @@ public final class GuestService: @unchecked Sendable {
                 try await Task.sleep(nanoseconds: UInt64(Uploader.retryDelays[failures] * 1_000_000_000))
                 failures += 1
             } catch let error as LinkError where error.status == 401 {
-                lost(id)
+                lost(id, using: secret)
                 throw error
             }
         }
@@ -159,6 +171,7 @@ public final class GuestService: @unchecked Sendable {
             return try ItemRequest.file(at: url, name: url.lastPathComponent, mime: values?.contentType?.preferredMIMEType,
                                         modified: values?.contentModificationDate)
         }.value
+        let secret = hosts.secret(for: id)
         var first = true
         let uploader = Uploader(chunkBytes: GuestService.chunkBytes) { [self] () async throws -> UploadAPI in
             let search = first
@@ -168,7 +181,7 @@ public final class GuestService: @unchecked Sendable {
         do {
             _ = try await uploader.send(request, source: FileDataSource(url: url), onProgress: onProgress)
         } catch let error as LinkError where error.status == 401 {
-            lost(id)
+            lost(id, using: secret)
             throw error
         }
     }
@@ -190,8 +203,6 @@ public final class GuestService: @unchecked Sendable {
         }
     }
 
-    // MARK: Receiving
-
     private func watch(_ id: String) {
         lock.lock()
         defer { lock.unlock() }
@@ -199,13 +210,16 @@ public final class GuestService: @unchecked Sendable {
         watchers[id] = Task { [weak self] in await self?.watchLoop(id) }
     }
 
-    private func collector(for id: String) -> OutboxCollector {
+    private func collector(for id: String) -> (OutboxCollector, GuestReceiver) {
         lock.lock()
         defer { lock.unlock() }
-        if let existing = collectors[id] { return existing }
-        let made = OutboxCollector(handler: GuestReceiver(hostId: id, guest: self))
+        if let existing = collectors[id], let receiver = receivers[id] { return (existing, receiver) }
+        let receiver = GuestReceiver(hostId: id, guest: self)
+        let made = OutboxCollector(handler: receiver)
         collectors[id] = made
-        return made
+        receivers[id] = receiver
+        return (made, receiver)
+    }
     }
 
     private func setReachable(_ id: String, _ value: Bool) {
@@ -221,21 +235,30 @@ public final class GuestService: @unchecked Sendable {
         var retry = firstRetry
         while !Task.isCancelled {
             guard let pc = hosts.get(id) else { return }
+            let secret = hosts.secret(for: id)
             switch await connector.connect(pc) {
             case .forgotten:
-                lost(id)
+                lost(id, using: secret)
                 return
             case .reached(let reached):
                 retry = firstRetry
                 setReachable(id, true)
                 do {
-                    let outbox = collector(for: id)
-                    while true { _ = try await outbox.collect(api: reached.client, wait: LinkProtocol.maxOutboxWait) }
+                    let (outbox, receiver) = collector(for: id)
+                    if let waiting = try? await reached.client.outbox(wait: 0), !waiting.more {
+                        receiver.removeStaleParts(keeping: Set(waiting.items.map(\.id)))
+                    }
+                    while true {
+                        let asked = Date()
+                        let taken = try await outbox.collect(api: reached.client, wait: LinkProtocol.maxOutboxWait)
+                        // A host that answers a long poll at once with nothing is not waiting; do not spin on it.
+                        if taken == 0 && Date().timeIntervalSince(asked) < 1 { try await Task.sleep(nanoseconds: 1_000_000_000) }
+                    }
                 } catch is CancellationError {
                     return
                 } catch {
                     if (error as? LinkError)?.status == 401 {
-                        lost(id)
+                        lost(id, using: secret)
                         return
                     }
                 }

@@ -306,6 +306,32 @@ public class GuestConnectionTests
         Assert.Equal("Test PC", await forgotten.Task.WaitAsync(TimeSpan.FromSeconds(40)));
         Assert.Empty(guest.Hosts.Hosts);
     }
+
+    [Fact]
+    public async Task PairingAgainKeepsWatchingWithTheNewSecret()
+    {
+        await using var h = new Harness();
+        using var guest = new GuestRig(h);
+        var host = await guest.PairAsync();
+        var arrived = new TaskCompletionSource<ReceivedItem>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var forgotten = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        guest.Service.Receiver.TextReceived += (_, item) => arrived.TrySetResult(item);
+        guest.Service.Forgotten += (_, name) => forgotten.TrySetResult(name);
+        guest.Service.Start();
+        for (int i = 0; i < 400 && !guest.Service.IsReachable(host.Id); i++) await Task.Delay(50);
+        Assert.True(guest.Service.IsReachable(host.Id));
+        string? before = guest.Hosts.Secret(host.Id);
+
+        await guest.PairAsync();
+
+        Assert.NotEqual(before, guest.Hosts.Secret(host.Id));
+        h.Service.Outbox.QueueText(guest.GuestId, "after the second pairing");
+        await arrived.Task.WaitAsync(TimeSpan.FromSeconds(20));
+        // A watcher still polling with the old secret would be refused by now and would drop the new entry.
+        await Task.Delay(1500);
+        Assert.Single(guest.Hosts.Hosts);
+        Assert.False(forgotten.Task.IsCompleted);
+    }
 }
 
 public class GuestSendTests
@@ -579,6 +605,34 @@ public class GuestReceiveTests
         Assert.Contains("moved.txt", failure);
         Assert.Empty(h.Service.Outbox.Pending(guest.GuestId));
         Assert.Empty(Directory.GetFiles(folder, "*.part"));
+    }
+
+    [Fact]
+    public async Task ReceiveFolderThatCannotBeUsedLeavesTheItemQueuedUntilItWorks()
+    {
+        await using var h = new Harness();
+        using var guest = new GuestRig(h);
+        var host = await guest.PairAsync();
+        string source = Path.Combine(h.Root, "kept.bin");
+        byte[] content = RandomNumberGenerator.GetBytes(2000);
+        await File.WriteAllBytesAsync(source, content);
+        h.Service.Outbox.QueueFile(guest.GuestId, source);
+        // A file where the receive folder should be, so no folder can be made under it.
+        Directory.CreateDirectory(Path.GetDirectoryName(guest.Paths.DefaultReceiveRoot)!);
+        await File.WriteAllBytesAsync(guest.Paths.DefaultReceiveRoot, []);
+        var failures = new List<string>();
+        guest.Service.Receiver.Failed += (_, text) => failures.Add(text);
+        using var client = await guest.Service.Connector.ConnectAsync(host.Id, CancellationToken.None);
+
+        await Assert.ThrowsAnyAsync<IOException>(() => guest.Service.Receiver.CollectAsync(client, host.Id, 0, CancellationToken.None));
+        await Assert.ThrowsAnyAsync<IOException>(() => guest.Service.Receiver.CollectAsync(client, host.Id, 0, CancellationToken.None));
+
+        Assert.Single(h.Service.Outbox.Pending(guest.GuestId));
+        Assert.Single(failures);
+        File.Delete(guest.Paths.DefaultReceiveRoot);
+        await guest.Service.Receiver.CollectAsync(client, host.Id, 0, CancellationToken.None);
+        Assert.Empty(h.Service.Outbox.Pending(guest.GuestId));
+        Assert.Equal(content, await File.ReadAllBytesAsync(Path.Combine(guest.Paths.DefaultReceiveRoot, "Test PC", "kept.bin")));
     }
 }
 
