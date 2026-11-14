@@ -482,6 +482,7 @@ public final class AppModel: ObservableObject {
             var files: [(url: URL, bookmark: Data?, mime: String?)] = []
             for url in readable {
                 let scoped = url.startAccessingSecurityScopedResource()
+                let bookmark = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
                 if scoped { url.stopAccessingSecurityScopedResource() }
                 files.append((url, bookmark, AppModel.mime(of: url)))
             }
@@ -719,6 +720,7 @@ public final class AppModel: ObservableObject {
 
     /// Takes a folder the user chose as the receive folder, kept across launches by a bookmark.
     public func chooseReceiveFolder(_ url: URL) {
+        let bookmark = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
         openReceiveScope(url)
         service.settings.setReceiveRoot(url, bookmark: bookmark)
         receiveFolder = url.path
