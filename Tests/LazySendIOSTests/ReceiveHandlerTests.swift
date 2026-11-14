@@ -2,6 +2,7 @@
 import LazySendKit
 import XCTest
 @testable import LazySendIOS
+@testable import LazySendServer
 
 @MainActor
 final class ReceiveHandlerTests: XCTestCase {
@@ -122,6 +123,107 @@ final class ReceiveHandlerTests: XCTestCase {
         await handler.fail(file("item-0009", name: "never.txt", size: 1), reason: "nope")
         XCTAssertEqual(timeline.get("in-item-0009")?.state, .failed)
         XCTAssertEqual(timeline.get("in-item-0009")?.title, "never.txt")
+    }
+
+    private func gallery(_ id: String, name: String, size: Int64, taken: String? = nil) -> OutboxEntry {
+        OutboxEntry(id: id, kind: "file", name: name, size: size, mime: "image/jpeg", sourceId: "asset-" + id + "#photo", taken: taken)
+    }
+
+    func testGalleryFileIsFiledUnderTheComputerByTheMonthItWasTaken() async throws {
+        let (handler, timeline, folder, _) = fixture()
+        let item = gallery("gallery-0001", name: "IMG_1.jpg", size: 3, taken: "2021-03-15T12:00:00Z")
+        _ = try await handler.prepareFile(item)
+        try handler.write(Data([1, 2, 3]), for: item)
+        try await handler.finishFile(item)
+        let month = Inbox.month(Date(timeIntervalSince1970: 1_615_809_600))
+        let placed = folder.appendingPathComponent("Office PC/Gallery/\(month)/IMG_1.jpg")
+        XCTAssertEqual(try Data(contentsOf: placed), Data([1, 2, 3]))
+        let modified = try XCTUnwrap(try FileManager.default.attributesOfItem(atPath: placed.path)[.modificationDate] as? Date)
+        XCTAssertEqual(modified.timeIntervalSince1970, 1_615_809_600, accuracy: 1)
+        XCTAssertFalse(exists(folder, "Office PC/gallery-0001.part"))
+        XCTAssertNil(timeline.get("in-gallery-0001"))
+        let done = await handler.isDone(item)
+        XCTAssertTrue(done)
+    }
+
+    func testGalleryFileWithoutADateIsFiledByTheDayItArrived() async throws {
+        let (handler, _, folder, _) = fixture()
+        let item = gallery("gallery-0002", name: "IMG_2.jpg", size: 1)
+        _ = try await handler.prepareFile(item)
+        try handler.write(Data([5]), for: item)
+        try await handler.finishFile(item)
+        XCTAssertTrue(exists(folder, "Office PC/Gallery/\(Inbox.month(Date()))/IMG_2.jpg"))
+    }
+
+    func testGalleryFilesShareOneRowForTheComputer() async throws {
+        let (handler, timeline, _, _) = fixture()
+        for index in 1...3 {
+            let item = gallery("gallery-010\(index)", name: "IMG_\(index).jpg", size: 1)
+            _ = try await handler.prepareFile(item)
+            try handler.write(Data([1]), for: item)
+            try await handler.finishFile(item)
+        }
+        let rows = timeline.entries.filter { $0.kind == .gallery }
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(rows.first?.count, 3)
+        XCTAssertEqual(rows.first?.direction, .received)
+        XCTAssertFalse(timeline.entries.contains { $0.kind == .file })
+    }
+
+    func testHalfSavedGalleryFileContinuesFromItsSize() async throws {
+        let (first, timeline, folder, env) = fixture()
+        let item = gallery("gallery-0003", name: "IMG_3.jpg", size: 11)
+        _ = try await first.prepareFile(item)
+        try first.write(Data("hello".utf8), for: item)
+        await first.pause(item)
+        let second = ReceiveHandler(pcName: "Office PC", timeline: timeline, folder: folder, notifier: .silent, defaults: env.defaults,
+                                    saved: SavedAssets(file: env.support.appendingPathComponent("saved-assets.json")))
+        let have = try await second.prepareFile(item)
+        XCTAssertEqual(have, 5)
+    }
+
+    func testGalleryFileIsAcknowledgedAfterTheDownload() async throws {
+        let (handler, _, folder, _) = fixture()
+        let item = gallery("gallery-0004", name: "IMG_4.jpg", size: 4, taken: "2022-07-01T09:30:00+02:00")
+        let api = ScriptedOutbox(items: [item], files: [item.id: Data([1, 2, 3, 4])])
+        let taken = try await OutboxCollector(handler: handler).collect(api: api, wait: 0)
+        XCTAssertEqual(taken, 1)
+        XCTAssertEqual(api.acknowledged, [item.id])
+        XCTAssertTrue(exists(folder, "Office PC/Gallery"))
+    }
+}
+
+private final class ScriptedOutbox: OutboxAPI, @unchecked Sendable {
+    private let items: [OutboxEntry]
+    private let files: [String: Data]
+    private let lock = NSLock()
+    private var done: [String] = []
+
+    init(items: [OutboxEntry], files: [String: Data]) {
+        self.items = items
+        self.files = files
+    }
+
+    var acknowledged: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return done
+    }
+
+    func outbox(wait: Int) async throws -> OutboxReply {
+        OutboxReply(items: items, more: false)
+    }
+
+    func download(id: String, from: Int64, onStart: @escaping (Int, Int64) throws -> Void, sink: @escaping (Data) throws -> Void) async throws {
+        let data = files[id] ?? Data()
+        try onStart(from > 0 ? 206 : 200, Int64(data.count))
+        try sink(Data(data.dropFirst(Int(from))))
+    }
+
+    func acknowledge(_ id: String) async throws {
+        lock.lock()
+        done.append(id)
+        lock.unlock()
     }
 }
 #endif

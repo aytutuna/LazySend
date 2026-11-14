@@ -1,11 +1,13 @@
 #if os(iOS)
 import Foundation
 import LazySendKit
+import LazySendServer
 import Photos
 import UniformTypeIdentifiers
 
 /// Stores what a computer sends in the app's Documents folder and the timeline. A file is kept as
-/// `<name>.part` until it is whole, so a later try can carry on from its size.
+/// `<name>.part` until it is whole, so a later try can carry on from its size. Files from the computer's photo
+/// library are filed under `<computer name>/Gallery/YYYY-MM/` and show as one row for the computer.
 final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
     private let pcName: String
     private let timeline: Timeline
@@ -17,6 +19,8 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
     private var handles: [String: FileHandle] = [:]
     private var parts: [String: URL] = [:]
     private var lastReport: [String: Date] = [:]
+    // The gallery files finished lately: they have no timeline entry to say so.
+    private var finishedGallery: [String] = []
 
     init(pcName: String, timeline: Timeline, folder: URL, notifier: Notifier, defaults: UserDefaults, saved: SavedAssets) {
         self.pcName = pcName
@@ -31,7 +35,20 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
         "in-" + item.id
     }
 
+    private var computerFolder: URL {
+        folder.appendingPathComponent(FileNames.clean(pcName, fallback: "Computer"), isDirectory: true)
+    }
+
+    private var galleryRowId: String {
+        "in-gallery-" + pcName
+    }
+
     func isDone(_ item: OutboxEntry) async -> Bool {
+        if item.gallerySource != nil {
+            lock.lock()
+            defer { lock.unlock() }
+            return finishedGallery.contains(item.id)
+        }
         let id = entryId(item)
         return await MainActor.run { timeline.get(id)?.state == .done }
     }
@@ -46,6 +63,7 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
     }
 
     func prepareFile(_ item: OutboxEntry) async throws -> Int64 {
+        if item.gallerySource != nil { return try prepareGalleryFile(item) }
         let id = entryId(item)
         let previous = await MainActor.run { timeline.get(id) }
         let fm = FileManager.default
@@ -78,6 +96,28 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
         return have
     }
 
+    // The part is named by the item's id, which the computer keeps for the item, so a later try finds it.
+    private func prepareGalleryFile(_ item: OutboxEntry) throws -> Int64 {
+        guard isValidId(item.id) else { throw CocoaError(.fileWriteInvalidFileName) }
+        let fm = FileManager.default
+        let part = computerFolder.appendingPathComponent(item.id + ".part")
+        try fm.createDirectory(at: computerFolder, withIntermediateDirectories: true)
+        closeHandle(item.id)
+        var have: Int64 = 0
+        if fm.fileExists(atPath: part.path) {
+            have = ((try? fm.attributesOfItem(atPath: part.path))?[.size] as? NSNumber)?.int64Value ?? 0
+        } else if !fm.createFile(atPath: part.path, contents: nil) {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        let handle = try FileHandle(forWritingTo: part)
+        _ = try handle.seekToEnd()
+        lock.lock()
+        handles[item.id] = handle
+        parts[item.id] = part
+        lock.unlock()
+        return have
+    }
+
     func resetFile(_ item: OutboxEntry) throws {
         let handle = try openHandle(for: item)
         try handle.truncate(atOffset: 0)
@@ -91,6 +131,7 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
     }
 
     func progress(_ item: OutboxEntry, bytes: Int64) {
+        guard item.gallerySource == nil else { return }
         lock.lock()
         let now = Date()
         let due = now.timeIntervalSince(lastReport[item.id] ?? Date.distantPast) >= 0.25
@@ -102,6 +143,7 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
     }
 
     func finishFile(_ item: OutboxEntry) async throws {
+        if item.gallerySource != nil { return try await finishGalleryFile(item) }
         let id = entryId(item)
         closeHandle(item.id)
         lock.lock()
@@ -129,8 +171,46 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
         ReceiveHandler.saveToPhotos(target, mime: item.mime, defaults: defaults, saved: saved)
     }
 
+    private func finishGalleryFile(_ item: OutboxEntry) async throws {
+        closeHandle(item.id)
+        lock.lock()
+        let part = parts.removeValue(forKey: item.id)
+        lock.unlock()
+        guard let part = part, let month = item.galleryFolder(in: computerFolder) else { throw CocoaError(.fileNoSuchFile) }
+        let fm = FileManager.default
+        try fm.createDirectory(at: month, withIntermediateDirectories: true)
+        let name = ReceiveHandler.unique(ReceiveHandler.safeName(item.name)) { fm.fileExists(atPath: month.appendingPathComponent($0).path) }
+        let target = month.appendingPathComponent(name)
+        try fm.moveItem(at: part, to: target)
+        if let taken = item.takenDate {
+            try? fm.setAttributes([.modificationDate: taken], ofItemAtPath: target.path)
+        }
+        lock.lock()
+        finishedGallery.append(item.id)
+        if finishedGallery.count > 200 { finishedGallery.removeFirst(finishedGallery.count - 200) }
+        lock.unlock()
+        let row = galleryRowId
+        let pcName = self.pcName
+        let first = await MainActor.run { () -> Bool in
+            let first = timeline.get(row) == nil
+            if first {
+                timeline.add(TimelineEntry(id: row, direction: .received, kind: .gallery, pcName: pcName,
+                                           title: String(localized: "Photos and videos"), state: .done))
+            }
+            timeline.update(row) {
+                $0.count += 1
+                $0.time = Date()
+            }
+            if (timeline.get(row)?.count ?? 0) % 20 == 0 { timeline.save() }
+            return first
+        }
+        if first { notifier.post(pcName, String(localized: "Receiving photos and videos.")) }
+        ReceiveHandler.saveToPhotos(target, mime: item.mime, defaults: defaults, saved: saved)
+    }
+
     func pause(_ item: OutboxEntry) async {
         closeHandle(item.id)
+        guard item.gallerySource == nil else { return }
         let id = entryId(item)
         await MainActor.run {
             timeline.update(id) { $0.state = .paused }
@@ -141,8 +221,9 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
     func fail(_ item: OutboxEntry, reason: String) async {
         closeHandle(item.id)
         lock.lock()
-        parts[item.id] = nil
+        let part = parts.removeValue(forKey: item.id)
         lock.unlock()
+        if item.gallerySource != nil, let part = part { try? FileManager.default.removeItem(at: part) }
         let id = entryId(item)
         let folder = self.folder
         let pcName = self.pcName
