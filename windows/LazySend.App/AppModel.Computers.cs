@@ -44,7 +44,7 @@ public sealed partial class AppModel
     {
         var send = resumed.Send;
         string name = Guest.Hosts.Find(send.HostId)?.Name ?? "computer";
-        SendToComputer(send.HostId, name, TimelineKind.File, null, send.Path, (stop, progress) => resumed.Run(progress, stop), send.Size);
+        SendToComputer(send.HostId, name, TimelineKind.File, null, send.Path, (stop, progress) => resumed.Run(progress, stop), send.Size, resumed.Wait, resumed.Drop);
     }
 
     private int SendFilesToComputer(PhoneRow computer, IEnumerable<string> paths)
@@ -73,7 +73,8 @@ public sealed partial class AppModel
 
     /// <summary>Adds a row for what is being sent and runs <paramref name="send"/>, two at a time; the row says how it went.</summary>
     private void SendToComputer(string computerId, string computerName, TimelineKind kind, string? text, string? path,
-                                Func<CancellationToken, IProgress<long>, Task> send, long size = 0)
+                                Func<CancellationToken, IProgress<long>, Task> send, long size = 0,
+                                Func<CancellationToken, Task>? waitForHost = null, Action? dropped = null)
     {
         var stop = new CancellationTokenSource();
         var row = new TimelineItem(kind, true, computerId, computerName, DateTimeOffset.UtcNow) { Text = text, Path = path, SendStop = stop };
@@ -98,6 +99,11 @@ public sealed partial class AppModel
             string status;
             try
             {
+                if (waitForHost is not null)
+                {
+                    await _ui.BeginInvoke(() => row.Detail = $"{sizeText}Waiting for {computerName}, {Stamp(row.Time)}");
+                    await waitForHost(stop.Token).ConfigureAwait(false);
+                }
                 await _sendLanes.WaitAsync(stop.Token).ConfigureAwait(false);
                 try
                 {
@@ -113,6 +119,7 @@ public sealed partial class AppModel
             catch (OperationCanceledException)
             {
                 status = "Cancelled";
+                if (stop.IsCancellationRequested) dropped?.Invoke();
             }
             catch (Exception e)
             {

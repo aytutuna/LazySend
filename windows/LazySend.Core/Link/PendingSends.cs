@@ -62,7 +62,7 @@ public sealed class PendingSends
         {
             JsonFile.Save(_path, _file);
         }
-        catch (IOException)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
         }
     }

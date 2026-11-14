@@ -446,11 +446,35 @@ public class GuestSendTests
         var progress = new List<long>();
 
         var run = await resumed.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await run.Wait(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(20));
         await run.Run(new SyncProgress(progress), CancellationToken.None);
 
         Assert.Equal(send, run.Send);
         Assert.Equal(held, progress.First());
         Assert.Equal(content, await File.ReadAllBytesAsync(Path.Combine(h.ReceivedRoot, "Guest PC", "left.bin")));
+        Assert.Empty(guest.Pending.Sends);
+    }
+
+    [Fact]
+    public async Task WaitStopsWhenCancelledAndDropForgetsTheEntry()
+    {
+        await using var h = new Harness();
+        var before = new GuestRig(h);
+        var host = await before.PairAsync();
+        await LeaveHalfSentAsync(h, before, host);
+        before.Dispose();
+        await h.RestartAsync();
+        using var guest = new GuestRig(h, before.GuestId);
+        var resumed = new TaskCompletionSource<ResumedSend>();
+        guest.Service.SendResumed += (_, r) => resumed.TrySetResult(r);
+        guest.Service.Start();
+        var run = await resumed.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        using var stop = new CancellationTokenSource(300);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run.Wait(stop.Token));
+        Assert.Single(guest.Pending.Sends);
+        run.Drop();
+
         Assert.Empty(guest.Pending.Sends);
     }
 

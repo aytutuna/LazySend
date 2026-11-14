@@ -1,7 +1,10 @@
 namespace LazySend.Core;
 
-/// <summary>An unfinished send found at start; <paramref name="Run"/> sends the rest and reports its progress.</summary>
-public sealed record ResumedSend(PendingSend Send, Func<IProgress<long>?, CancellationToken, Task> Run);
+/// <summary>
+/// An unfinished send found at start. <paramref name="Wait"/> returns once the host answers, <paramref name="Run"/> checks
+/// the file and sends the rest, and <paramref name="Drop"/> forgets the entry when the user cancels before Run.
+/// </summary>
+public sealed record ResumedSend(PendingSend Send, Func<CancellationToken, Task> Wait, Func<IProgress<long>?, CancellationToken, Task> Run, Action Drop);
 
 /// <summary>
 /// This computer's side as a guest of other computers: pairing with them, sending to them, and taking what they
@@ -67,7 +70,7 @@ public sealed class GuestService : IDisposable
         foreach (var send in _pending.Sends)
         {
             if (Hosts.Find(send.HostId) is null) _pending.Remove(send.SendId);
-            else SendResumed?.Invoke(this, new ResumedSend(send, (progress, cancellation) => ResumeAsync(send, progress, cancellation)));
+            else SendResumed?.Invoke(this, new ResumedSend(send, cancellation => WaitForHostAsync(send.HostId, cancellation), (progress, cancellation) => ResumeAsync(send, progress, cancellation), () => _pending.Remove(send.SendId)));
         }
     }
 
@@ -194,6 +197,15 @@ public sealed class GuestService : IDisposable
         await SendPendingAsync(send, request, progress, cancellation).ConfigureAwait(false);
     }
 
+    private async Task WaitForHostAsync(string hostId, CancellationToken cancellation)
+    {
+        while (!IsReachable(hostId))
+        {
+            if (Hosts.Find(hostId) is null) throw new IOException("The computer was removed.");
+            await Task.Delay(TimeSpan.FromSeconds(1), cancellation).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>Carries on with a file the host may already have part of, once the host answers. Throws when the file is gone or changed.</summary>
     private async Task ResumeAsync(PendingSend send, IProgress<long>? progress, CancellationToken cancellation)
     {
@@ -202,19 +214,6 @@ public sealed class GuestService : IDisposable
         {
             _pending.Remove(send.SendId);
             throw new IOException($"{info.Name} is gone or has changed since it was left unfinished.");
-        }
-        try
-        {
-            while (!IsReachable(send.HostId))
-            {
-                if (Hosts.Find(send.HostId) is null) throw new IOException("The computer was removed.");
-                await Task.Delay(TimeSpan.FromSeconds(1), cancellation).ConfigureAwait(false);
-            }
-        }
-        catch
-        {
-            if (cancellation.IsCancellationRequested) _pending.Remove(send.SendId);
-            throw;
         }
         var request = new ItemRequest(ItemKind.File, Name: info.Name, Size: send.Size, Modified: send.Modified, Sha256: send.Sha256, SendId: send.SendId);
         await SendPendingAsync(send, request, progress, cancellation).ConfigureAwait(false);
