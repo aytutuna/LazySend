@@ -39,7 +39,13 @@ public final class ReceivedHistory: @unchecked Sendable {
 
     @discardableResult
     func add(_ device: PairedDevice, kind: String, text: String?, url link: String?, now: Date) -> ReceivedItem {
-        let item = ReceivedItem(id: newId(), deviceId: device.id, deviceName: device.name, kind: kind, text: text, url: link, received: now)
+        add(deviceId: device.id, deviceName: device.name, kind: kind, text: text, url: link, id: newId(), now: now)
+    }
+
+    /// An item of a computer this one is a guest of keeps the id the computer gave it, so a repeat is noticed.
+    @discardableResult
+    func add(deviceId: String, deviceName: String, kind: String, text: String?, url link: String?, id: String, now: Date) -> ReceivedItem {
+        let item = ReceivedItem(id: id, deviceId: deviceId, deviceName: deviceName, kind: kind, text: text, url: link, received: now)
         lock.lock()
         file.items.insert(item, at: 0)
         var bytes = 0
