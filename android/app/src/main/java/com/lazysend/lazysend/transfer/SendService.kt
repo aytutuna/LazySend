@@ -16,7 +16,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -70,7 +69,7 @@ class SendService : Service() {
                     }
                 }
             }
-            ACTION_STOP -> scope.coroutineContext.cancelChildren()
+            ACTION_STOP -> gate.cancelSends()
             ACTION_STOP_HOST -> {
                 graph.host.stop()
                 gate.hostStopped()
@@ -82,7 +81,7 @@ class SendService : Service() {
 
     // Android 15 limits how long a data sync service may run in a day; what is half done is paused and can be resumed.
     override fun onTimeout(startId: Int, fgsType: Int) {
-        scope.coroutineContext.cancelChildren()
+        gate.cancelSends()
         graph.host.stop()
         finish()
     }

@@ -67,4 +67,24 @@ class ServiceGateTest {
         hosted.hostingChanged(false)
         assertEquals(1, finished.get())
     }
+
+    @Test
+    fun stoppingSendsCancelsThemAndLeavesTheGateUsable() {
+        val started = CountDownLatch(1)
+        val cancelled = CountDownLatch(1)
+        gate.launch {
+            try {
+                started.countDown()
+                kotlinx.coroutines.delay(60_000)
+            } finally {
+                cancelled.countDown()
+            }
+        }
+        assertTrue(started.await(5, TimeUnit.SECONDS))
+        gate.cancelSends()
+        assertTrue(cancelled.await(5, TimeUnit.SECONDS))
+        val again = CountDownLatch(1)
+        gate.launch { again.countDown() }
+        assertTrue(again.await(5, TimeUnit.SECONDS))
+    }
 }
