@@ -136,9 +136,9 @@ public class TxtRecordTests
     [Fact]
     public void RecordCarriesVersionIdAndName()
     {
-        var txt = Protocol.TxtRecords("abcdef0123456789", "Aytu's PC");
+        var txt = Protocol.TxtRecords("abcdef0123456789", "Test PC");
 
-        Assert.Equal(["v=1", "id=abcdef0123456789", "n=Aytu's PC"], txt.Select(e => $"{e.Key}={e.Value}"));
+        Assert.Equal(["v=1", "id=abcdef0123456789", "n=Test PC"], txt.Select(e => $"{e.Key}={e.Value}"));
     }
 
     [Fact]

@@ -94,7 +94,7 @@ public sealed class Phone : IDisposable
             SslOptions = new SslClientAuthenticationOptions
             {
                 RemoteCertificateValidationCallback = (_, certificate, _, _) =>
-                    certificate is not null && SpkiFingerprint.Matches(SpkiFingerprint.Of(new X509Certificate2(certificate)), pin),
+                    certificate is not null && SpkiFingerprint.Matches(SpkiFingerprint.Of(X509CertificateLoader.LoadCertificate(certificate.GetRawCertData())), pin),
             },
         });
     }
@@ -145,7 +145,7 @@ public sealed class Phone : IDisposable
         using var tcp = new TcpClient();
         await tcp.ConnectAsync(IPAddress.Loopback, _harness.Port);
         await using var tls = new SslStream(tcp.GetStream(), false, (_, certificate, _, _) =>
-            SpkiFingerprint.Matches(SpkiFingerprint.Of(new X509Certificate2(certificate!)), Pin));
+            SpkiFingerprint.Matches(SpkiFingerprint.Of(X509CertificateLoader.LoadCertificate(certificate!.GetRawCertData())), Pin));
         await tls.AuthenticateAsClientAsync("127.0.0.1");
         string head = $"PUT {Protocol.ItemsPrefix}{id}/data HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Device-Id: {Id}\r\nAuthorization: Bearer {Secret}\r\n"
                       + $"X-Offset: {offset}\r\nContent-Length: {declared}\r\n\r\n";

@@ -69,8 +69,10 @@ public sealed class WindowsDnsSdBrowser
             foreach (var (name, found) in names.Zip(resolved))
             {
                 if (found is null || !found.Txt.TryGetValue(Protocol.TxtIdKey, out string? id) || !Protocol.IsValidId(id)) continue;
-                string label = name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) ? name[..^suffix.Length] : name;
-                string shown = found.Txt.TryGetValue(Protocol.TxtNameKey, out string? n) && n.Length > 0 ? n : label;
+                string label = PairedDeviceStore.CleanName(name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) ? name[..^suffix.Length] : name);
+                // The name comes from the network and ends up on screen and in a folder name.
+                string shown = PairedDeviceStore.CleanName(found.Txt.GetValueOrDefault(Protocol.TxtNameKey));
+                if (shown.Length == 0) shown = label.Length > 0 ? label : "Computer";
                 var addresses = found.Addresses.Select(a => a.ToString()).Where(a => !a.Contains('%')).ToList();
                 hosts[id] = hosts.TryGetValue(id, out var earlier)
                     ? earlier with { Addresses = HostStore.MergeAddresses(earlier.Addresses, addresses) }
@@ -147,9 +149,10 @@ public sealed class WindowsDnsSdBrowser
             {
                 return await done.Task.WaitAsync(TimeSpan.FromSeconds(3), cancellation).ConfigureAwait(false);
             }
-            catch (TimeoutException)
+            catch (Exception e) when (e is TimeoutException or OperationCanceledException)
             {
                 DnsServiceResolveCancel(cancel);
+                if (e is OperationCanceledException) throw;
                 return null;
             }
         }

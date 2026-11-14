@@ -78,7 +78,7 @@ public sealed class LinkClient : IDisposable
     private bool Validate(X509Certificate? certificate)
     {
         if (certificate is null) return false;
-        using var leaf = new X509Certificate2(certificate);
+        using var leaf = X509CertificateLoader.LoadCertificate(certificate.GetRawCertData());
         byte[] fingerprint = SpkiFingerprint.Of(leaf);
         Seen = fingerprint;
         return _pin is null || SpkiFingerprint.Matches(fingerprint, _pin);
