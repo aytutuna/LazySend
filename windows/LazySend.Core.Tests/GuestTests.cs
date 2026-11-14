@@ -652,7 +652,12 @@ public class GuestReceiveTests
         var taken = new DateTimeOffset(2021, 3, 15, 12, 0, 0, TimeSpan.Zero);
         h.Service.Outbox.QueueFile(guest.GuestId, source, sourceId: "asset-1", taken: taken);
         ReceivedFile? arrived = null;
-        guest.Service.Receiver.FileReceived += (_, file) => arrived = file;
+        bool busyWhileReceiving = false;
+        guest.Service.Receiver.FileReceived += (_, file) =>
+        {
+            arrived = file;
+            busyWhileReceiving = guest.Service.Receiver.IsReceivingGallery(host.Id);
+        };
         using var client = await guest.Service.Connector.ConnectAsync(host.Id, CancellationToken.None);
 
         await guest.Service.Receiver.CollectAsync(client, host.Id, 0, CancellationToken.None);
@@ -660,6 +665,8 @@ public class GuestReceiveTests
         string month = taken.ToLocalTime().ToString("yyyy-MM");
         string expected = Path.Combine(guest.Paths.DefaultReceiveRoot, "Test PC", "Gallery", month, "IMG_0001.jpg");
         Assert.Equal(expected, arrived?.Path);
+        Assert.True(busyWhileReceiving);
+        Assert.False(guest.Service.Receiver.IsReceivingGallery(host.Id));
         Assert.Equal("asset-1", arrived?.SourceId);
         Assert.Equal(content, await File.ReadAllBytesAsync(expected));
         Assert.Equal(taken.UtcDateTime, File.GetLastWriteTimeUtc(expected));

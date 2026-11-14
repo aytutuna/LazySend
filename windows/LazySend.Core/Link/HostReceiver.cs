@@ -17,6 +17,7 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
     private readonly object _gate = new();
     private readonly Queue<string> _finishedOrder = new();
     private readonly HashSet<string> _finished = [];
+    private readonly Dictionary<string, int> _galleryBusy = [];
     private bool _storageReported;
     private bool _fullReported;
 
@@ -59,7 +60,16 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
                     break;
                 case ItemKind.File:
                     if (WasFinished(host.Id, item.Id) || (GalleryIndex.IsValidSourceId(item.SourceId) && received.Contains(host.Id, item.SourceId))) break;
-                    await DownloadAsync(host, client, item, cancellation).ConfigureAwait(false);
+                    bool gallery = GalleryIndex.IsValidSourceId(item.SourceId);
+                    if (gallery) GalleryBusy(host.Id, 1);
+                    try
+                    {
+                        await DownloadAsync(host, client, item, cancellation).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        if (gallery) GalleryBusy(host.Id, -1);
+                    }
                     RememberFinished(host.Id, item.Id);
                     break;
             }
@@ -91,6 +101,22 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
             if (!_finished.Add(key)) return;
             _finishedOrder.Enqueue(key);
             while (_finishedOrder.Count > FinishedKept) _finished.Remove(_finishedOrder.Dequeue());
+        }
+    }
+
+    /// <summary>Whether a gallery file from the host is coming in now, so its row in the timeline is not finished between slow files.</summary>
+    public bool IsReceivingGallery(string hostId)
+    {
+        lock (_gate) return _galleryBusy.ContainsKey(hostId);
+    }
+
+    private void GalleryBusy(string hostId, int change)
+    {
+        lock (_gate)
+        {
+            int now = _galleryBusy.GetValueOrDefault(hostId) + change;
+            if (now > 0) _galleryBusy[hostId] = now;
+            else _galleryBusy.Remove(hostId);
         }
     }
 

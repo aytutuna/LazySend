@@ -207,7 +207,7 @@ public sealed partial class AppModel
         var now = DateTimeOffset.UtcNow;
         foreach (var row in _galleries.Values.Where(r => r.Active && now - r.LastArrival > GalleryIdle))
         {
-            if (Service.Inbox.InProgress.Any(f => f.DeviceId == row.DeviceId && f.SourceId is not null)) continue;
+            if (Service.Inbox.InProgress.Any(f => f.DeviceId == row.DeviceId && f.SourceId is not null) || Guest.Receiver.IsReceivingGallery(row.DeviceId)) continue;
             row.Active = false;
             DescribeGallery(row);
         }
