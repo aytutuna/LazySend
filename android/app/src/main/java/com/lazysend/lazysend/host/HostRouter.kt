@@ -278,10 +278,13 @@ class HostRouter(
         } catch (e: FileNotFoundException) {
             throw HostError.notFound
         }
-        val headers = listOf("Content-Type" to (item.mime ?: "application/octet-stream"), "Accept-Ranges" to "bytes")
+        val headers = listOf("Content-Type" to safeMime(item.mime), "Accept-Ranges" to "bytes")
         if (!partial) return HostResponse(200, headers, stream = stream, length = size)
         return HostResponse(206, headers + ("Content-Range" to "bytes $start-${size - 1}/$size"), stream = stream, length = size - start)
     }
+
+    // The type goes into a header as it is, so anything that is not a plain type/subtype is not sent.
+    private fun safeMime(mime: String?) = mime?.takeIf { TYPE.matches(it) } ?: "application/octet-stream"
 
     private fun acknowledge(request: HostRequest, id: String, now: Long): HostResponse {
         val guest = authenticate(request, now)
@@ -293,5 +296,9 @@ class HostRouter(
         LinkJson.decodeFromString<T>(String(bytes, Charsets.UTF_8))
     } catch (e: IllegalArgumentException) {
         throw HostError.badRequest
+    }
+
+    private companion object {
+        val TYPE = Regex("[A-Za-z0-9!#\$&^_.+-]+/[A-Za-z0-9!#\$&^_.+-]+")
     }
 }

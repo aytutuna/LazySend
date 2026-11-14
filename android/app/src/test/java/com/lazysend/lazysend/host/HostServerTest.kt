@@ -459,4 +459,19 @@ class HostServerTest {
         assertTrue(answer, answer.startsWith("HTTP/1.1 200"))
         assertTrue(host.raw("GET /v1/outbox?wait=abc HTTP/1.1\r\nHost: x\r\nX-Device-Id: ${credentials.deviceId}\r\nAuthorization: Bearer ${credentials.secret}\r\n\r\n").startsWith("HTTP/1.1 400"))
     }
+
+    @Test
+    fun aTypeThatIsNotATokenIsNotPutInAHeader() {
+        val credentials = host.pair()
+        val auth = "X-Device-Id: ${credentials.deviceId}\r\nAuthorization: Bearer ${credentials.secret}\r\n"
+        fun typeOf(mime: String?): String {
+            val item = host.core.outbox.queueFile(credentials.deviceId, "a", mime) { ByteArrayInputStream(ByteArray(2)) }
+            val answer = host.raw("GET /v1/outbox/${item.id}/data HTTP/1.1\r\nHost: x\r\n$auth\r\n")
+            return answer.lines().first { it.startsWith("Content-Type") }.trim()
+        }
+        assertEquals("Content-Type: image/jpeg", typeOf("image/jpeg"))
+        assertEquals("Content-Type: application/octet-stream", typeOf("text/plain\r\nX-Evil: 1"))
+        assertEquals("Content-Type: application/octet-stream", typeOf("text/plain; charset=x"))
+        assertEquals("Content-Type: application/octet-stream", typeOf(null))
+    }
 }
