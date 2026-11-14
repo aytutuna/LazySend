@@ -12,9 +12,11 @@ public sealed class OutboxItem
     public string? Name { get; set; }
     public long? Size { get; set; }
     public string? Mime { get; set; }
+    public string? SourceId { get; set; }
+    public DateTimeOffset? Taken { get; set; }
     public DateTimeOffset Queued { get; set; }
 
-    public OutboxEntry ToEntry() => new(Id, Kind, Text, Url, Name, Size, Mime);
+    public OutboxEntry ToEntry() => new(Id, Kind, Text, Url, Name, Size, Mime, SourceId, Taken);
 }
 
 public sealed class OutboxFile
@@ -59,11 +61,11 @@ public sealed class Outbox
     }
 
     /// <summary>Queues the file at <paramref name="path"/>; throws <see cref="FileNotFoundException"/> when there is none.</summary>
-    public OutboxItem QueueFile(string deviceId, string path, string? mime = null)
+    public OutboxItem QueueFile(string deviceId, string path, string? mime = null, string? sourceId = null, DateTimeOffset? taken = null)
     {
         var info = new FileInfo(path);
         if (!info.Exists) throw new FileNotFoundException("The file does not exist.", path);
-        return Add(new OutboxItem { Kind = ItemKind.File, Path = info.FullName, Name = info.Name, Size = info.Length, Mime = mime }, deviceId);
+        return Add(new OutboxItem { Kind = ItemKind.File, Path = info.FullName, Name = info.Name, Size = info.Length, Mime = mime, SourceId = sourceId, Taken = taken }, deviceId);
     }
 
     /// <summary>

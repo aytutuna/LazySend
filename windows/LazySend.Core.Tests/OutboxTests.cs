@@ -39,6 +39,27 @@ public class OutboxTests
     }
 
     [Fact]
+    public void OutboxFileWrittenBeforeGalleryFieldsStillLoads()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "lazysend-outbox-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            File.WriteAllText(path, """{"items":[{"id":"a1","deviceId":"d1","kind":"file","path":"/tmp/x.jpg","name":"x.jpg","size":3,"queued":"2026-11-01T10:00:00+00:00"}]}""");
+
+            var item = new Outbox(path).Find("d1", "a1");
+
+            Assert.NotNull(item);
+            Assert.Null(item.SourceId);
+            Assert.Null(item.Taken);
+            Assert.Null(item.ToEntry().SourceId);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task LongPollReturnsAsSoonAsSomethingIsQueued()
     {
         await using var h = new Harness();
