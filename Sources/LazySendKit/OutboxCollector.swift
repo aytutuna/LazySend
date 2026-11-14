@@ -104,7 +104,7 @@ public final class OutboxCollector: @unchecked Sendable {
             throw CancellationError()
         } catch let error as LinkError where OutboxCollector.leavesQueued(error) {
             throw error
-        } catch is StorageUnavailable {
+        } catch let error as StorageUnavailable {
             throw error
         } catch {
             // One item that cannot be stored must not stop the ones behind it, and it will not get better.
