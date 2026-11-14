@@ -21,12 +21,20 @@ final class Exchange {
 /// Holds the session's tasks by identifier. The delegate is all the session retains, so the owner can
 /// invalidate the session when it goes away.
 final class SessionDelegate: NSObject, URLSessionDataDelegate, @unchecked Sendable {
-    let pin: Data
+    /// Nil for a session that has no key to hold the computer to yet: it takes the first certificate it meets and remembers its fingerprint.
+    let pin: Data?
     private let lock = NSLock()
     private var exchanges: [Int: Exchange] = [:]
+    private var met: Data?
 
-    init(pin: Data) {
+    init(pin: Data?) {
         self.pin = pin
+    }
+
+    var seen: Data? {
+        lock.lock()
+        defer { lock.unlock() }
+        return met
     }
 
     func add(_ exchange: Exchange, for task: URLSessionTask) {
@@ -58,7 +66,16 @@ final class SessionDelegate: NSObject, URLSessionDataDelegate, @unchecked Sendab
         if let chain = SecTrustCopyCertificateChain(trust) as? [SecCertificate], let leaf = chain.first {
             der = SecCertificateCopyData(leaf) as Data
         }
-        if PinnedSession.accepts(der, pin: pin) {
+        var accepted = false
+        if let pin = pin {
+            accepted = PinnedSession.accepts(der, pin: pin)
+        } else if let fingerprint = der.flatMap({ SpkiFingerprint.of($0) }) {
+            lock.lock()
+            met = fingerprint
+            lock.unlock()
+            accepted = true
+        }
+        if accepted {
             completionHandler(.useCredential, URLCredential(trust: trust))
         } else {
             exchange(for: task)?.refused = true
@@ -157,8 +174,18 @@ public final class PinnedSession: @unchecked Sendable {
     private let session: URLSession
     private let delegate: SessionDelegate
 
-    public init(pin: Data) {
-        delegate = SessionDelegate(pin: pin)
+    public convenience init(pin: Data) {
+        self.init(delegate: SessionDelegate(pin: pin))
+    }
+
+    /// A session with no key yet, for the first look at a computer whose code was typed: it takes whatever
+    /// certificate answers, and `seen` says which. Nothing but `health` should go over it.
+    public convenience init() {
+        self.init(delegate: SessionDelegate(pin: nil))
+    }
+
+    private init(delegate: SessionDelegate) {
+        self.delegate = delegate
         let configuration = URLSessionConfiguration.ephemeral
         // Every request sets its own timeout (pairing waits 130 s, the outbox up to 40), which a shorter one here could cut.
         configuration.timeoutIntervalForRequest = 3600
@@ -175,6 +202,9 @@ public final class PinnedSession: @unchecked Sendable {
     deinit {
         session.finishTasksAndInvalidate()
     }
+
+    /// The fingerprint of the certificate the last connection of a keyless session met.
+    public var seen: Data? { delegate.seen }
 
     /// Whether `certificateDER` is the computer's: the SHA-256 of its key is `pin`. Nothing else about the certificate counts.
     public static func accepts(_ certificateDER: Data?, pin: Data) -> Bool {

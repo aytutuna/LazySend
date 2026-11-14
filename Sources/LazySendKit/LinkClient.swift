@@ -56,6 +56,9 @@ public final class LinkClient: UploadAPI, GalleryCheckAPI, OutboxAPI, @unchecked
         self.init(endpoint: endpoint, session: PinnedSession(pin: pin), credentials: credentials)
     }
 
+    /// The fingerprint of the certificate met, when the session was made without a key.
+    public var seen: Data? { session.seen }
+
     static func url(_ endpoint: Endpoint, path: String, query: [String: String] = [:]) -> URL? {
         var host = endpoint.host
         if host.contains(":") && !host.hasPrefix("[") { host = "[" + host + "]" }
@@ -106,8 +109,8 @@ public final class LinkClient: UploadAPI, GalleryCheckAPI, OutboxAPI, @unchecked
     }
 
     /// Waits for the person at the computer: it answers after they approve, or declines after 120 seconds.
-    public func pair(token: String, phoneId: String, phoneName: String, appVersion: String) async throws -> PairResponse {
-        let body = PairRequest(token: token, phoneId: phoneId, phoneName: phoneName, appVersion: appVersion)
+    public func pair(token: String, phoneId: String, phoneName: String, appVersion: String, platform: String = "ios") async throws -> PairResponse {
+        let body = PairRequest(token: token, phoneId: phoneId, phoneName: phoneName, platform: platform, appVersion: appVersion)
         return try await json(PairResponse.self, makeRequest("POST", "/v1/pair", timeout: 130, authenticated: false), body: body)
     }
 
