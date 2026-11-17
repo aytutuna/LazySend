@@ -64,17 +64,16 @@ class MediaFiles(private val context: Context) : ReceivedFiles {
             return Uri.fromFile(done).toString()
         }
         val uri = Uri.parse(part.uri)
-        val values = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
+        // The media store ignores a DATE_TAKEN an app sets and fills it from the file's own metadata when the file is
+        // published, falling back to the file's time. So a file without metadata is dated by setting its time first.
         if (modified != null) {
-            values.put(MediaStore.MediaColumns.DATE_MODIFIED, modified / 1000)
-            values.put(MediaStore.MediaColumns.DATE_TAKEN, modified)
+            @Suppress("DEPRECATION")
+            val path = context.contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.DATA), null, null, null)?.use {
+                if (it.moveToFirst()) it.getString(0) else null
+            }
+            path?.let { File(it).setLastModified(modified) }
         }
-        try {
-            context.contentResolver.update(uri, values, null, null)
-        } catch (e: IllegalArgumentException) {
-            // A collection without those date columns: the file is still put in place, only undated.
-            context.contentResolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
-        }
+        context.contentResolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
         return part.uri
     }
 
