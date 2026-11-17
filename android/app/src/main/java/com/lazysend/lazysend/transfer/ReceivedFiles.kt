@@ -100,6 +100,8 @@ class MediaFiles(private val context: Context) : ReceivedFiles {
             put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
         val uri = context.contentResolver.insert(collection, values) ?: error("The media store refused $name")
+        // The row has no file behind it until something is written, and existing() reads it before the first chunk.
+        context.contentResolver.openOutputStream(uri, "w")?.close()
         return ReceivedFiles.Part(uri.toString(), 0)
     }
 
