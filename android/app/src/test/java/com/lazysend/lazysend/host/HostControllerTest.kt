@@ -36,11 +36,11 @@ class HostControllerTest {
 
     private fun keys(): KeyPair = KeyPairGenerator.getInstance("EC").apply { initialize(ECGenParameterSpec("secp256r1")) }.generateKeyPair()
 
-    private fun controller(key: KeyPair = pair, port: Int = 0): HostController {
+    private fun controller(key: KeyPair = pair, port: Int = 0, subnets: List<HostSubnet> = emptyList()): HostController {
         val identity = HostIdentity(File(root, "cert.der"), key.private, key.public, { "Pixel" })
         return HostController(
             File(root, "host"), MemFiles(0), Timeline(File(root, "timeline.json")), { "host-test-0001" }, { "Pixel host" }, { 100L shl 30 },
-            { identity }, HostNetworks({ emptyList() }), null, preferredPort = port,
+            { identity }, HostNetworks({ subnets }), null, preferredPort = port,
         ).also { started.add(it) }
     }
 
@@ -63,6 +63,14 @@ class HostControllerTest {
         host.core.approval.filterNotNull().first()
         host.answer(true)
         Credentials(id, reply.await().deviceSecret)
+    }
+
+    @Test
+    fun anEthernetAddressStillCountsAsANetwork() = runBlocking {
+        val host = controller(subnets = listOf(HostSubnet("eth0", java.net.InetAddress.getByName("192.168.1.5"), 24)))
+        host.open()
+        waitFor { host.state.value.pairing != null }
+        assertEquals("Network", host.state.value.link)
     }
 
     @Test
