@@ -10,7 +10,6 @@ import com.lazysend.lazysend.data.Timeline
 import com.lazysend.lazysend.data.TimelineEntry
 import com.lazysend.lazysend.link.DEFAULT_PORT
 import com.lazysend.lazysend.transfer.Asset
-import com.lazysend.lazysend.transfer.LinkKind
 import com.lazysend.lazysend.transfer.ReceivedFiles
 import com.lazysend.lazysend.transfer.Subnet
 import java.io.File
@@ -262,7 +261,7 @@ class HostController(
         if (!current.running) return
         val addresses = networks.pairingAddresses()
         val label = networks.subnets().firstOrNull { it.address.hostAddress?.substringBefore('%') == addresses.firstOrNull() }
-            ?.let { Subnet(it.name, 0, 0).kind().takeIf { kind -> kind != LinkKind.Other }?.label }
+            ?.let { Subnet(it.name, 0, 0).kind().label }
         val session = core.pairing.value
         val key = key ?: return
         val pairing = session?.takeIf { screenOpen }?.let {
