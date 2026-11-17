@@ -73,7 +73,17 @@ class MediaFiles(private val context: Context) : ReceivedFiles {
             }
             path?.let { File(it).setLastModified(modified) }
         }
-        context.contentResolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+        val values = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
+        if (modified != null) {
+            // Android 10 has no file access to set the time with, but may keep these.
+            values.put(MediaStore.MediaColumns.DATE_MODIFIED, modified / 1000)
+            values.put(MediaStore.MediaColumns.DATE_TAKEN, modified)
+        }
+        try {
+            context.contentResolver.update(uri, values, null, null)
+        } catch (e: IllegalArgumentException) {
+            context.contentResolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+        }
         return part.uri
     }
 
@@ -100,7 +110,12 @@ class MediaFiles(private val context: Context) : ReceivedFiles {
         }
         val uri = context.contentResolver.insert(collection, values) ?: error("The media store refused $name")
         // The row has no file behind it until something is written, and existing() reads it before the first chunk.
-        context.contentResolver.openOutputStream(uri, "w")?.close()
+        try {
+            context.contentResolver.openOutputStream(uri, "w")?.close()
+        } catch (e: Exception) {
+            context.contentResolver.delete(uri, null, null)
+            throw e
+        }
         return ReceivedFiles.Part(uri.toString(), 0)
     }
 
