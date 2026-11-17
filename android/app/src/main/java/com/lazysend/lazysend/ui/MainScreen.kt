@@ -1,6 +1,8 @@
 package com.lazysend.lazysend.ui
 
 import android.text.format.DateUtils
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -119,7 +121,7 @@ private fun Connection(state: MainState, actions: MainActions) {
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (state.pcs.size > 1) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     state.pcs.forEach { FilterChip(selected = it.id == pc.id, onClick = { actions.onSelect(it.id) }, label = { Text(it.name) }) }
                 }
             }
