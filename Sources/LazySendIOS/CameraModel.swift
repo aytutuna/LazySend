@@ -210,20 +210,21 @@ final class CameraModel: ObservableObject {
         }
         guard let data = shot.0 else { return nil }
         guard format == .png else { return (data, shot.1) }
-        guard let png = await Task.detached(operation: { PhotoFormatting.png(fromPhoto: data) }).value else { return nil }
+        // A shot that cannot be made a PNG is sent as it was taken.
+        guard let png = await Task.detached(operation: { PhotoFormatting.png(fromPhoto: data) }).value else { return (data, shot.1) }
         return (png, "png")
     }
 
-    func shot(_ name: String, jpeg: Data) {
+    func shot(_ name: String, photo: Data) {
         lastName = name
         Task {
-            let small = await Task.detached { CameraModel.thumbnail(of: jpeg) }.value
+            let small = await Task.detached { CameraModel.thumbnail(of: photo) }.value
             thumbnail = small
         }
     }
 
-    nonisolated static func thumbnail(of jpeg: Data) -> UIImage? {
-        guard let source = CGImageSourceCreateWithData(jpeg as CFData, nil) else { return nil }
+    nonisolated static func thumbnail(of photo: Data) -> UIImage? {
+        guard let source = CGImageSourceCreateWithData(photo as CFData, nil) else { return nil }
         let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
                                         kCGImageSourceThumbnailMaxPixelSize: 200]
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary).map { UIImage(cgImage: $0) }

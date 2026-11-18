@@ -353,17 +353,17 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// A photo from the camera goes as a JPEG named by its time, to be put on the clipboard there. Returns the file's name,
+    /// A photo from the camera goes as a file named by its time in the chosen format (`ext`), to be put on the clipboard there. Returns the file name,
     /// which carries the milliseconds when another send already has the plain one, so the row can be found by it.
     /// Throws when the file cannot be written or the device is gone, so the caller can say so.
-    func sendCameraPhoto(_ jpeg: Data, ext: String = "jpg", to target: Target) async throws -> String {
+    func sendCameraPhoto(_ photo: Data, ext: String = "jpg", to target: Target) async throws -> String {
         let plain = ClipName.photo(ext: ext)
         let name = timeline.entries.contains { $0.direction == .sent && $0.title == plain } ? ClipName.photo(milliseconds: true, ext: ext) : plain
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("lazysend-photo-" + UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let file = folder.appendingPathComponent(name)
         do {
-            try jpeg.write(to: file)
+            try photo.write(to: file)
             if let phone = HostedPhones.id(ofTarget: target.id) {
                 try await host.sendFiles([file], to: phone, clip: true)
             } else if let pc = pcs.first(where: { $0.id == target.id }) {
@@ -375,16 +375,16 @@ final class AppModel: ObservableObject {
             try? FileManager.default.removeItem(at: folder)
             throw error
         }
-        if savesCameraToPhotos { addToPhotos(jpeg) }
+        if savesCameraToPhotos { addToPhotos(photo) }
         return name
     }
 
     // The library's id is kept so the gallery sync does not send the photo again.
-    private func addToPhotos(_ jpeg: Data) {
+    private func addToPhotos(_ photo: Data) {
         let saved = self.saved
         PHPhotoLibrary.shared().performChanges({
             let request = PHAssetCreationRequest.forAsset()
-            request.addResource(with: .photo, data: jpeg, options: nil)
+            request.addResource(with: .photo, data: photo, options: nil)
             if let id = request.placeholderForCreatedAsset?.localIdentifier { saved.insert(id) }
         }, completionHandler: nil)
     }

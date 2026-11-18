@@ -264,7 +264,7 @@ struct CameraView: View {
                 return
             }
             do {
-                camera.shot(try await model.sendCameraPhoto(photo.data, ext: photo.ext, to: target), jpeg: photo.data)
+                camera.shot(try await model.sendCameraPhoto(photo.data, ext: photo.ext, to: target), photo: photo.data)
             } catch {
                 camera.problem = error.localizedDescription
             }
