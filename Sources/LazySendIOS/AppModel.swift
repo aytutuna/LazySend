@@ -915,6 +915,7 @@ final class AppModel: ObservableObject {
         let pc = PairedPc(id: "demo-office-pc", name: "Office PC", fingerprint: Base64Url.encode(Data(repeating: 7, count: 32)),
                           addresses: [], port: LinkProtocol.defaultPort)
         try? store.put(pc, secret: "demo")
+        if env.demoEmpty { return }
         let now = Date()
         let entries = [
             TimelineEntry(id: "demo-1", time: now.addingTimeInterval(-18000), direction: .sent, kind: .text, pcName: pc.name,

@@ -59,6 +59,8 @@ struct AppEnvironment {
     var addresses: (() -> [String])?
     /// Seconds a pairing waits before it starts, so a UI test can look at the waiting screen (-slowPairing); 0 in the app.
     var pairDelay: TimeInterval = 0
+    /// The demo pairs the Office PC but leaves the timeline empty (-demoPc).
+    var demoEmpty = false
 
     static let quiet = Discovery(announced: { _ in [:] }, subnets: { [] }, probe: { _, _ in [] })
 
@@ -66,7 +68,8 @@ struct AppEnvironment {
     static func live() -> AppEnvironment {
         let arguments = ProcessInfo.processInfo.arguments
         if arguments.contains("-uiTesting") {
-            var env = temporary(demo: arguments.contains("-demoData"), notifier: .silent)
+            var env = temporary(demo: arguments.contains("-demoData") || arguments.contains("-demoPc"), notifier: .silent)
+            env.demoEmpty = arguments.contains("-demoPc")
             if arguments.contains("-slowPairing") { env.pairDelay = 12 }
             return env
         }

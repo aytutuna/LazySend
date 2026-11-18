@@ -15,19 +15,45 @@ final class ScreenshotTests: XCTestCase {
     func testMainScreenWithDemoData() {
         let app = XCUIApplication.launched(demo: true)
         XCTAssertTrue(app.item("main.timeline").waitForExistence(timeout: 30))
-        XCTAssertTrue(app.item("main.send").exists)
+        XCTAssertTrue(app.item("files.add").exists)
         XCTAssertTrue(app.item("main.pcs").exists)
         attach(app, as: "02-main")
     }
 
     @MainActor
-    func testSendScreen() {
+    func testTheEmptyFilesStateOffersThePlusMenu() {
+        let app = XCUIApplication.launched(tab: "Files", pairedOnly: true)
+        XCTAssertTrue(app.item("files.empty").waitForExistence(timeout: 30))
+        let add = app.item("files.add")
+        XCTAssertTrue(add.exists)
+        add.tap()
+        XCTAssertTrue(app.item("source.photos").waitForExistence(timeout: 30))
+        XCTAssertTrue(app.item("source.files").exists)
+        XCTAssertTrue(app.item("source.format").exists)
+        attach(app, as: "03-files-empty")
+    }
+
+    @MainActor
+    func testTheFilesTabListsNoTextsAndTheClipboardListsThem() {
+        let app = XCUIApplication.launched(demo: true, tab: "Files")
+        XCTAssertTrue(app.item("main.timeline").waitForExistence(timeout: 30))
+        XCTAssertFalse(app.staticTexts["The door code is 4821"].exists)
+        XCTAssertTrue(app.staticTexts["Quarterly report.pdf"].exists)
+        app.tabBars.buttons["Clipboard"].tap()
+        XCTAssertTrue(app.staticTexts["The door code is 4821"].waitForExistence(timeout: 30))
+        XCTAssertFalse(app.staticTexts["Quarterly report.pdf"].exists)
+    }
+
+    @MainActor
+    func testTheGalleryScreenIsInThePlusMenu() {
         let app = XCUIApplication.launched(demo: true)
-        let send = app.item("main.send")
-        XCTAssertTrue(send.waitForExistence(timeout: 30))
-        send.tap()
-        XCTAssertTrue(app.item("send.text").waitForExistence(timeout: 30))
-        XCTAssertTrue(app.item("send.gallery").exists)
+        let add = app.item("files.add")
+        XCTAssertTrue(add.waitForExistence(timeout: 30))
+        add.tap()
+        let gallery = app.item("source.gallery")
+        XCTAssertTrue(gallery.waitForExistence(timeout: 30))
+        gallery.tap()
+        XCTAssertTrue(app.item("send.gallery").waitForExistence(timeout: 30))
         attach(app, as: "03-send")
     }
 
