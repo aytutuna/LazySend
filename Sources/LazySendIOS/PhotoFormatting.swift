@@ -23,10 +23,16 @@ enum PhotoFormat: String, CaseIterable, Identifiable {
 enum PhotoFormatting {
     static let jpegQuality = 0.92
 
-    /// A still picture that can be converted: not a GIF (it may move), a video or anything that is not an image.
+    /// The most pixels a picture may have to be made a PNG, which has to be decoded whole (4 bytes a pixel in memory).
+    static let maxPngPixels = 50_000_000
+
+    /// A still picture that can be converted: not a RAW or DNG, AVIF, GIF or other picture that moves, a video, or anything that is not an
+    /// image. A picture of more than one frame (an animated HEICS, WebP or APNG) is not still.
     static func isConvertible(_ url: URL) -> Bool {
-        guard let type = UTType(filenameExtension: url.pathExtension) else { return false }
-        return type.conforms(to: .image) && !type.conforms(to: .gif)
+        guard let type = UTType(filenameExtension: url.pathExtension), type.conforms(to: .image), !type.conforms(to: .gif),
+              !type.conforms(to: .rawImage), type.identifier != "public.avif", type.identifier != "public.avis",
+              let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return false }
+        return CGImageSourceGetCount(source) == 1
     }
 
     /// The picked photo in `format`, written next to the original, which goes. The photo itself when it is to stay as it is: Original,
@@ -53,7 +59,8 @@ enum PhotoFormatting {
         return convert(source, to: .png)
     }
 
-    /// JPEG keeps the picture's metadata (EXIF, GPS, orientation); PNG gets the picture turned upright.
+    /// JPEG is streamed from the source with the picture's metadata (EXIF, GPS, orientation tag) and never decoded whole; PNG gets the
+    /// picture turned upright, which decodes it, so a picture of more than `maxPngPixels` stays as it is (nil).
     private static func convert(_ source: CGImageSource, to type: UTType) -> Data? {
         let out = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(out, type.identifier as CFString, 1, nil) else { return nil }
@@ -61,6 +68,7 @@ enum PhotoFormatting {
             let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
             let width = properties?[kCGImagePropertyPixelWidth] as? Int ?? 0
             let height = properties?[kCGImagePropertyPixelHeight] as? Int ?? 0
+            guard width * height <= maxPngPixels else { return nil }
             let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
                                             kCGImageSourceThumbnailMaxPixelSize: max(width, height, 1)]
             guard let upright = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }

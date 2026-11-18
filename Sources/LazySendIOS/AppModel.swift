@@ -329,13 +329,12 @@ final class AppModel: ObservableObject {
         env.defaults.set(format.rawValue, forKey: Keys.photoFormat)
     }
 
-    /// Photos picked in Files go in the chosen format; videos, GIFs and other files are left as they are.
-    func sendPhotos(_ urls: [URL], to target: Target) {
+    /// A photo picked from the Photos item goes in the chosen format; videos, RAW, animated pictures and other files are left as they are.
+    /// Each is sent as soon as it is ready.
+    func sendPhoto(_ url: URL, to target: Target) async {
         let format = photoFormat
-        Task {
-            let prepared = await Task.detached { urls.map { PhotoFormatting.prepare($0, as: format) } }.value
-            sendFiles(prepared, to: target)
-        }
+        let prepared = await Task.detached { PhotoFormatting.prepare(url, as: format) }.value
+        sendFiles([prepared], to: target)
     }
 
     func setSavesCameraToPhotos(_ on: Bool) {

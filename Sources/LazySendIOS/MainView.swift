@@ -92,11 +92,9 @@ struct MainView: View {
             picks = []
             guard let target = model.selectedTarget else { return }
             Task { @MainActor in
-                var urls: [URL] = []
                 for item in items {
-                    if let media = try? await item.loadTransferable(type: PickedMedia.self) { urls.append(media.url) }
+                    if let media = try? await item.loadTransferable(type: PickedMedia.self) { await model.sendPhoto(media.url, to: target) }
                 }
-                model.sendPhotos(urls, to: target)
             }
         }
         .dropDestination(for: DroppedFile.self) { dropped, _ in
@@ -179,7 +177,7 @@ struct MainView: View {
                     ForEach(PhotoFormat.allCases) { Text($0.title).tag($0) }
                 }
             } label: {
-                Label("Format: \(model.photoFormat.title)", systemImage: "slider.horizontal.3")
+                Label("Photo format: \(model.photoFormat.title)", systemImage: "slider.horizontal.3")
             }
             .accessibilityIdentifier("source.format")
         } label: {
