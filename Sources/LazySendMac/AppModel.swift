@@ -123,7 +123,8 @@ public final class AppModel: ObservableObject {
         refreshPhones()
         for item in service.history.items.reversed() { addText(item, arrived: false) }
         for phone in service.devices.devices {
-            for waiting in service.outbox.pending(phone.id) { addSent(waiting, deviceName: phone.name) }
+            // pending lists clip items first; the rows go by the time they were queued.
+            for waiting in service.outbox.pending(phone.id).sorted(by: { $0.queued < $1.queued }) { addSent(waiting, deviceName: phone.name) }
         }
         clearScratch()
     }
