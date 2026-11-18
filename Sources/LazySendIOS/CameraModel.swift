@@ -4,6 +4,13 @@ import ImageIO
 import SwiftUI
 import UIKit
 
+extension CameraAvailability {
+    /// The camera tab's camera now: a camera to use (none in the Simulator) and the camera permission.
+    static var current: CameraAvailability {
+        resolve(isSupported: CameraLens.hasCamera, authorization: AVCaptureDevice.authorizationStatus(for: .video))
+    }
+}
+
 @MainActor
 final class CameraModel: ObservableObject {
     @Published private(set) var availability = CameraAvailability.current

@@ -40,7 +40,8 @@ struct CameraView: View {
     }
 
     private var shownMessage: String? {
-        camera.availability.reason ?? (camera.interrupted ? String(localized: "Camera paused") : nil)
+        if !camera.availability.isAvailable { return camera.availability.reason }
+        return camera.interrupted ? String(localized: "Camera paused") : nil
     }
 
     private func card(_ line: String) -> some View {
