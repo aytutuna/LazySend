@@ -88,7 +88,13 @@ public sealed class Outbox
 
     public IReadOnlyList<OutboxItem> Pending(string deviceId)
     {
-        lock (_gate) return [.. _file.Items.Where(i => i.DeviceId == deviceId)];
+        lock (_gate)
+        {
+            // Items still worth clipping go first, so a guest that takes them in list order is not held up by a gallery feed.
+            var now = _clock();
+            var mine = _file.Items.Where(i => i.DeviceId == deviceId).ToList();
+            return [.. mine.Where(i => i.Clip && now - i.Queued <= Protocol.ClipMaxAge), .. mine.Where(i => !(i.Clip && now - i.Queued <= Protocol.ClipMaxAge))];
+        }
     }
 
     public OutboxItem? Find(string deviceId, string id)

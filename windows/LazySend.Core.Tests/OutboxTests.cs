@@ -50,7 +50,23 @@ public class OutboxTests
 
         var items = (await PollAsync(phone, 0)).Items;
 
-        Assert.Equal([null, true, true, true], items.Select(i => i.Clip));
+        Assert.Equal([true, true, true, null], items.Select(i => i.Clip));
+    }
+
+    [Fact]
+    public async Task FreshClipItemsAreListedFirstAndTheRestKeepTheirOrder()
+    {
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+        h.Service.Outbox.QueueText(phone.Id, "one");
+        h.Service.Outbox.QueueText(phone.Id, "stale", clip: true);
+        h.Now += Protocol.ClipMaxAge + TimeSpan.FromSeconds(1);
+        h.Service.Outbox.QueueText(phone.Id, "two");
+        h.Service.Outbox.QueueText(phone.Id, "fresh", clip: true);
+
+        var items = (await PollAsync(phone, 0)).Items;
+
+        Assert.Equal(["fresh", "one", "stale", "two"], items.Select(i => i.Text));
     }
 
     [Fact]
@@ -65,7 +81,7 @@ public class OutboxTests
 
         var items = (await PollAsync(phone, 0)).Items;
 
-        Assert.Equal([null, true], items.Select(i => i.Clip));
+        Assert.Equal([true, null], items.Select(i => i.Clip));
     }
 
     [Fact]
