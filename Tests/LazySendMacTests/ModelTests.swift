@@ -219,7 +219,8 @@ final class ModelTests: XCTestCase {
         }
         let picture = fixture.root.appendingPathComponent("files/red.png")
         try XCTUnwrap(AppModel.png(image)).write(to: picture)
-        model.addFile(ReceivedFile(deviceId: phone.id, deviceName: phone.name, url: picture, size: 100, sourceId: nil, clip: true))
+        // Another device, so the picture does not join the file above.
+        model.addFile(ReceivedFile(deviceId: "other-device", deviceName: "Other", url: picture, size: 100, sourceId: nil, clip: true))
         let both = fixture.pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
         XCTAssertEqual(both?.map(\.lastPathComponent), ["red.png"])
         XCTAssertEqual(fixture.pasteboard.data(forType: .png), try Data(contentsOf: picture))
