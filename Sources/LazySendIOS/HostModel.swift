@@ -57,6 +57,8 @@ final class HostModel: ObservableObject {
     var onPhotosDenied: (() -> Void)?
     /// The server side exists: what was left queued for the phones can be delivered.
     var onReady: (() -> Void)?
+    /// An item with the clip flag arrived: what goes on the pasteboard, and who sent it.
+    var onClip: ((ClipContent, String) -> Void)?
 
     private let env: AppEnvironment
     private let phoneId: () -> String
@@ -397,8 +399,11 @@ final class HostModel: ObservableObject {
         let link = item.kind == "link"
         let body = (link ? item.url : item.text) ?? ""
         timeline.add(TimelineEntry(id: "in-" + item.id, time: item.received, direction: .received, kind: link ? .link : .text,
-                                   pcName: item.deviceName, title: body, state: .done))
+                                   pcName: item.deviceName, title: body, state: .done, clip: item.clip))
         env.notifier.post(item.deviceName, String(body.prefix(120)))
+        if item.clip == true, let content = ClipContent.of(kind: item.kind, text: item.text, url: item.url, file: nil) {
+            onClip?(content, item.deviceName)
+        }
     }
 
     private func received(_ file: ReceivedFile) {
@@ -418,8 +423,9 @@ final class HostModel: ObservableObject {
         } else {
             timeline.add(TimelineEntry(id: "in-file-" + UUID().uuidString, direction: .received, kind: .file, pcName: file.deviceName,
                                        title: file.url.lastPathComponent, state: .done, bytes: file.size, totalBytes: file.size,
-                                       fileName: relativeName(file.url), mime: mime))
+                                       fileName: relativeName(file.url), mime: mime, clip: file.clip ? true : nil))
             env.notifier.post(file.deviceName, file.url.lastPathComponent)
+            if file.clip, let content = ClipContent.of(kind: "file", text: nil, url: nil, file: file.url) { onClip?(content, file.deviceName) }
         }
         ReceiveHandler.saveToPhotos(file.url, mime: mime, defaults: env.defaults, saved: saved)
     }

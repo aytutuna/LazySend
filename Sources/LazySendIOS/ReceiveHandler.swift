@@ -22,9 +22,12 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
     private var lastReport: [String: Date] = [:]
     private let gallery: GalleryIndex
     private var reportedFull = false
+    // Files that went on from a part left by an earlier try: not a fresh arrival, so they do not take the pasteboard.
+    private var resumedParts = Set<String>()
+    private let onClip: (@Sendable (ClipContent) -> Void)?
 
     init(pcId: String, pcName: String, timeline: Timeline, folder: URL, notifier: Notifier, defaults: UserDefaults, saved: SavedAssets,
-         gallery: GalleryIndex) {
+         gallery: GalleryIndex, onClip: (@Sendable (ClipContent) -> Void)? = nil) {
         self.pcId = pcId
         self.pcName = pcName
         self.timeline = timeline
@@ -33,6 +36,7 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
         self.defaults = defaults
         self.saved = saved
         self.gallery = gallery
+        self.onClip = onClip
     }
 
     private func entryId(_ item: OutboxEntry) -> String {
@@ -57,9 +61,10 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
         let body = item.text ?? item.url ?? ""
         guard !body.isEmpty else { return }
         let entry = TimelineEntry(id: entryId(item), direction: .received, kind: item.kind == "link" ? .link : .text,
-                                  pcName: pcName, title: body, state: .done)
+                                  pcName: pcName, title: body, state: .done, clip: item.clip)
         await MainActor.run { timeline.add(entry) }
         notifier.post(pcName, body)
+        if item.clip == true, let content = ClipContent.of(kind: item.kind, text: item.text, url: item.url, file: nil) { onClip?(content) }
     }
 
     func prepareFile(_ item: OutboxEntry) async throws -> Int64 {
@@ -88,10 +93,11 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
         lock.lock()
         handles[item.id] = handle
         parts[item.id] = part
+        if have > 0 { resumedParts.insert(item.id) }
         lock.unlock()
         let entry = TimelineEntry(id: id, time: previous?.time ?? Date(), direction: .received, kind: .file, pcName: pcName,
                                   title: String(part.lastPathComponent.dropLast(5)), state: .active, bytes: have,
-                                  totalBytes: item.size ?? 0, fileName: part.lastPathComponent, mime: item.mime)
+                                  totalBytes: item.size ?? 0, fileName: part.lastPathComponent, mime: item.mime, clip: item.clip)
         await MainActor.run { timeline.add(entry) }
         return have
     }
@@ -167,6 +173,7 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
         closeHandle(item.id)
         lock.lock()
         let part = parts.removeValue(forKey: item.id)
+        let resumed = resumedParts.remove(item.id) != nil
         reportedFull = false
         lock.unlock()
         guard let part = part else { throw CocoaError(.fileNoSuchFile) }
@@ -189,6 +196,7 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
         }
         notifier.post(pcName, name)
         ReceiveHandler.saveToPhotos(target, mime: item.mime, defaults: defaults, saved: saved)
+        if item.clip == true, !resumed, let content = ClipContent.of(kind: "file", text: nil, url: nil, file: target) { onClip?(content) }
     }
 
     private func finishGalleryFile(_ item: OutboxEntry) async throws {

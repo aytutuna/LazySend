@@ -74,6 +74,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var photoNotice: PhotoNotice?
     @Published private(set) var galleryRunning = false
     @Published private(set) var feeds: [String: GalleryFeedProgress] = [:]
+    /// The banner for what was just put on the pasteboard, "Copied from <device>".
+    @Published private(set) var copied: String?
 
     private var galleryTask: Task<Void, Never>?
     private var galleryRun = 0
@@ -87,6 +89,7 @@ final class AppModel: ObservableObject {
     private var resuming: Set<String> = []
     private var held: Set<String> = []
     private var grace = UIBackgroundTaskIdentifier.invalid
+    private var copiedBanner: Task<Void, Never>?
     private let saved: SavedAssets
     private let gallery: GalleryIndex
 
@@ -107,6 +110,7 @@ final class AppModel: ObservableObject {
         host.$feeds.assign(to: &$feeds)
         host.onPhotosDenied = { [weak self] in self?.photoNotice = .denied }
         host.onReady = { [weak self] in self?.drainShareQueue() }
+        host.onClip = { [weak self] content, name in self?.clipped(content, from: name) }
         if env.demo { seedDemo() }
         removeStrayCopies()
         refreshPcs()
@@ -234,11 +238,25 @@ final class AppModel: ObservableObject {
     private func outboxCollector(for id: String) -> OutboxCollector? {
         if let existing = collectors[id] { return existing }
         guard let pc = store.get(id) else { return nil }
+        let name = pc.name
         let handler = ReceiveHandler(pcId: pc.id, pcName: pc.name, timeline: timeline, folder: env.documents, notifier: env.notifier, defaults: env.defaults, saved: saved,
-                                     gallery: gallery)
+                                     gallery: gallery, onClip: { [weak self] content in self?.clipped(content, from: name) })
         let made = OutboxCollector(handler: handler)
         collectors[id] = made
         return made
+    }
+
+    // The pasteboard is written at once, also while the app is in the background; the banner only matters in front.
+    nonisolated func clipped(_ content: ClipContent, from name: String) {
+        content.write()
+        Task { @MainActor in
+            self.copied = String(localized: "Copied from \(name)")
+            self.copiedBanner?.cancel()
+            self.copiedBanner = Task {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                if !Task.isCancelled { self.copied = nil }
+            }
+        }
     }
 
     /// The computer no longer knows this phone, so the pairing is dropped here too.
