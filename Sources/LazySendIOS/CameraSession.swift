@@ -26,6 +26,8 @@ struct CameraSetup {
     var device: AVCaptureDevice
     var base: Double
     var lowest: Double
+    /// The zoom factor where the telephoto lens takes over, on a phone that has one.
+    var telephoto: Double?
     var highest: Double
     var flash: Bool
 }
@@ -64,8 +66,16 @@ final class CameraSession: @unchecked Sendable {
         input = next
         device = camera
         let base = CameraLens.startZoom(camera)
+        let switchOvers = camera.virtualDeviceSwitchOverVideoZoomFactors.map { $0.doubleValue }
+        let kind = CameraLens.kind(camera.deviceType)
+        var telephoto: Double?
+        if kind == .triple, switchOvers.count >= 2 {
+            telephoto = switchOvers[1]
+        } else if kind == .dual {
+            telephoto = switchOvers.first
+        }
         setZoom(base)
-        return CameraSetup(device: camera, base: base, lowest: Double(camera.minAvailableVideoZoomFactor), highest: min(Double(camera.maxAvailableVideoZoomFactor), base * 10),
+        return CameraSetup(device: camera, base: base, lowest: Double(camera.minAvailableVideoZoomFactor), telephoto: telephoto, highest: min(Double(camera.maxAvailableVideoZoomFactor), base * 10),
                            flash: output.supportedFlashModes.contains(.on))
     }
 

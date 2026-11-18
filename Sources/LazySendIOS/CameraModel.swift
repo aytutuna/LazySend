@@ -141,7 +141,12 @@ final class CameraModel: ObservableObject {
                 self.zoomLevel = 1
                 var values = [1.0]
                 if setup.lowest < setup.base { values.insert(setup.lowest / setup.base, at: 0) }
-                if setup.base * 2 <= setup.highest { values.append(2) }
+                // The telephoto lens is the third button where the phone has one; else the second step is the main lens digitally doubled.
+                if let tele = setup.telephoto, tele > setup.base, tele <= setup.highest {
+                    values.append(tele / setup.base)
+                } else if setup.telephoto == nil, setup.base * 2 <= setup.highest {
+                    values.append(2)
+                }
                 self.stops = values.map { LensStop(value: $0) }
                 self.hasFlash = setup.flash
                 if !setup.flash { self.flash = false }
