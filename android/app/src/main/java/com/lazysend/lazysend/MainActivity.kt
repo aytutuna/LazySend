@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity() {
         var screen by rememberSaveable { mutableStateOf(Screen.Main) }
         // The camera asks for its permission once the start-up requests have been answered, as two requests at once cancel each other.
         var startupAsked by rememberSaveable { mutableStateOf(false) }
+        var cameraAsked by rememberSaveable { mutableStateOf(false) }
         val state by model.state.collectAsState()
         val pair by model.pair.collectAsState()
         val notice by model.notice.collectAsState()
@@ -180,6 +181,8 @@ class MainActivity : ComponentActivity() {
                 when (tab) {
                     Tab.Camera -> CameraScreen(
                         canAsk = startupAsked,
+                        asked = cameraAsked,
+                        onAsked = { cameraAsked = true },
                         targets = state.pcs,
                         selected = state.selected,
                         entries = state.entries,
@@ -282,7 +285,13 @@ class MainActivity : ComponentActivity() {
                             },
                             onBack = { screen = Screen.Main },
                             saveCameraPhotos = saveCameraPhotos,
-                            onSaveCameraPhotos = model::saveCameraPhotos,
+                            onSaveCameraPhotos = { on ->
+                                model.saveCameraPhotos(on)
+                                // Before Android 10 the gallery needs the storage permission, so it is asked for again here.
+                                if (on && Build.VERSION.SDK_INT <= 28 &&
+                                    ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+                                ) permissions.launch(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE))
+                            },
                         )
                     }
                 }

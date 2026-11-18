@@ -123,6 +123,8 @@
     <string name="clip_pair_title">Kopyaladıklarınızı göndermek için bir cihaz eşleştirin.</string>
     <string name="clip_empty">Bir panoya koyduklarınız ve bu panoya konulanlar burada görünür.</string>
     <string name="nothing_to_send">Panoda gönderilecek bir şey yok</string>
+    <string name="paste_read_failed">Kopyalananlar okunamadı</string>
+    <string name="paste_too_big">Bu, panodan gönderilebilen 2 GB sınırını aşıyor.</string>
 
     <string name="share_no_pc">Önce Lazy Send\'de bir bilgisayar eşleştirin.</string>
     <string name="share_choose_pc">Gönderilecek cihaz</string>

@@ -123,6 +123,8 @@
     <string name="clip_pair_title">Pair a device to send what you copy.</string>
     <string name="clip_empty">What you put on a clipboard, and what is put on this one, shows up here.</string>
     <string name="nothing_to_send">Nothing to send on the clipboard</string>
+    <string name="paste_read_failed">Could not read what was copied</string>
+    <string name="paste_too_big">That is more than the 2 GB that can be sent from the clipboard.</string>
 
     <string name="share_no_pc">Pair a PC in Lazy Send first.</string>
     <string name="share_choose_pc">Send to</string>

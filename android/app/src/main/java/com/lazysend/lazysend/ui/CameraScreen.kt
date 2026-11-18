@@ -5,6 +5,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
+import android.view.OrientationEventListener
+import android.view.Surface
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
@@ -46,6 +48,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -75,6 +78,7 @@ import com.lazysend.lazysend.data.EntryState
 import com.lazysend.lazysend.data.TimelineEntry
 import java.io.File
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val Scrim = Color.Black.copy(alpha = 0.45f)
 
@@ -85,6 +89,8 @@ private val Scrim = Color.Black.copy(alpha = 0.45f)
 @Composable
 fun CameraScreen(
     canAsk: Boolean,
+    asked: Boolean,
+    onAsked: () -> Unit,
     targets: List<PcRow>,
     selected: String?,
     entries: List<TimelineEntry>,
@@ -93,7 +99,7 @@ fun CameraScreen(
     onSelect: (String) -> Unit,
     onPair: () -> Unit,
     onHistory: () -> Unit,
-    newFile: () -> File,
+    newFile: suspend () -> File,
     onTaken: (File) -> Unit,
     onFailed: (String) -> Unit,
     onClearProblem: () -> Unit,
@@ -104,10 +110,9 @@ fun CameraScreen(
     val hasCamera = remember { context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY) }
     fun allowed() = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
     var granted by remember { mutableStateOf(allowed()) }
-    var asked by rememberSaveable { mutableStateOf(false) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         granted = it
-        asked = true
+        onAsked()
     }
     // Coming back from the system settings with the permission given starts the camera.
     LaunchedEffect(resumed) { if (resumed) granted = allowed() }
@@ -155,6 +160,24 @@ fun CameraScreen(
         }
     }
 
+    // The shot is tagged for how the phone is held, also when the screen's rotation is locked.
+    DisposableEffect(running) {
+        val listener = object : OrientationEventListener(context) {
+            override fun onOrientationChanged(degrees: Int) {
+                if (degrees == ORIENTATION_UNKNOWN) return
+                capture.targetRotation = when (degrees) {
+                    in 45..134 -> Surface.ROTATION_270
+                    in 135..224 -> Surface.ROTATION_180
+                    in 225..314 -> Surface.ROTATION_90
+                    else -> Surface.ROTATION_0
+                }
+            }
+        }
+        if (running && listener.canDetectOrientation()) listener.enable()
+        onDispose { listener.disable() }
+    }
+
+    val scope = rememberCoroutineScope()
     val hasFlash = camera?.cameraInfo?.hasFlashUnit() == true
     val message = when {
         !hasCamera || broken -> R.string.camera_none
@@ -226,26 +249,28 @@ fun CameraScreen(
             Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp), verticalAlignment = Alignment.Top) {
                 Box(Modifier.weight(1f), contentAlignment = Alignment.TopStart) { Thumb(shot, entries, targets.firstOrNull { it.id == selected }?.name, onHistory) }
                 Shutter(ready) {
-                    val file = newFile()
                     onClearProblem()
-                    capture.flashMode = if (hasFlash) flash else ImageCapture.FLASH_MODE_OFF
                     busy = true
-                    capture.takePicture(
-                        ImageCapture.OutputFileOptions.Builder(file).build(),
-                        ContextCompat.getMainExecutor(context),
-                        object : ImageCapture.OnImageSavedCallback {
-                            override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                                busy = false
-                                onTaken(file)
-                            }
+                    scope.launch {
+                        val file = newFile()
+                        capture.flashMode = if (hasFlash) flash else ImageCapture.FLASH_MODE_OFF
+                        capture.takePicture(
+                            ImageCapture.OutputFileOptions.Builder(file).build(),
+                            ContextCompat.getMainExecutor(context),
+                            object : ImageCapture.OnImageSavedCallback {
+                                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                                    busy = false
+                                    onTaken(file)
+                                }
 
-                            override fun onError(exception: ImageCaptureException) {
-                                busy = false
-                                file.delete()
-                                onFailed(context.getString(R.string.camera_photo_failed))
-                            }
-                        },
-                    )
+                                override fun onError(exception: ImageCaptureException) {
+                                    busy = false
+                                    file.delete()
+                                    onFailed(context.getString(R.string.camera_photo_failed))
+                                }
+                            },
+                        )
+                    }
                 }
                 Box(Modifier.weight(1f), contentAlignment = Alignment.TopEnd) {
                     val flipOn = camera != null && !busy

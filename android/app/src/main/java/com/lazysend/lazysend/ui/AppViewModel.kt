@@ -26,6 +26,8 @@ import com.lazysend.lazysend.transfer.pasted
 import com.lazysend.lazysend.transfer.photoName
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
@@ -41,6 +43,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 private const val DAY = 24 * 60 * 60 * 1000L
+
+/** What the clipboard may hold to be sent, since it is copied to the cache first. */
+private const val PASTE_LIMIT = 2L * 1024 * 1024 * 1024
 
 /** The camera's last photo, by file name, with a small picture of it once that is ready. */
 class Shot(val name: String, val thumbnail: Bitmap?)
@@ -93,19 +98,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun saveCameraPhotos(on: Boolean) = graph.settings.saveCameraPhotos(on)
 
     /** Where the next camera photo goes, named by the time and by milliseconds too when the plain name is taken. */
-    fun newPhotoFile(): File {
+    suspend fun newPhotoFile(): File = withContext(Dispatchers.IO) {
         val dir = cacheFolder("camera")
         val sent = graph.timeline.entries.value
-        return File(dir, photoName(System.currentTimeMillis()) { name -> File(dir, name).exists() || sent.any { it.direction == Direction.Sent && it.title == name } })
+        File(dir, photoName(System.currentTimeMillis()) { name -> File(dir, name).exists() || sent.any { it.direction == Direction.Sent && it.title == name } })
     }
 
     /** A photo the camera saved: it goes at once to the selected device, to be put on its clipboard. */
     fun photoTaken(file: File) {
+        val at = System.currentTimeMillis()
         shot.value = Shot(file.name, null)
-        if (!sendClipped(file, cameraProblem)) return
         viewModelScope.launch(Dispatchers.IO) {
-            shot.value = Shot(file.name, jpegThumbnail(file))
+            // Saved first, so a send that fails never loses the photo.
             if (graph.settings.saveCameraPhotos.value) saveToGallery(file)
+            if (!sendClipped(file, cameraProblem, at)) return@launch
+            shot.value = Shot(file.name, jpegThumbnail(file))
         }
     }
 
@@ -122,6 +129,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val context = getApplication<Application>()
         val clip = context.getSystemService(ClipboardManager::class.java).primaryClip?.takeIf { it.itemCount > 0 }
         val item = clip?.getItemAt(0)
+        val at = System.currentTimeMillis()
         viewModelScope.launch(Dispatchers.IO) {
             val uri = item?.uri
             val mime = uri?.let { runCatching { context.contentResolver.getType(it) }.getOrNull() ?: clip.description.getMimeType(0) }
@@ -132,7 +140,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     val pc = selectedPc()
                     when {
                         guest != null -> SendService.queueText(context, guest.id, found.text, clip = true)
-                        pc != null -> SendService.sendText(context, pc.id, found.text, clip = true)
+                        pc != null -> SendService.sendText(context, pc.id, found.text, clip = true, at = at)
                         else -> {
                             clipProblem.value = context.getString(R.string.target_gone)
                             return@launch
@@ -144,14 +152,33 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(found.mime) ?: "bin"
                     val file = File(cacheFolder("clipboard"), clipboardName(System.currentTimeMillis(), extension))
                     try {
-                        context.contentResolver.openInputStream(Uri.parse(found.uri))!!.use { input -> file.outputStream().use { input.copyTo(it) } }
+                        context.contentResolver.openInputStream(Uri.parse(found.uri))!!.use { input -> file.outputStream().use { copyLimited(input, it) } }
+                    } catch (e: TooBig) {
+                        file.delete()
+                        clipProblem.value = context.getString(R.string.paste_too_big)
+                        return@launch
                     } catch (e: Exception) {
-                        clipProblem.value = context.getString(R.string.nothing_to_send)
+                        file.delete()
+                        clipProblem.value = context.getString(R.string.paste_read_failed)
                         return@launch
                     }
-                    if (sendClipped(file, clipProblem)) clipProblem.value = null
+                    if (sendClipped(file, clipProblem, at)) clipProblem.value = null
                 }
             }
+        }
+    }
+
+    private class TooBig : IOException()
+
+    private fun copyLimited(input: InputStream, out: OutputStream) {
+        val buffer = ByteArray(64 * 1024)
+        var total = 0L
+        while (true) {
+            val n = input.read(buffer)
+            if (n < 0) return
+            total += n
+            if (total > PASTE_LIMIT) throw TooBig()
+            out.write(buffer, 0, n)
         }
     }
 
@@ -162,7 +189,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // The file goes through the provider so the sending service reads its name and size like any picked file.
-    private fun sendClipped(file: File, problem: MutableStateFlow<String?>): Boolean {
+    private fun sendClipped(file: File, problem: MutableStateFlow<String?>, at: Long): Boolean {
         val context = getApplication<Application>()
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
         val guest = selectedGuest()
@@ -170,7 +197,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         try {
             when {
                 guest != null -> SendService.queueFiles(context, guest.id, listOf(uri), clip = true)
-                pc != null -> SendService.sendFiles(context, pc.id, listOf(uri), clip = true)
+                pc != null -> SendService.sendFiles(context, pc.id, listOf(uri), clip = true, at = at)
                 else -> {
                     problem.value = context.getString(R.string.target_gone)
                     return false
