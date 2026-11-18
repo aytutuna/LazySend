@@ -53,6 +53,37 @@ final class ScreenshotTests: XCTestCase {
     }
 
     @MainActor
+    func testTheTabsSwitchAndTheClipboardHasAPasteButton() {
+        let app = XCUIApplication.launched(demo: true, tab: nil)
+        // The Simulator has no camera.
+        XCTAssertTrue(app.item("camera.message").waitForExistence(timeout: 30))
+        XCTAssertEqual(app.item("camera.message").label, "No camera here")
+        XCTAssertTrue(app.item("camera.target").exists)
+        XCTAssertTrue(app.item("camera.shutter").exists)
+        attach(app, as: "08-camera")
+        app.tabBars.buttons["Files"].tap()
+        XCTAssertTrue(app.item("main.timeline").waitForExistence(timeout: 30))
+        app.tabBars.buttons["Clipboard"].tap()
+        XCTAssertTrue(app.item("clip.hint").waitForExistence(timeout: 30))
+        XCTAssertEqual(app.item("clip.hint").label, "Paste here to put it on Office PC's clipboard.")
+        XCTAssertTrue(app.item("clip.paste").exists || app.buttons["Paste"].exists)
+        attach(app, as: "09-clipboard")
+        app.tabBars.buttons["Camera"].tap()
+        XCTAssertTrue(app.item("camera.message").waitForExistence(timeout: 30))
+    }
+
+    @MainActor
+    func testTheCameraWithoutAComputerOffersPairing() {
+        let app = XCUIApplication.launched(tab: nil)
+        XCTAssertTrue(app.item("camera.pairTitle").waitForExistence(timeout: 30))
+        let pair = app.item("camera.pair")
+        XCTAssertTrue(pair.exists)
+        XCTAssertFalse(app.item("camera.target").exists)
+        pair.tap()
+        XCTAssertTrue(app.item("pair.scanner.message").waitForExistence(timeout: 30))
+    }
+
+    @MainActor
     func testReceiveScreen() {
         let app = XCUIApplication.launched(demo: true)
         let receive = app.item("main.receive")
