@@ -8,6 +8,12 @@
             "state" : "translated",
             "value" : "Lazy Send"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lazy Send"
+          }
         }
       }
     },
@@ -17,6 +23,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nothing paired yet"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Henüz eşleşen cihaz yok"
           }
         }
       }
@@ -28,6 +40,12 @@
             "state" : "translated",
             "value" : "Open Lazy Send on your PC, choose Pair a phone and scan the code it shows."
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bilgisayarınızda Lazy Send'i açın, Telefon eşleştir'i seçin ve gösterdiği kodu tarayın."
+          }
         }
       }
     },
@@ -37,6 +55,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pair a PC"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bilgisayar eşleştir"
           }
         }
       }
@@ -48,6 +72,12 @@
             "state" : "translated",
             "value" : "Paired PCs"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eşleşen bilgisayarlar"
+          }
         }
       }
     },
@@ -57,6 +87,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Send"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gönder"
           }
         }
       }
@@ -68,6 +104,12 @@
             "state" : "translated",
             "value" : "PC"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bilgisayar"
+          }
         }
       }
     },
@@ -77,6 +119,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Connected over %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ üzerinden bağlı"
           }
         }
       }
@@ -88,6 +136,12 @@
             "state" : "translated",
             "value" : "%@ is not reachable"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ cihazına ulaşılamıyor"
+          }
         }
       }
     },
@@ -97,6 +151,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "What you send and receive shows up here."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gönderdikleriniz ve aldıklarınız burada görünür."
           }
         }
       }
@@ -108,6 +168,12 @@
             "state" : "translated",
             "value" : "To %@"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alıcı: %@"
+          }
         }
       }
     },
@@ -117,6 +183,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "From %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gönderen: %@"
           }
         }
       }
@@ -128,6 +200,12 @@
             "state" : "translated",
             "value" : "Paused"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duraklatıldı"
+          }
         }
       }
     },
@@ -137,6 +215,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Resume"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sürdür"
           }
         }
       }
@@ -148,6 +232,12 @@
             "state" : "translated",
             "value" : "The file is no longer available."
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dosya artık yok."
+          }
         }
       }
     },
@@ -157,6 +247,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ was removed."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kaldırıldı."
           }
         }
       }
@@ -184,6 +280,12 @@
             "state" : "translated",
             "value" : "Not received"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alınmadı"
+          }
         }
       }
     },
@@ -193,6 +295,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld of %lld · %@ of %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld / %2$lld · %3$@ / %4$@"
           }
         }
       }
@@ -204,6 +312,12 @@
             "state" : "translated",
             "value" : "%lld sent"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld gönderildi"
+          }
         }
       }
     },
@@ -213,6 +327,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ of %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ / %2$@"
           }
         }
       }
@@ -224,6 +344,12 @@
             "state" : "translated",
             "value" : "Copy"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kopyala"
+          }
         }
       }
     },
@@ -233,6 +359,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Open"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aç"
           }
         }
       }
@@ -244,6 +376,12 @@
             "state" : "translated",
             "value" : "Stop"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Durdur"
+          }
         }
       }
     },
@@ -253,6 +391,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Send to %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ cihazına gönder"
           }
         }
       }
@@ -264,6 +408,12 @@
             "state" : "translated",
             "value" : "Type or paste text or a link"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Metin veya bağlantı yazın ya da yapıştırın"
+          }
         }
       }
     },
@@ -273,6 +423,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Send text"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Metni gönder"
           }
         }
       }
@@ -284,6 +440,12 @@
             "state" : "translated",
             "value" : "Pick files"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dosya seç"
+          }
         }
       }
     },
@@ -293,6 +455,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pick photos"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fotoğraf seç"
           }
         }
       }
@@ -304,6 +472,12 @@
             "state" : "translated",
             "value" : "All photos and videos"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tüm fotoğraflar ve videolar"
+          }
         }
       }
     },
@@ -313,6 +487,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Photos and videos"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fotoğraflar ve videolar"
           }
         }
       }
@@ -324,6 +504,12 @@
             "state" : "translated",
             "value" : "Sent"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gönderildi"
+          }
         }
       }
     },
@@ -333,6 +519,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Only the photos you allowed are sent."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yalnızca izin verdiğiniz fotoğraflar gönderilir."
           }
         }
       }
@@ -344,6 +536,12 @@
             "state" : "translated",
             "value" : "Allow all"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tümüne izin ver"
+          }
         }
       }
     },
@@ -353,6 +551,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Lazy Send needs access to your photos to send them."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lazy Send'in fotoğrafları gönderebilmesi için fotoğraflarınıza erişmesi gerekir."
           }
         }
       }
@@ -364,6 +568,12 @@
             "state" : "translated",
             "value" : "Photos are not allowed."
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fotoğraflara izin verilmedi."
+          }
         }
       }
     },
@@ -373,6 +583,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Looking for what is new"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yeni olanlar aranıyor"
           }
         }
       }
@@ -400,6 +616,12 @@
             "state" : "translated",
             "value" : "%lld could not be sent"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld gönderilemedi"
+          }
         }
       }
     },
@@ -409,6 +631,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sending photos and videos"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fotoğraflar ve videolar gönderiliyor"
           }
         }
       }
@@ -420,6 +648,12 @@
             "state" : "translated",
             "value" : "Already on the PC"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zaten bilgisayarda"
+          }
         }
       }
     },
@@ -429,6 +663,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ no longer knows this phone. It was removed here."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ artık bu telefonu tanımıyor. Burada kaldırıldı."
           }
         }
       }
@@ -440,6 +680,12 @@
             "state" : "translated",
             "value" : "%@ no longer knows this phone."
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ artık bu telefonu tanımıyor."
+          }
         }
       }
     },
@@ -449,6 +695,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pair with your PC"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bilgisayarınızla eşleştirin"
           }
         }
       }
@@ -460,6 +712,12 @@
             "state" : "translated",
             "value" : "Point the camera at the code on your PC."
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kamerayı bilgisayarınızdaki koda doğrultun."
+          }
         }
       }
     },
@@ -470,12 +728,24 @@
             "state" : "translated",
             "value" : "Paste pairing text"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eşleştirme metnini yapıştırın"
+          }
         }
       }
     },
     "lazysend://pair?…" : {
       "localizations" : {
         "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "lazysend://pair?…"
+          }
+        },
+        "tr" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "lazysend://pair?…"
@@ -490,6 +760,12 @@
             "state" : "translated",
             "value" : "Paste"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yapıştır"
+          }
         }
       }
     },
@@ -499,6 +775,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Connect"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bağlan"
           }
         }
       }
@@ -510,6 +792,12 @@
             "state" : "translated",
             "value" : "Approve on your PC"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bilgisayarınızda onaylayın"
+          }
         }
       }
     },
@@ -519,6 +807,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Check that the code on your PC says the same, then approve this phone there."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bilgisayarınızdaki kodun aynı olduğunu kontrol edin, sonra bu telefonu orada onaylayın."
           }
         }
       }
@@ -530,6 +824,12 @@
             "state" : "translated",
             "value" : "Check code"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Doğrulama kodu"
+          }
         }
       }
     },
@@ -539,6 +839,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Try again"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tekrar dene"
           }
         }
       }
@@ -550,6 +856,12 @@
             "state" : "translated",
             "value" : "Paired with %@"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ile eşleşti"
+          }
         }
       }
     },
@@ -559,6 +871,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Done"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bitti"
           }
         }
       }
@@ -574,7 +892,7 @@
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Burada kamera yok"
+            "value" : "Bu cihazda kamera yok"
           }
         }
       }
@@ -618,6 +936,12 @@
             "state" : "translated",
             "value" : "Open Settings"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ayarlar'ı aç"
+          }
         }
       }
     },
@@ -627,6 +951,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "The camera is not available here. Paste the pairing text below instead."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kamera burada kullanılamıyor. Bunun yerine eşleştirme metnini aşağıya yapıştırın."
           }
         }
       }
@@ -638,6 +968,12 @@
             "state" : "translated",
             "value" : "No PCs are paired."
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eşleşen bilgisayar yok."
+          }
         }
       }
     },
@@ -647,6 +983,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Remove"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kaldır"
           }
         }
       }
@@ -658,6 +1000,12 @@
             "state" : "translated",
             "value" : "Remove %@?"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kaldırılsın mı?"
+          }
         }
       }
     },
@@ -667,6 +1015,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "This phone is forgotten on the PC as well when it can be reached."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bilgisayara ulaşılabildiğinde bu telefon orada da unutulur."
           }
         }
       }
@@ -678,6 +1032,12 @@
             "state" : "translated",
             "value" : "Save received photos and videos to Photos"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alınan fotoğraf ve videoları Fotoğraflar'a kaydet"
+          }
         }
       }
     },
@@ -687,6 +1047,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Not reachable"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ulaşılamıyor"
           }
         }
       }
@@ -867,38 +1233,6 @@
         }
       }
     },
-    "Pair a computer to send photos" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pair a computer to send photos"
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Fotoğraf göndermek için bir bilgisayarı eşleştirin"
-          }
-        }
-      }
-    },
-    "Pair a computer" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pair a computer"
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bilgisayar eşleştir"
-          }
-        }
-      }
-    },
     "Sent to %@" : {
       "localizations" : {
         "en" : {
@@ -942,23 +1276,7 @@
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ panosuna koymak için buraya yapıştırın."
-          }
-        }
-      }
-    },
-    "Pair a computer to send what you copy." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pair a computer to send what you copy."
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kopyaladıklarınızı göndermek için bir bilgisayarı eşleştirin."
+            "value" : "%@ cihazının panosuna koymak için buraya yapıştırın."
           }
         }
       }
@@ -1039,6 +1357,758 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gönderilecek cihaz"
+          }
+        }
+      }
+    },
+    "Paired with %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paired with %@."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ile eşleşti."
+          }
+        }
+      }
+    },
+    "Pair a device to send photos" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pair a device to send photos"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fotoğraf göndermek için bir cihaz eşleştirin"
+          }
+        }
+      }
+    },
+    "Pair a device" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pair a device"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cihaz eşleştir"
+          }
+        }
+      }
+    },
+    "Pair a device to send what you copy." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pair a device to send what you copy."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kopyaladıklarınızı göndermek için bir cihaz eşleştirin."
+          }
+        }
+      }
+    },
+    "The camera could not be switched." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The camera could not be switched."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kamera değiştirilemedi."
+          }
+        }
+      }
+    },
+    "Photos access is off, so camera photos are not saved." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Photos access is off, so camera photos are not saved."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fotoğraflar erişimi kapalı, bu yüzden kamera fotoğrafları kaydedilmiyor."
+          }
+        }
+      }
+    },
+    "Receive from a phone" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Receive from a phone"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bir telefondan al"
+          }
+        }
+      }
+    },
+    "Receive" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Receive"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Al"
+          }
+        }
+      }
+    },
+    "Devices" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Devices"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cihazlar"
+          }
+        }
+      }
+    },
+    "Allow" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "İzin ver"
+          }
+        }
+      }
+    },
+    "Don't allow" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Don't allow"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "İzin verme"
+          }
+        }
+      }
+    },
+    "Copy link" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy link"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bağlantıyı kopyala"
+          }
+        }
+      }
+    },
+    "Share link" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Share link"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bağlantıyı paylaş"
+          }
+        }
+      }
+    },
+    "New code" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New code"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yeni kod"
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vazgeç"
+          }
+        }
+      }
+    },
+    "Check code for a phone" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check code for a phone"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Telefon için doğrulama kodu"
+          }
+        }
+      }
+    },
+    "Code to type on a computer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Code to type on a computer"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bilgisayara yazılacak kod"
+          }
+        }
+      }
+    },
+    "The computer then shows" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The computer then shows"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bilgisayar ardından şunu gösterir"
+          }
+        }
+      }
+    },
+    "Scan within" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scan within"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Şu süre içinde tarayın"
+          }
+        }
+      }
+    },
+    "Pairing code to scan" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pairing code to scan"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Taranacak eşleştirme kodu"
+          }
+        }
+      }
+    },
+    "On the other phone, open Lazy Send, choose Pair a PC and scan this code. Both phones need to be on the same network. Nothing goes through the internet." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On the other phone, open Lazy Send, choose Pair a PC and scan this code. Both phones need to be on the same network. Nothing goes through the internet."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diğer telefonda Lazy Send'i açın, Bilgisayar eşleştir'i seçin ve bu kodu tarayın. İki telefon da aynı ağda olmalı. Hiçbir şey internetten geçmez."
+          }
+        }
+      }
+    },
+    "Keep Lazy Send open to receive. This phone stops listening when you leave the app and starts again when you come back." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep Lazy Send open to receive. This phone stops listening when you leave the app and starts again when you come back."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Almak için Lazy Send'i açık tutun. Bu telefon, uygulamadan çıktığınızda dinlemeyi bırakır ve geri döndüğünüzde yeniden başlar."
+          }
+        }
+      }
+    },
+    "Keep Lazy Send open until it is done." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep Lazy Send open until it is done."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bitene kadar Lazy Send'i açık tutun."
+          }
+        }
+      }
+    },
+    "This code has expired or was used." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This code has expired or was used."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu kodun süresi doldu ya da kullanıldı."
+          }
+        }
+      }
+    },
+    "A phone is waiting for your answer." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A phone is waiting for your answer."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bir telefon yanıtınızı bekliyor."
+          }
+        }
+      }
+    },
+    "Pair with \"%@\"?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pair with \"%@\"?"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "\"%@\" ile eşleştirilsin mi?"
+          }
+        }
+      }
+    },
+    "%@ wants to pair with this phone. Allow it only if you just started it yourself." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ wants to pair with this phone. Allow it only if you just started it yourself."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ bu telefonla eşleşmek istiyor. Yalnızca bunu az önce kendiniz başlattıysanız izin verin."
+          }
+        }
+      }
+    },
+    "%@ wants to pair with this phone. Allow it only if you just started it yourself and it shows %@ too." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ wants to pair with this phone. Allow it only if you just started it yourself and it shows %@ too."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ bu telefonla eşleşmek istiyor. Yalnızca bunu az önce kendiniz başlattıysanız ve o da %2$@ gösteriyorsa izin verin."
+          }
+        }
+      }
+    },
+    "Nothing is paired." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing is paired."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eşleşen cihaz yok."
+          }
+        }
+      }
+    },
+    "Phone that connects to this one" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phone that connects to this one"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu telefona bağlanan telefon"
+          }
+        }
+      }
+    },
+    "What is waiting for it is dropped, and it has to pair again to connect." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What is waiting for it is dropped, and it has to pair again to connect."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Onu bekleyenler silinir ve bağlanmak için yeniden eşleşmesi gerekir."
+          }
+        }
+      }
+    },
+    "Paired devices" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paired devices"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eşleşen cihazlar"
+          }
+        }
+      }
+    },
+    "Waiting for free storage" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for free storage"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Boş depolama alanı bekleniyor"
+          }
+        }
+      }
+    },
+    "Paused. Lazy Send needs access to your photos." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paused. Lazy Send needs access to your photos."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duraklatıldı. Lazy Send'in fotoğraflarınıza erişmesi gerekiyor."
+          }
+        }
+      }
+    },
+    "Waiting for %@ to take what is queued" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for %@ to take what is queued"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ cihazının sıradakileri almasını bekliyor"
+          }
+        }
+      }
+    },
+    "%lld of %lld sent to %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld of %lld sent to %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%3$@ cihazına %1$lld / %2$lld gönderildi"
+          }
+        }
+      }
+    },
+    "Nothing new to send to %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing new to send to %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ cihazına gönderilecek yeni bir şey yok"
+          }
+        }
+      }
+    },
+    "%lld sent to %@, %lld could not be read" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld sent to %@, %lld could not be read"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%2$@ cihazına %1$lld gönderildi, %3$lld okunamadı"
+          }
+        }
+      }
+    },
+    "All %lld photos and videos sent to %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All %lld photos and videos sent to %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%2$@ cihazına tüm %1$lld fotoğraf ve video gönderildi"
+          }
+        }
+      }
+    },
+    "Waiting for %@ to connect" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for %@ to connect"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ cihazının bağlanması bekleniyor"
+          }
+        }
+      }
+    },
+    "This phone is out of storage" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This phone is out of storage"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu telefonun depolama alanı doldu"
+          }
+        }
+      }
+    },
+    "Files stay queued on %@ until there is room." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Files stay queued on %@ until there is room."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yer açılana kadar dosyalar %@ cihazında sırada bekler."
+          }
+        }
+      }
+    },
+    "Receiving photos and videos." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Receiving photos and videos."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fotoğraflar ve videolar alınıyor."
+          }
+        }
+      }
+    },
+    "That phone is no longer paired." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That phone is no longer paired."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu telefonun eşleşmesi artık yok."
+          }
+        }
+      }
+    },
+    "Too many items are waiting for %@. Wait until it picks some up." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Too many items are waiting for %@. Wait until it picks some up."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ cihazı için çok fazla öğe bekliyor. Bir kısmını alana kadar bekleyin."
+          }
+        }
+      }
+    },
+    "This phone's keychain is locked. Unlock the phone and try again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This phone's keychain is locked. Unlock the phone and try again."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu telefonun anahtar zinciri kilitli. Telefonun kilidini açıp tekrar deneyin."
+          }
+        }
+      }
+    },
+    "Lazy Send could not start listening: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lazy Send could not start listening: %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lazy Send dinlemeye başlayamadı: %@"
           }
         }
       }

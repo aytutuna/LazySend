@@ -8,6 +8,12 @@
             "state" : "translated",
             "value" : "Send to %@"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ cihazına gönder"
+          }
         }
       }
     },
@@ -17,6 +23,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Open Lazy Send and pair a PC first."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Önce Lazy Send'i açıp bir bilgisayar eşleştirin."
           }
         }
       }
@@ -28,6 +40,12 @@
             "state" : "translated",
             "value" : "PC"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bilgisayar"
+          }
         }
       }
     },
@@ -37,6 +55,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Send"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gönder"
           }
         }
       }
@@ -48,6 +72,12 @@
             "state" : "translated",
             "value" : "Cancel"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vazgeç"
+          }
         }
       }
     },
@@ -57,6 +87,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Done"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bitti"
           }
         }
       }
@@ -68,6 +104,12 @@
             "state" : "translated",
             "value" : "Sending…"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gönderiliyor…"
+          }
         }
       }
     },
@@ -77,6 +119,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sent"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gönderildi"
           }
         }
       }
@@ -88,6 +136,12 @@
             "state" : "translated",
             "value" : "Try again"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tekrar dene"
+          }
         }
       }
     },
@@ -97,6 +151,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Send later"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sonra gönder"
           }
         }
       }
@@ -108,6 +168,12 @@
             "state" : "translated",
             "value" : "Too big to send from here. It is saved and Lazy Send will send it when you open the app."
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buradan göndermek için çok büyük. Kaydedildi; uygulamayı açtığınızda Lazy Send gönderecek."
+          }
         }
       }
     },
@@ -117,6 +183,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Saved. Lazy Send will send it when you open the app."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kaydedildi. Uygulamayı açtığınızda Lazy Send gönderecek."
           }
         }
       }
@@ -128,6 +200,12 @@
             "state" : "translated",
             "value" : "Lazy Send could not read what you shared."
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lazy Send paylaştığınız şeyi okuyamadı."
+          }
         }
       }
     },
@@ -138,6 +216,12 @@
             "state" : "translated",
             "value" : "%@ is not reachable"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ cihazına ulaşılamıyor"
+          }
         }
       }
     },
@@ -147,6 +231,76 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ no longer knows this phone."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ artık bu telefonu tanımıyor."
+          }
+        }
+      }
+    },
+    "Lazy Send" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lazy Send"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lazy Send"
+          }
+        }
+      }
+    },
+    "Send to" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send to"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gönderilecek cihaz"
+          }
+        }
+      }
+    },
+    "Open Lazy Send and pair a PC or a phone first." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Lazy Send and pair a PC or a phone first."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Önce Lazy Send'i açıp bir bilgisayar ya da telefon eşleştirin."
+          }
+        }
+      }
+    },
+    "Saved. Lazy Send will pass it on when you open the app and %@ connects." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved. Lazy Send will pass it on when you open the app and %@ connects."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kaydedildi. Uygulamayı açıp %@ bağlandığında Lazy Send iletecek."
           }
         }
       }
