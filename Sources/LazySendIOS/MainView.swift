@@ -92,9 +92,22 @@ struct MainView: View {
             picks = []
             guard let target = model.selectedTarget else { return }
             Task { @MainActor in
-                for item in items {
-                    if let media = try? await item.loadTransferable(type: PickedMedia.self) { await model.sendPhoto(media.url, to: target) }
+                // Going to the background while the photos are still coming down must not drop the rest.
+                var background = UIBackgroundTaskIdentifier.invalid
+                background = UIApplication.shared.beginBackgroundTask(withName: "load picks") {
+                    UIApplication.shared.endBackgroundTask(background)
+                    background = .invalid
                 }
+                var failed = 0
+                for item in items {
+                    if let media = try? await item.loadTransferable(type: PickedMedia.self) {
+                        await model.sendPhoto(media.url, to: target)
+                    } else {
+                        failed += 1
+                    }
+                }
+                if failed > 0 { model.notice = String(localized: "Could not load \(failed) items") }
+                UIApplication.shared.endBackgroundTask(background)
             }
         }
         .dropDestination(for: DroppedFile.self) { dropped, _ in
@@ -200,6 +213,10 @@ struct MainView: View {
                     .background(Color.accentColor.opacity(0.15), in: Capsule())
             }
             .accessibilityIdentifier("files.target")
+            if let notice = model.notice {
+                Text(notice).font(.footnote).foregroundStyle(.red)
+                    .accessibilityIdentifier("files.notice")
+            }
             if let target = model.selectedTarget {
                 Group {
                     if target.phone {
