@@ -278,7 +278,7 @@ class HostServerTest {
         assertEquals(listOf("copy me", "https://alazy.app/"), clips)
         host.core.outbox.queueText(credentials.deviceId, "plain")
         host.core.outbox.queueText(credentials.deviceId, "copy me", clip = true)
-        assertEquals(listOf(null, true), client.outbox(0).items.map { it.clip })
+        assertEquals(listOf(true, null), client.outbox(0).items.map { it.clip })
     }
 
     @Test
@@ -291,8 +291,8 @@ class HostServerTest {
             now += CLIP_MAX_AGE_MS
             late.core.outbox.queueText(credentials.deviceId, "edge", clip = true)
             now += 1
-            assertEquals(listOf("old", "edge"), client.outbox(0).items.map { it.text })
-            assertEquals(listOf(null, true), client.outbox(0).items.map { it.clip })
+            assertEquals(listOf("edge", "old"), client.outbox(0).items.map { it.text })
+            assertEquals(listOf(true, null), client.outbox(0).items.map { it.clip })
         }
     }
 

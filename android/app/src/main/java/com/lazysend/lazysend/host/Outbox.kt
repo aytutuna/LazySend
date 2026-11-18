@@ -67,7 +67,13 @@ class Outbox(
     val count: Int @Synchronized get() = items.size
 
     @Synchronized
-    fun pending(deviceId: String): List<OutboxItem> = items.filter { it.deviceId == deviceId }
+    fun pending(deviceId: String): List<OutboxItem> {
+        val mine = items.filter { it.deviceId == deviceId }
+        // Items still worth clipping go first, so a guest that takes them in list order is not held up by a gallery feed.
+        val now = clock()
+        val (clipped, rest) = mine.partition { it.clip && now - it.queued <= CLIP_MAX_AGE_MS }
+        return clipped + rest
+    }
 
     @Synchronized
     fun find(deviceId: String, id: String): OutboxItem? = items.firstOrNull { it.deviceId == deviceId && it.id == id }

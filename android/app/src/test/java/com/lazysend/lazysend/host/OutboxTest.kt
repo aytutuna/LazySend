@@ -60,6 +60,18 @@ class OutboxTest {
     }
 
     @Test
+    fun clipItemsAreListedFirstAndTheRestKeepTheirOrder() {
+        var now = 1_000_000L
+        val timed = Outbox(File(dir, "timed.json"), File(dir, "timed-outgoing"), clock = { now })
+        timed.queueText("phone-0001", "one")
+        timed.queueText("phone-0001", "stale", clip = true)
+        now += CLIP_MAX_AGE_MS + 1
+        timed.queueText("phone-0001", "two")
+        timed.queueText("phone-0001", "fresh", clip = true)
+        assertEquals(listOf("fresh", "one", "stale", "two"), timed.pending("phone-0001").map { it.text })
+    }
+
+    @Test
     fun onlyHttpAndHttpsLinksAndNonEmptyTextAreQueued() {
         for (url in listOf("javascript:alert(1)", "ftp://x.y/z", "https://", "not a url", "")) {
             try {
