@@ -90,6 +90,11 @@ final class ClipTests: XCTestCase {
         let data = try png()
         ClipContent.image(try temp("shot.png", data), .png).write(to: board)
         XCTAssertEqual(board.data(forPasteboardType: UTType.png.identifier), data)
+        let heic = Data([1, 2, 3, 4])
+        ClipContent.image(try temp("shot.heic", heic), .heic).write(to: board)
+        XCTAssertEqual(board.data(forPasteboardType: UTType.heic.identifier), heic)
+        ClipContent.image(try temp("shot.webp", heic), .webP).write(to: board)
+        XCTAssertEqual(board.data(forPasteboardType: UTType.webP.identifier), heic)
         ClipContent.file(try temp("notes.txt", Data("hi".utf8)), .plainText).write(to: board)
         XCTAssertEqual(board.data(forPasteboardType: UTType.plainText.identifier), Data("hi".utf8))
     }

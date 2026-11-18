@@ -248,9 +248,10 @@ final class AppModel: ObservableObject {
         return made
     }
 
-    // The pasteboard is written at once, also while the app is in the background; the banner only matters in front.
+    // The pasteboard is written at once, also while the app is in the background, and off the main actor, since reading a big
+    // file takes a while; the banner only matters in front.
     nonisolated func clipped(_ content: ClipContent, from name: String) {
-        content.write()
+        Task.detached { content.write() }
         Task { @MainActor in
             self.copied = String(localized: "Copied from \(name)")
             self.copiedBanner?.cancel()

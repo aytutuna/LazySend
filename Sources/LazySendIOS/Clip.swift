@@ -35,21 +35,14 @@ enum ClipContent: Equatable {
         }
     }
 
-    /// A picture of a common format goes as its own bytes, which keeps its orientation and metadata; other pictures as an image.
+    /// A file, a picture too, goes as its own bytes under its type, which keeps its format, orientation and metadata.
     func write(to pasteboard: UIPasteboard = .general) {
         switch self {
         case .text(let text):
             pasteboard.string = text
         case .link(let url):
             pasteboard.url = url
-        case .image(let url, let type):
-            guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return }
-            if type.conforms(to: .jpeg) || type.conforms(to: .png) {
-                pasteboard.setItems([[type.identifier: data]])
-            } else if let image = UIImage(data: data) {
-                pasteboard.image = image
-            }
-        case .file(let url, let type):
+        case .image(let url, let type), .file(let url, let type):
             guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return }
             pasteboard.setItems([[type.identifier: data]])
         }
