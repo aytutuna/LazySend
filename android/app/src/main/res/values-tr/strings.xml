@@ -118,7 +118,7 @@
     <string name="flash_auto">Flaş otomatik</string>
     <string name="flash_on">Flaş açık</string>
     <string name="save_camera_photos">Kamera fotoğraflarını galeriye kaydet</string>
-    <string name="target_gone">Bu cihazın eşleşmesi artık yok.</string>
+    <string name="target_gone">Bu cihaz artık eşleşmiş değil.</string>
     <string name="clip_hint">%1$s cihazının panosuna koymak için buraya yapıştırın.</string>
     <string name="clip_pair_title">Kopyaladıklarınızı göndermek için bir cihaz eşleştirin.</string>
     <string name="clip_empty">Bir panoya koyduklarınız ve bu panoya konulanlar burada görünür.</string>
