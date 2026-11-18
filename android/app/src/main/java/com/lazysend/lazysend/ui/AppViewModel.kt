@@ -135,19 +135,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val mime = uri?.let { runCatching { context.contentResolver.getType(it) }.getOrNull() ?: clip.description.getMimeType(0) }
             when (val found = pasted(item?.text, uri?.toString(), mime)) {
                 null -> clipProblem.value = context.getString(R.string.nothing_to_send)
-                is Pasted.Note -> {
-                    val guest = selectedGuest()
-                    val pc = selectedPc()
-                    when {
-                        guest != null -> SendService.queueText(context, guest.id, found.text, clip = true)
-                        pc != null -> SendService.sendText(context, pc.id, found.text, clip = true, at = at)
-                        else -> {
-                            clipProblem.value = context.getString(R.string.target_gone)
-                            return@launch
-                        }
-                    }
-                    clipProblem.value = null
-                }
+                is Pasted.Note -> sendClipText(found.text, at)
                 is Pasted.Attachment -> {
                     val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(found.mime) ?: "bin"
                     val file = File(cacheFolder("clipboard"), clipboardName(System.currentTimeMillis(), extension))
@@ -166,6 +154,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
+    }
+
+    /** Sends text to the selected device's clipboard; a lone address goes as a link. */
+    fun sendClipText(text: String, at: Long = System.currentTimeMillis()) {
+        val context = getApplication<Application>()
+        val guest = selectedGuest()
+        val pc = selectedPc()
+        when {
+            guest != null -> SendService.queueText(context, guest.id, text, clip = true)
+            pc != null -> SendService.sendText(context, pc.id, text, clip = true, at = at)
+            else -> {
+                clipProblem.value = context.getString(R.string.target_gone)
+                return
+            }
+        }
+        clipProblem.value = null
     }
 
     private class TooBig : IOException()
