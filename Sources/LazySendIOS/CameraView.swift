@@ -84,17 +84,44 @@ struct CameraView: View {
             }
             .frame(maxWidth: .infinity)
             if !wide { Spacer(minLength: 0) }
-            controls {
-                thumbnail
-                if !wide { Spacer() }
-                shutter
-                if !wide { Spacer() }
-                flip
+            VStack(spacing: 0) {
+                if camera.stops.count > 1 { lensPills.padding(.top, wide ? 0 : 8) }
+                controls {
+                    thumbnail
+                    if !wide { Spacer() }
+                    shutter
+                    if !wide { Spacer() }
+                    flip
+                }
+                .padding(wide ? .horizontal : .vertical, 20)
+                .padding(.horizontal, wide ? 0 : 24)
             }
-            .padding(wide ? .horizontal : .vertical, 20)
-            .padding(.horizontal, wide ? 0 : 24)
             .frame(maxHeight: wide ? .infinity : nil)
         }
+    }
+
+    // 0.5, 1 and 2 as in the Camera app: the one in use shows the live zoom while pinching.
+    private var lensPills: some View {
+        let current = camera.stops.last { $0.value <= camera.zoomLevel + 0.01 }
+        return HStack(spacing: 6) {
+            ForEach(camera.stops) { stop in
+                let active = stop.id == current?.id
+                Button { camera.setZoom(stop.value) } label: {
+                    Text(lensLabel(active ? camera.zoomLevel : stop.value, active: active))
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(active ? Color.yellow : Color.white)
+                        .frame(minWidth: 34)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 6)
+                        .background(Color.black.opacity(active ? 0.6 : 0.4), in: Capsule())
+                }
+                .accessibilityIdentifier("camera.lens." + lensLabel(stop.value, active: false))
+            }
+        }
+    }
+
+    private func lensLabel(_ value: Double, active: Bool) -> String {
+        value.formatted(.number.precision(.fractionLength(0...1))) + (active ? "×" : "")
     }
 
     private var topBar: some View {

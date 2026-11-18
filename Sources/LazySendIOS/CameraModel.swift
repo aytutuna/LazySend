@@ -11,6 +11,12 @@ extension CameraAvailability {
     }
 }
 
+/// One of the lens buttons: a zoom as a multiple of the main lens's view.
+struct LensStop: Identifiable {
+    let value: Double
+    var id: Double { value }
+}
+
 @MainActor
 final class CameraModel: ObservableObject {
     @Published private(set) var availability = CameraAvailability.current
@@ -30,6 +36,10 @@ final class CameraModel: ObservableObject {
     private var running = false
     private var activation: Task<Void, Never>?
     private var base = 1.0
+    private var lowest = 1.0
+    /// The zoom now, 1 at the main lens's view; 0.5 is the ultra wide lens where the phone has one.
+    @Published private(set) var zoomLevel = 1.0
+    @Published private(set) var stops: [LensStop] = []
     private var highest = 1.0
     private var zoomNow = 1.0
     private weak var previewLayer: AVCaptureVideoPreviewLayer?
@@ -126,7 +136,13 @@ final class CameraModel: ObservableObject {
                 self.position = next
                 self.base = setup.base
                 self.highest = setup.highest
+                self.lowest = setup.lowest
                 self.zoomNow = setup.base
+                self.zoomLevel = 1
+                var values = [1.0]
+                if setup.lowest < setup.base { values.insert(setup.lowest / setup.base, at: 0) }
+                if setup.base * 2 <= setup.highest { values.append(2) }
+                self.stops = values.map { LensStop(value: $0) }
                 self.hasFlash = setup.flash
                 if !setup.flash { self.flash = false }
                 self.followRotation()
@@ -173,7 +189,8 @@ final class CameraModel: ObservableObject {
     var zoom: Double { zoomNow / base }
 
     func setZoom(_ zoom: Double) {
-        zoomNow = min(max(zoom * base, base), max(base, highest))
+        zoomNow = min(max(zoom * base, lowest), max(base, highest))
+        zoomLevel = zoomNow / base
         let box = capture
         let factor = zoomNow
         box.queue.async { box.setZoom(factor) }

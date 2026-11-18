@@ -25,6 +25,7 @@ private final class PhotoDelegate: NSObject, AVCapturePhotoCaptureDelegate, @unc
 struct CameraSetup {
     var device: AVCaptureDevice
     var base: Double
+    var lowest: Double
     var highest: Double
     var flash: Bool
 }
@@ -64,7 +65,7 @@ final class CameraSession: @unchecked Sendable {
         device = camera
         let base = CameraLens.startZoom(camera)
         setZoom(base)
-        return CameraSetup(device: camera, base: base, highest: min(Double(camera.maxAvailableVideoZoomFactor), base * 10),
+        return CameraSetup(device: camera, base: base, lowest: Double(camera.minAvailableVideoZoomFactor), highest: min(Double(camera.maxAvailableVideoZoomFactor), base * 10),
                            flash: output.supportedFlashModes.contains(.on))
     }
 
