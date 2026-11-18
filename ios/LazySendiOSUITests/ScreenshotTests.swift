@@ -73,6 +73,18 @@ final class ScreenshotTests: XCTestCase {
     }
 
     @MainActor
+    func testTheClipboardTextBoxEnablesSendOnlyWithText() {
+        let app = XCUIApplication.launched(demo: true, tab: "Clipboard")
+        let field = app.item("clip.text")
+        XCTAssertTrue(field.waitForExistence(timeout: 30))
+        XCTAssertFalse(app.item("clip.send").isEnabled)
+        field.tap()
+        field.typeText("the door code is 4821")
+        XCTAssertTrue(app.item("clip.send").isEnabled)
+        attach(app, as: "11-clipboard-text")
+    }
+
+    @MainActor
     func testTheCameraWithoutAComputerOffersPairing() {
         let app = XCUIApplication.launched(tab: nil)
         XCTAssertTrue(app.item("camera.pairTitle").waitForExistence(timeout: 30))
