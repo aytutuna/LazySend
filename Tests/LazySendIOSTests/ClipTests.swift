@@ -94,6 +94,24 @@ final class ClipTests: XCTestCase {
         XCTAssertEqual(board.data(forPasteboardType: UTType.plainText.identifier), Data("hi".utf8))
     }
 
+    func testAPasteIsAPictureBeforeALinkBeforeText() async throws {
+        let link = URL(string: "https://alazy.app/send/")!
+        let linked = await Pasted.load([NSItemProvider(object: link as NSURL)])
+        XCTAssertEqual(linked, .link(link))
+        let texted = await Pasted.load([NSItemProvider(object: "hello" as NSString)])
+        XCTAssertEqual(texted, .text("hello"))
+        let blank = await Pasted.load([NSItemProvider(object: "  " as NSString)])
+        XCTAssertNil(blank)
+        let nothing = await Pasted.load([])
+        XCTAssertNil(nothing)
+        let both = await Pasted.load([NSItemProvider(object: "hello" as NSString), NSItemProvider(object: link as NSURL)])
+        XCTAssertEqual(both, .link(link))
+        let picture = await Pasted.load([NSItemProvider(object: "hello" as NSString), NSItemProvider(object: UIImage(data: try png())!)])
+        guard case .image(let data, let ext)? = picture else { return XCTFail("a picture was expected") }
+        XCTAssertFalse(data.isEmpty)
+        XCTAssertEqual(ext, "png")
+    }
+
     private func makeHandler(_ clips: Clips) -> (ReceiveHandler, URL) {
         let env = AppEnvironment.temporary()
         let timeline = Timeline(file: env.support.appendingPathComponent("timeline.json"))

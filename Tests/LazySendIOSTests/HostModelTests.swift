@@ -206,6 +206,39 @@ final class HostModelTests: XCTestCase {
         XCTAssertEqual(text.state, .done)
     }
 
+    func testAClipNoteFromAGuestIsMarkedAndShowsTheBanner() async throws {
+        await fixture.startReceiving()
+        let guest = try await fixture.pair("Pixel")
+        _ = try await guest.client.postItem(try ItemRequest.note("see you at five"))
+        _ = try await guest.client.postItem(try ItemRequest.note("the door code is 4821", clip: true))
+        let arrived = await fixture.until { model.timeline.entries.filter { $0.direction == .received }.count == 2 }
+        XCTAssertTrue(arrived)
+        XCTAssertEqual(model.timeline.entries.first { $0.title == "see you at five" }?.clip, nil)
+        XCTAssertEqual(model.timeline.entries.first { $0.title == "the door code is 4821" }?.clip, true)
+        let shown = await fixture.until { model.copied == "Copied from Pixel" }
+        XCTAssertTrue(shown)
+    }
+
+    func testAClipNoteAndAPhotoForAGuestPhoneCarryTheFlag() async throws {
+        await fixture.startReceiving()
+        let guest = try await fixture.pair("Pixel")
+        let target = try XCTUnwrap(model.targets.first { $0.phone })
+        try model.sendNote("the door code is 4821", to: target, clip: true)
+        try model.sendNote("not for the clipboard", to: target)
+        _ = try model.sendCameraPhoto(Data([0xFF, 0xD8, 0xFF, 0xD9]), to: target)
+        let queued = await fixture.until { model.timeline.entries.filter { $0.direction == .sent }.count == 3 }
+        XCTAssertTrue(queued)
+        let items = try await guest.client.outbox(wait: 0).items
+        XCTAssertEqual(items.count, 3)
+        XCTAssertEqual(items.first { $0.text == "the door code is 4821" }?.clip, true)
+        XCTAssertNil(items.first { $0.text == "not for the clipboard" }?.clip)
+        let photo = try XCTUnwrap(items.first { $0.kind == "file" })
+        XCTAssertEqual(photo.clip, true)
+        XCTAssertTrue(try XCTUnwrap(photo.name).hasPrefix("Photo "))
+        XCTAssertTrue(try XCTUnwrap(photo.name).hasSuffix(".jpg"))
+        XCTAssertEqual(model.timeline.entries.filter { $0.clip == true }.count, 2)
+    }
+
     func testAFileLandsInTheDocumentsFolderOfThePhoneThatSentIt() async throws {
         await fixture.startReceiving()
         let guest = try await fixture.pair("Pixel")
