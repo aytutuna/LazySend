@@ -52,7 +52,17 @@ final class OutboxLinkTests: XCTestCase {
         let url = try makeFile("c.bin", Data(count: 10))
         outbox.queueFiles(phone.id, [(url: url, bookmark: nil, mime: nil)], clip: true)
         let reply = try await phone.client.outbox(wait: 0)
-        XCTAssertEqual(reply.items.map(\.clip), [nil, true, true, true])
+        XCTAssertEqual(reply.items.map(\.clip), [true, true, true, nil])
+    }
+
+    func testClipItemsAreListedFirstAndTheRestKeepTheirOrder() async throws {
+        try outbox.queueText(phone.id, "one")
+        try outbox.queueText(phone.id, "stale", clip: true)
+        harness.clock.now += LinkProtocol.clipMaxAge + 1
+        try outbox.queueText(phone.id, "two")
+        try outbox.queueText(phone.id, "fresh", clip: true)
+        let reply = try await phone.client.outbox(wait: 0)
+        XCTAssertEqual(reply.items.map(\.text), ["fresh", "one", "stale", "two"])
     }
 
     func testClipIsDroppedFromItemsQueuedMoreThanFiveMinutesAgo() {

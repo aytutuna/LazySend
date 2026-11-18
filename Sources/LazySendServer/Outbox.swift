@@ -83,7 +83,14 @@ public final class Outbox: @unchecked Sendable {
     public func pending(_ deviceId: String) -> [OutboxItem] {
         lock.lock()
         defer { lock.unlock() }
-        return file.items.filter { $0.deviceId == deviceId }
+        return clipFirst(file.items.filter { $0.deviceId == deviceId })
+    }
+
+    // Items still worth clipping go first, so a guest that takes them in list order is not held up by a gallery feed.
+    private func clipFirst(_ items: [OutboxItem]) -> [OutboxItem] {
+        let now = clock()
+        func clips(_ item: OutboxItem) -> Bool { item.clip == true && now.timeIntervalSince(item.queued) <= LinkProtocol.clipMaxAge }
+        return items.filter(clips) + items.filter { !clips($0) }
     }
 
     public func find(_ deviceId: String, _ id: String) -> OutboxItem? {
@@ -140,7 +147,7 @@ public final class Outbox: @unchecked Sendable {
         let items = file.items.filter { $0.deviceId == deviceId }
         if !items.isEmpty || seconds <= 0 {
             lock.unlock()
-            return items
+            return clipFirst(items)
         }
         waiters[key] = (deviceId, signal)
         lock.unlock()
