@@ -49,6 +49,26 @@ final class AppModelTests: XCTestCase {
         }
     }
 
+    func testAClipSendIsNotHeldUpByAStuckJob() async throws {
+        let (model, pc) = try pairedModel()
+        var release: CheckedContinuation<Void, Never>?
+        model.enqueue("stuck") { await withCheckedContinuation { release = $0 } }
+        try model.sendNote("held", to: pc)
+        try model.sendNote("pasted", to: pc, clip: true)
+        let pasted = try XCTUnwrap(model.timeline.entries.first { $0.title == "pasted" })
+        var tries = 0
+        while model.timeline.get(pasted.id)?.state == .active, tries < 500 {
+            try await Task.sleep(nanoseconds: 20_000_000)
+            tries += 1
+        }
+        XCTAssertEqual(model.timeline.get(pasted.id)?.state, .failed)
+        let held = try XCTUnwrap(model.timeline.entries.first { $0.title == "held" })
+        XCTAssertEqual(model.timeline.get(held.id)?.state, .active)
+        release?.resume()
+        await model.waitForSends()
+        XCTAssertEqual(model.timeline.get(held.id)?.state, .failed)
+    }
+
     func testAnEmptyNoteIsRefused() throws {
         let (model, pc) = try pairedModel()
         XCTAssertThrowsError(try model.sendNote("  \n", to: pc)) { XCTAssertEqual($0 as? NoteError, .empty) }

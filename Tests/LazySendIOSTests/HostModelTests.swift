@@ -270,6 +270,28 @@ final class HostModelTests: XCTestCase {
         XCTAssertNil(model.timeline.entries.first { $0.title == "kept.txt" }?.clip)
     }
 
+    func testAClipSentMoreThanFiveMinutesAfterTheShotGoesWithoutClip() async throws {
+        await fixture.startReceiving()
+        let code = try PairingCode.parse(try XCTUnwrap(host.pairing).link)
+        let guest = AppModel(env: .temporary())
+        let pairing = Task { try await guest.pair(code) }
+        let asked = await fixture.until { self.host.approval != nil }
+        XCTAssertTrue(asked)
+        host.answerApproval(true)
+        let pc = try await pairing.value
+
+        let late = Date().addingTimeInterval(-LinkProtocol.clipMaxAge - 1)
+        try guest.sendNote("late paste", to: pc, clip: true, at: late)
+        try guest.sendNote("quick paste", to: pc, clip: true)
+        await guest.waitForSends()
+
+        let arrived = await fixture.until { model.timeline.entries.filter { $0.direction == .received }.count == 2 }
+        XCTAssertTrue(arrived)
+        XCTAssertNil(model.timeline.entries.first { $0.title == "late paste" }?.clip)
+        XCTAssertEqual(model.timeline.entries.first { $0.title == "quick paste" }?.clip, true)
+        XCTAssertNil(guest.timeline.entries.first { $0.title == "late paste" }?.clip)
+    }
+
     func testAFileLandsInTheDocumentsFolderOfThePhoneThatSentIt() async throws {
         await fixture.startReceiving()
         let guest = try await fixture.pair("Pixel")

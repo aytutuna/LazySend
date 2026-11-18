@@ -87,6 +87,7 @@ final class AppModel: ObservableObject {
     private var collectors: [String: OutboxCollector] = [:]
     private var jobs: [Job] = []
     private var pump: Task<Void, Never>?
+    private var alongside: [String: Task<Void, Never>] = [:]
     private var current: String?
     private var queued: Set<String> = []
     private var resuming: Set<String> = []
@@ -369,24 +370,24 @@ final class AppModel: ObservableObject {
         }, completionHandler: nil)
     }
 
-    func sendNote(_ text: String, to pc: PairedPc, clip: Bool? = nil) throws {
+    func sendNote(_ text: String, to pc: PairedPc, clip: Bool? = nil, at: Date = Date()) throws {
         var request = try ItemRequest.note(text, clip: clip)
         request.sendId = newSendId()
         drainShareQueue()
         let id = "out-" + UUID().uuidString
         timeline.add(TimelineEntry(id: id, direction: .sent, kind: request.kind == "link" ? .link : .text, pcName: pc.name,
                                    title: request.url ?? request.text ?? "", clip: clip))
-        enqueue(id) { _ = await self.post(request, to: pc, entryId: id) }
+        start(id, clip: clip) { _ = await self.post(request, to: pc, entryId: id, at: at) }
     }
 
     /// `scoped` is for URLs from the document picker, which are copied first; picked photos are temp files already.
-    func sendFiles(_ urls: [URL], to pc: PairedPc, scoped: Bool = false, clip: Bool? = nil) {
+    func sendFiles(_ urls: [URL], to pc: PairedPc, scoped: Bool = false, clip: Bool? = nil, at: Date = Date()) {
         drainShareQueue()
         for url in urls {
             let id = "out-" + UUID().uuidString
             timeline.add(TimelineEntry(id: id, direction: .sent, kind: .file, pcName: pc.name, title: url.lastPathComponent, pcId: pc.id,
                                        sendId: newSendId(), clip: clip))
-            enqueue(id) { await self.deliverFile(url, scoped: scoped, to: pc, entryId: id) }
+            start(id, clip: clip) { await self.deliverFile(url, scoped: scoped, to: pc, entryId: id, at: at) }
         }
     }
 
@@ -599,9 +600,28 @@ final class AppModel: ObservableObject {
 
     func waitForSends() async {
         await pump?.value
+        for task in Array(alongside.values) { await task.value }
     }
 
-    private func enqueue(_ entryId: String, _ work: @escaping @MainActor () async -> Void) {
+    // A shot or paste does not wait behind an earlier upload; it runs in its own task.
+    private func start(_ entryId: String, clip: Bool?, _ work: @escaping @MainActor () async -> Void) {
+        guard clip == true else { return enqueue(entryId, work) }
+        beginGrace()
+        alongside[entryId] = Task {
+            await work()
+            self.alongside[entryId] = nil
+            self.endGrace()
+        }
+    }
+
+    // A clip is only worth putting on the clipboard while it is fresh; `at` is when it was made.
+    private func freshClip(_ clip: Bool?, at: Date?, entryId: String) -> Bool? {
+        guard clip == true, let at = at, Date().timeIntervalSince(at) > LinkProtocol.clipMaxAge else { return clip }
+        timeline.update(entryId) { $0.clip = nil }
+        return nil
+    }
+
+    private func enqueue(_ entryId: String,_ work: @escaping @MainActor () async -> Void) {
         jobs.append(Job(entryId: entryId, work: work))
         guard pump == nil else { return }
         beginGrace()
@@ -640,7 +660,7 @@ final class AppModel: ObservableObject {
 
     // Shared by the send queue and the gallery sync: it ends when both are done, or when the system says time is up.
     private func endGrace(force: Bool = false) {
-        guard grace != .invalid, force || (pump == nil && galleryTask == nil) else { return }
+        guard grace != .invalid, force || (pump == nil && alongside.isEmpty && galleryTask == nil) else { return }
         UIApplication.shared.endBackgroundTask(grace)
         grace = .invalid
     }
@@ -675,8 +695,10 @@ final class AppModel: ObservableObject {
         store.get(pc.id) == nil ? .failed : .waiting
     }
 
-    private func post(_ request: ItemRequest, to pc: PairedPc, entryId: String) async -> Sent {
+    private func post(_ request: ItemRequest, to pc: PairedPc, entryId: String, at: Date? = nil) async -> Sent {
         guard let reached = await reach(pc, entryId: entryId) else { return missed(pc) }
+        var request = request
+        request.clip = freshClip(request.clip, at: at, entryId: entryId)
         do {
             _ = try await reached.client.postItem(request)
             finish(entryId, .done)
@@ -699,7 +721,7 @@ final class AppModel: ObservableObject {
         return link.isTransient ? .waiting : .failed
     }
 
-    private func deliverFile(_ url: URL, scoped: Bool, to pc: PairedPc, entryId: String) async {
+    private func deliverFile(_ url: URL, scoped: Bool, to pc: PairedPc, entryId: String, at: Date) async {
         let folder = outgoing.appendingPathComponent(entryId, isDirectory: true)
         let file: URL
         do {
@@ -710,7 +732,7 @@ final class AppModel: ObservableObject {
         }
         timeline.update(entryId) { $0.localFile = entryId + "/" + file.lastPathComponent }
         timeline.save()
-        await sendStaged(file, to: pc, entryId: entryId, resumeItemId: nil, clip: timeline.get(entryId)?.clip)
+        await sendStaged(file, to: pc, entryId: entryId, resumeItemId: nil, clip: timeline.get(entryId)?.clip, at: at)
     }
 
     // A picked file is ours already and is moved; one from the document picker is copied while access to it lasts.
@@ -734,11 +756,11 @@ final class AppModel: ObservableObject {
         return target
     }
 
-    private func sendStaged(_ file: URL, to pc: PairedPc, entryId: String, resumeItemId: String?, clip: Bool?) async {
+    private func sendStaged(_ file: URL, to pc: PairedPc, entryId: String, resumeItemId: String?, clip: Bool?, at: Date? = nil) async {
         let mime = UTType(filenameExtension: file.pathExtension)?.preferredMIMEType
         let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
         let outcome = await upload(file, name: file.lastPathComponent, mime: mime, modified: modified, to: pc, entryId: entryId,
-                                   resumeItemId: resumeItemId, sendId: timeline.get(entryId)?.sendId, clip: clip) { [weak self] id in
+                                   resumeItemId: resumeItemId, sendId: timeline.get(entryId)?.sendId, clip: clip, at: at) { [weak self] id in
             self?.timeline.update(entryId) { $0.itemId = id }
             self?.timeline.save()
         }
@@ -756,8 +778,8 @@ final class AppModel: ObservableObject {
 
     // `remember` gets the computer's id for the file as soon as it is known, so a later run can carry on with it.
     private func upload(_ file: URL, name: String, mime: String?, modified: Date?, to pc: PairedPc, entryId: String,
-                        resumeItemId: String? = nil, sendId: String? = nil, clip: Bool? = nil, remember: @escaping @MainActor (String) -> Void) async -> Sent {
-        let request: ItemRequest
+                        resumeItemId: String? = nil, sendId: String? = nil, clip: Bool? = nil, at: Date? = nil, remember: @escaping @MainActor (String) -> Void) async -> Sent {
+        var request: ItemRequest
         do {
             request = try await Task.detached { try ItemRequest.file(at: file, name: name, mime: mime, modified: modified, sendId: sendId, clip: clip) }.value
         } catch {
@@ -766,6 +788,7 @@ final class AppModel: ObservableObject {
         }
         timeline.update(entryId) { $0.totalBytes = request.size ?? 0 }
         guard let first = await reach(pc, entryId: entryId) else { return missed(pc) }
+        request.clip = freshClip(request.clip, at: at, entryId: entryId)
         let connector = self.connector
         var used = false
         let uploader = Uploader(resumeItemId: resumeItemId) { () async throws -> UploadAPI in
