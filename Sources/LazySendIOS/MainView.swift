@@ -1,8 +1,10 @@
 #if os(iOS)
 import LazySendKit
+import PhotosUI
 import QuickLook
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 enum Route: Hashable {
     case send
@@ -11,11 +13,34 @@ enum Route: Hashable {
     case receive
 }
 
+/// A file dropped on the Files tab, copied into a folder of its own so it can be moved into the send queue.
+struct DroppedFile: Transferable {
+    let url: URL
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(importedContentType: .item) { received in
+            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("lazysend-drop-" + UUID().uuidString, isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let copy = folder.appendingPathComponent(received.file.lastPathComponent)
+            try FileManager.default.copyItem(at: received.file, to: copy)
+            return DroppedFile(url: copy)
+        }
+    }
+}
+
+private enum Source {
+    case photos
+    case files
+}
+
+/// The Files tab: photos and files, sent and received. What is picked here, or dropped, goes straight to the chosen device.
 struct MainView: View {
     @EnvironmentObject private var model: AppModel
     @ObservedObject var timeline: Timeline
     let go: (Route) -> Void
     @State private var preview: URL?
+    @State private var source: Source?
+    @State private var picks: [PhotosPickerItem] = []
 
     var body: some View {
         Group {
@@ -24,12 +49,30 @@ struct MainView: View {
             } else {
                 VStack(spacing: 0) {
                     header
-                    list
+                    if files.isEmpty {
+                        emptyStage
+                    } else {
+                        list
+                    }
+                }
+                .safeAreaInset(edge: .bottom) {
+                    if !files.isEmpty {
+                        addMenu(size: 44)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity)
+                            .background(.bar)
+                    }
                 }
             }
         }
         .navigationTitle("Lazy Send")
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                if !model.targets.isEmpty {
+                    Button("Receive") { go(.receive) }
+                        .accessibilityIdentifier("main.receive")
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 if !model.targets.isEmpty {
                     Button("Devices") { go(.pcs) }
@@ -38,6 +81,48 @@ struct MainView: View {
             }
         }
         .quickLookPreview($preview)
+        .photosPicker(isPresented: shown(.photos), selection: $picks, matching: .any(of: [.images, .videos]), preferredItemEncoding: .current)
+        .fileImporter(isPresented: shown(.files), allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            if case .success(let urls) = result, let target = model.selectedTarget {
+                model.sendFiles(urls, to: target, scoped: true)
+            }
+        }
+        .onChange(of: picks) { _, items in
+            guard !items.isEmpty else { return }
+            picks = []
+            guard let target = model.selectedTarget else { return }
+            Task { @MainActor in
+                // Going to the background while the photos are still coming down must not drop the rest.
+                var background = UIBackgroundTaskIdentifier.invalid
+                background = UIApplication.shared.beginBackgroundTask(withName: "load picks") {
+                    UIApplication.shared.endBackgroundTask(background)
+                    background = .invalid
+                }
+                var failed = 0
+                for item in items {
+                    if let media = try? await item.loadTransferable(type: PickedMedia.self) {
+                        await model.sendPhoto(media.url, to: target)
+                    } else {
+                        failed += 1
+                    }
+                }
+                if failed > 0 { model.notice = String(localized: "Could not load \(failed) items") }
+                UIApplication.shared.endBackgroundTask(background)
+            }
+        }
+        .dropDestination(for: DroppedFile.self) { dropped, _ in
+            guard let target = model.selectedTarget, !dropped.isEmpty else { return false }
+            model.sendFiles(dropped.map(\.url), to: target)
+            return true
+        }
+    }
+
+    private var files: [TimelineEntry] {
+        EntryFilter.files(timeline.entries)
+    }
+
+    private func shown(_ wanted: Source) -> Binding<Bool> {
+        Binding(get: { source == wanted }, set: { if !$0 && source == wanted { source = nil } })
     }
 
     private var empty: some View {
@@ -58,46 +143,102 @@ struct MainView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if model.targets.count > 1 {
-                Picker("Send to", selection: Binding(get: { model.selectedTarget?.id ?? "" }, set: { model.select($0) })) {
-                    ForEach(model.targets) { target in
-                        Text(target.name).tag(target.id)
-                    }
+    private var emptyStage: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "doc.on.doc")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Text("Nothing shared yet")
+                .font(.title3.weight(.semibold))
+            Text("Photos and files you send or receive show up here.")
+                .foregroundStyle(.secondary)
+            addMenu(size: 56)
+                .padding(.top, 4)
+        }
+        .multilineTextAlignment(.center)
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("files.empty")
+    }
+
+    /// The + that picks photos or files, and the format photos go in. It sets the source straight away, since a dialog in between
+    /// would still be closing when the picker opened.
+    private func addMenu(size: CGFloat) -> some View {
+        Menu {
+            Button {
+                source = .photos
+            } label: {
+                Label("Photos", systemImage: "photo.on.rectangle")
+            }
+            .accessibilityIdentifier("source.photos")
+            Button {
+                source = .files
+            } label: {
+                Label("Files", systemImage: "folder")
+            }
+            .accessibilityIdentifier("source.files")
+            Button {
+                go(.send)
+            } label: {
+                Label("All photos and videos", systemImage: "photo.stack")
+            }
+            .accessibilityIdentifier("source.gallery")
+            Menu {
+                Picker("Format", selection: Binding(get: { model.photoFormat }, set: { model.setPhotoFormat($0) })) {
+                    ForEach(PhotoFormat.allCases) { Text($0.title).tag($0) }
                 }
-                .pickerStyle(.menu)
+            } label: {
+                Label("Photo format: \(model.photoFormat.title)", systemImage: "slider.horizontal.3")
+            }
+            .accessibilityIdentifier("source.format")
+        } label: {
+            Label("Add files", systemImage: "plus")
+                .labelStyle(.iconOnly)
+                .imageScale(.large)
+                .frame(minWidth: size, minHeight: size)
+        }
+        .buttonStyle(.bordered)
+        .accessibilityIdentifier("files.add")
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TargetMenu { target in
+                Label(target.name, systemImage: target.phone ? "iphone" : "laptopcomputer")
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.accentColor.opacity(0.15), in: Capsule())
+            }
+            .accessibilityIdentifier("files.target")
+            if let notice = model.notice {
+                Text(notice).font(.footnote).foregroundStyle(.red)
+                    .accessibilityIdentifier("files.notice")
             }
             if let target = model.selectedTarget {
-                Text(target.name).font(.headline)
-                if target.phone {
-                    Text("\(target.name) picks up what you send the next time it connects to this phone.")
-                } else if let link = model.links[target.id] {
-                    Text("Connected over \(link.label)")
-                } else {
-                    Text("\(target.name) is not reachable")
+                Group {
+                    if target.phone {
+                        Text("\(target.name) picks up what you send the next time it connects to this phone.")
+                    } else if let link = model.links[target.id] {
+                        Text("Connected over \(link.label)")
+                    } else {
+                        Text("\(target.name) is not reachable")
+                    }
                 }
-                HStack {
-                    Button("Send") { go(.send) }
-                        .buttonStyle(.borderedProminent)
-                        .accessibilityIdentifier("main.send")
-                    Button("Receive") { go(.receive) }
-                        .buttonStyle(.bordered)
-                        .accessibilityIdentifier("main.receive")
-                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(Color.accentColor.opacity(0.12))
+        .padding(.horizontal)
+        .padding(.vertical, 10)
     }
 
     private var list: some View {
         List {
-            if timeline.entries.isEmpty {
-                Text("What you send and receive shows up here.").foregroundStyle(.secondary)
-            }
-            ForEach(timeline.entries) { entry in
+            ForEach(files) { entry in
                 EntryRow(entry: entry) { name in
                     let url = model.documentURL(name)
                     if FileManager.default.fileExists(atPath: url.path) { preview = url }

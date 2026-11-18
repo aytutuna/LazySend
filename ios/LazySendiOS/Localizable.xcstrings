@@ -145,22 +145,6 @@
         }
       }
     },
-    "What you send and receive shows up here." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "What you send and receive shows up here."
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gönderdikleriniz ve aldıklarınız burada görünür."
-          }
-        }
-      }
-    },
     "To %@" : {
       "localizations" : {
         "en" : {
@@ -397,70 +381,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ cihazına gönder"
-          }
-        }
-      }
-    },
-    "Type or paste text or a link" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Type or paste text or a link"
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Metin veya bağlantı yazın ya da yapıştırın"
-          }
-        }
-      }
-    },
-    "Send text" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Send text"
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Metni gönder"
-          }
-        }
-      }
-    },
-    "Pick files" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pick files"
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dosya seç"
-          }
-        }
-      }
-    },
-    "Pick photos" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pick photos"
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Fotoğraf seç"
           }
         }
       }
@@ -1297,22 +1217,6 @@
         }
       }
     },
-    "What you put on a clipboard, and what is put on this one, shows up here." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "What you put on a clipboard, and what is put on this one, shows up here."
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bir panoya koyduklarınız ve bu panoya konulanlar burada görünür."
-          }
-        }
-      }
-    },
     "Copied from %@" : {
       "localizations" : {
         "en" : {
@@ -2125,6 +2029,166 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ cihazında kopyalanacak bir şey yazın"
+          }
+        }
+      }
+    },
+    "Original" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Original"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orijinal"
+          }
+        }
+      }
+    },
+    "Format" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Format"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Biçim"
+          }
+        }
+      }
+    },
+    "Nothing shared yet" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing shared yet"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Henüz paylaşılan bir şey yok"
+          }
+        }
+      }
+    },
+    "Photos and files you send or receive show up here." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Photos and files you send or receive show up here."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gönderdiğiniz ya da aldığınız fotoğraflar ve dosyalar burada görünür."
+          }
+        }
+      }
+    },
+    "Photos" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Photos"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fotoğraflar"
+          }
+        }
+      }
+    },
+    "Add files" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add files"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dosya ekle"
+          }
+        }
+      }
+    },
+    "Texts and links you send or receive show up here." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Texts and links you send or receive show up here."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gönderdiğiniz ya da aldığınız metinler ve bağlantılar burada görünür."
+          }
+        }
+      }
+    },
+    "%@ picks up what you send the next time it connects to this phone." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ picks up what you send the next time it connects to this phone."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ bu telefona bir sonraki bağlanışında gönderdiklerinizi alır."
+          }
+        }
+      }
+    },
+    "Photo format: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Photo format: %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fotoğraf biçimi: %@"
+          }
+        }
+      }
+    },
+    "Could not load %lld items" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not load %lld items"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld öğe yüklenemedi"
           }
         }
       }

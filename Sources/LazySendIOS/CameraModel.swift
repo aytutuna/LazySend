@@ -11,6 +11,12 @@ extension CameraAvailability {
     }
 }
 
+/// One of the lens buttons: a zoom as a multiple of the main lens's view.
+struct LensStop: Identifiable {
+    let value: Double
+    var id: Double { value }
+}
+
 @MainActor
 final class CameraModel: ObservableObject {
     @Published private(set) var availability = CameraAvailability.current
@@ -30,6 +36,10 @@ final class CameraModel: ObservableObject {
     private var running = false
     private var activation: Task<Void, Never>?
     private var base = 1.0
+    private var lowest = 1.0
+    /// The zoom now, 1 at the main lens's view; 0.5 is the ultra wide lens where the phone has one.
+    @Published private(set) var zoomLevel = 1.0
+    @Published private(set) var stops: [LensStop] = []
     private var highest = 1.0
     private var zoomNow = 1.0
     private weak var previewLayer: AVCaptureVideoPreviewLayer?
@@ -126,7 +136,10 @@ final class CameraModel: ObservableObject {
                 self.position = next
                 self.base = setup.base
                 self.highest = setup.highest
+                self.lowest = setup.lowest
                 self.zoomNow = setup.base
+                self.zoomLevel = 1
+                self.stops = CameraModel.lensStops(base: setup.base, lowest: setup.lowest, highest: setup.highest, telephoto: setup.telephoto)
                 self.hasFlash = setup.flash
                 if !setup.flash { self.flash = false }
                 self.followRotation()
@@ -173,35 +186,55 @@ final class CameraModel: ObservableObject {
     var zoom: Double { zoomNow / base }
 
     func setZoom(_ zoom: Double) {
-        zoomNow = min(max(zoom * base, base), max(base, highest))
+        zoomNow = min(max(zoom * base, lowest), max(base, highest))
+        zoomLevel = zoomNow / base
         let box = capture
         let factor = zoomNow
         box.queue.async { box.setZoom(factor) }
     }
 
-    /// The JPEG of a photo, or nil when none could be taken.
-    func takePhoto() async -> Data? {
+    /// A photo in `format` with its file extension, or nil when none could be taken. Original is HEIC where the camera writes it,
+    /// else JPEG; PNG is made from the JPEG, with its turn put into the pixels.
+    func takePhoto(format: PhotoFormat) async -> (data: Data, ext: String)? {
         guard !busy, running else { return nil }
         busy = true
         defer { busy = false }
         let angle = rotation?.videoRotationAngleForHorizonLevelCapture ?? 90
         let box = capture
         let withFlash = flash && hasFlash
-        return await withCheckedContinuation { continuation in
-            box.capture(flash: withFlash, angle: angle) { continuation.resume(returning: $0) }
+        let shot: (Data?, String) = await withCheckedContinuation { continuation in
+            box.capture(flash: withFlash, angle: angle, original: format == .original) { continuation.resume(returning: ($0, $1)) }
         }
+        guard let data = shot.0 else { return nil }
+        guard format == .png else { return (data, shot.1) }
+        // A shot that cannot be made a PNG is sent as it was taken.
+        guard let png = await Task.detached(operation: { PhotoFormatting.png(fromPhoto: data) }).value else { return (data, shot.1) }
+        return (png, "png")
     }
 
-    func shot(_ name: String, jpeg: Data) {
+    func shot(_ name: String, photo: Data) {
         lastName = name
         Task {
-            let small = await Task.detached { CameraModel.thumbnail(of: jpeg) }.value
+            let small = await Task.detached { CameraModel.thumbnail(of: photo) }.value
             thumbnail = small
         }
     }
 
-    nonisolated static func thumbnail(of jpeg: Data) -> UIImage? {
-        guard let source = CGImageSourceCreateWithData(jpeg as CFData, nil) else { return nil }
+    /// The lens buttons as multiples of the main lens: the ultra wide where the zoom goes below it, 1, and the telephoto lens where the
+    /// phone has one, else the main lens doubled if the zoom reaches that far.
+    nonisolated static func lensStops(base: Double, lowest: Double, highest: Double, telephoto: Double?) -> [LensStop] {
+        var values = [1.0]
+        if lowest < base { values.insert(lowest / base, at: 0) }
+        if let tele = telephoto {
+            if tele > base, tele <= highest { values.append(tele / base) }
+        } else if base * 2 <= highest {
+            values.append(2)
+        }
+        return values.map { LensStop(value: $0) }
+    }
+
+    nonisolated static func thumbnail(of photo: Data) -> UIImage? {
+        guard let source = CGImageSourceCreateWithData(photo as CFData, nil) else { return nil }
         let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
                                         kCGImageSourceThumbnailMaxPixelSize: 200]
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary).map { UIImage(cgImage: $0) }

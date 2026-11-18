@@ -84,17 +84,44 @@ struct CameraView: View {
             }
             .frame(maxWidth: .infinity)
             if !wide { Spacer(minLength: 0) }
-            controls {
-                thumbnail
-                if !wide { Spacer() }
-                shutter
-                if !wide { Spacer() }
-                flip
+            VStack(spacing: 0) {
+                if camera.stops.count > 1 { lensPills.padding(.top, wide ? 0 : 8) }
+                controls {
+                    thumbnail
+                    if !wide { Spacer() }
+                    shutter
+                    if !wide { Spacer() }
+                    flip
+                }
+                .padding(wide ? .horizontal : .vertical, 20)
+                .padding(.horizontal, wide ? 0 : 24)
             }
-            .padding(wide ? .horizontal : .vertical, 20)
-            .padding(.horizontal, wide ? 0 : 24)
             .frame(maxHeight: wide ? .infinity : nil)
         }
+    }
+
+    // 0.5, 1 and 2 as in the Camera app: the one in use shows the live zoom while pinching.
+    private var lensPills: some View {
+        let current = camera.stops.last { $0.value <= camera.zoomLevel + 0.01 }
+        return HStack(spacing: 6) {
+            ForEach(camera.stops) { stop in
+                let active = stop.id == current?.id
+                Button { camera.setZoom(stop.value) } label: {
+                    Text(lensLabel(active ? camera.zoomLevel : stop.value, active: active))
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(active ? Color.yellow : Color.white)
+                        .frame(minWidth: 34)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 6)
+                        .background(Color.black.opacity(active ? 0.6 : 0.4), in: Capsule())
+                }
+                .accessibilityIdentifier("camera.lens." + lensLabel(stop.value, active: false))
+            }
+        }
+    }
+
+    private func lensLabel(_ value: Double, active: Bool) -> String {
+        value.formatted(.number.precision(.fractionLength(0...1))) + (active ? "×" : "")
     }
 
     private var topBar: some View {
@@ -109,22 +136,29 @@ struct CameraView: View {
                 .accessibilityLabel(camera.flash ? "Flash on" : "Flash off")
                 .accessibilityIdentifier("camera.flash")
             }
-            Spacer()
-            if let target = model.selectedTarget {
-                Menu {
-                    Picker("Send to", selection: Binding(get: { target.id }, set: { model.select($0) })) {
-                        ForEach(model.targets) { Text($0.name).tag($0.id) }
-                    }
-                } label: {
-                    Label(target.name, systemImage: target.phone ? "iphone" : "laptopcomputer")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(Color.black.opacity(0.4), in: Capsule())
+            Menu {
+                Picker("Format", selection: Binding(get: { model.photoFormat }, set: { model.setPhotoFormat($0) })) {
+                    ForEach(PhotoFormat.allCases) { Text($0.title).tag($0) }
                 }
-                .accessibilityIdentifier("camera.target")
+            } label: {
+                Text(model.photoFormat.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.black.opacity(0.4), in: Capsule())
             }
+            .accessibilityIdentifier("camera.format")
+            Spacer()
+            TargetMenu { target in
+                Label(target.name, systemImage: target.phone ? "iphone" : "laptopcomputer")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.black.opacity(0.4), in: Capsule())
+            }
+            .accessibilityIdentifier("camera.target")
         }
         .padding(.horizontal)
         .padding(.top, 8)
@@ -225,12 +259,12 @@ struct CameraView: View {
         camera.problem = nil
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         Task { @MainActor in
-            guard let jpeg = await camera.takePhoto() else {
+            guard let photo = await camera.takePhoto(format: model.photoFormat) else {
                 camera.problem = String(localized: "The photo could not be taken.")
                 return
             }
             do {
-                camera.shot(try await model.sendCameraPhoto(jpeg, to: target), jpeg: jpeg)
+                camera.shot(try await model.sendCameraPhoto(photo.data, ext: photo.ext, to: target), photo: photo.data)
             } catch {
                 camera.problem = error.localizedDescription
             }
