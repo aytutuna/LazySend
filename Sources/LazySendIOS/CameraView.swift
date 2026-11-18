@@ -132,12 +132,12 @@ struct CameraView: View {
 
     private var pairCard: some View {
         VStack(spacing: 10) {
-            Text("Pair a computer to send photos")
+            Text("Pair a device to send photos")
                 .font(.headline)
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.center)
                 .accessibilityIdentifier("camera.pairTitle")
-            Button("Pair a computer", action: pair)
+            Button("Pair a device", action: pair)
                 .buttonStyle(.borderedProminent)
                 .accessibilityIdentifier("camera.pair")
         }

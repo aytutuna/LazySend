@@ -81,8 +81,8 @@ struct ClipboardView: View {
                         }
                         .padding(.vertical, 4)
                     } else {
-                        Text("Pair a computer to send what you copy.").foregroundStyle(.secondary)
-                        Button("Pair a computer", action: pair)
+                        Text("Pair a device to send what you copy.").foregroundStyle(.secondary)
+                        Button("Pair a device", action: pair)
                             .accessibilityIdentifier("clip.pair")
                     }
                 }

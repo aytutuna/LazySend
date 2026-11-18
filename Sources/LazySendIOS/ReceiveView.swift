@@ -10,8 +10,7 @@ struct ReceiveView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Receive from a phone").font(.title2.bold())
-                Text("On the other phone, open Lazy Send, choose Pair a PC and scan this code. Both phones need to be on the same network. "
-                    + "Nothing goes through the internet.")
+                Text("On the other phone, open Lazy Send, choose Pair a PC and scan this code. Both phones need to be on the same network. Nothing goes through the internet.")
                     .foregroundStyle(.secondary)
                 content
                 Text("Keep Lazy Send open to receive. This phone stops listening when you leave the app and starts again when you come back.")
