@@ -121,4 +121,42 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertFalse(app.alerts.firstMatch.exists)
         XCTAssertFalse(app.item("receive.paired").exists)
     }
+
+    // A well-formed code for a computer that is not there (192.0.2.1 is reserved for documentation), pasted in as text.
+    private static let unreachableCode = "lazysend://pair?v=1&id=office-pc-1&n=Office%20PC&fp=AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE&a=192.0.2.1&p=9&t=AgICAgICAgICAgICAgICAg"
+
+    @MainActor
+    private func assertWaitingScreenStays(from tab: String, button: String) {
+        let app = XCUIApplication.launched(tab: nil)
+        if tab != "Camera" { app.tabBars.buttons[tab].tap() }
+        let open = app.item(button)
+        XCTAssertTrue(open.waitForExistence(timeout: 30))
+        open.tap()
+        let field = app.item("pair.paste")
+        XCTAssertTrue(field.waitForExistence(timeout: 30))
+        field.tap()
+        field.typeText(ScreenshotTests.unreachableCode)
+        let connect = app.item("pair.connect")
+        XCTAssertTrue(connect.waitForExistence(timeout: 30))
+        connect.tap()
+        let code = app.item("pair.checkCode")
+        XCTAssertTrue(code.waitForExistence(timeout: 30))
+        let later = expectation(description: "a few seconds pass")
+        later.isInverted = true
+        wait(for: [later], timeout: 4)
+        XCTAssertTrue(code.exists)
+        XCTAssertFalse(app.item("pair.paste").exists)
+        XCTAssertFalse(app.item("pair.scanner.message").exists)
+        attach(app, as: "10-pair-waiting")
+    }
+
+    @MainActor
+    func testPairingStaysOnTheWaitingScreenWhenOpenedFromTheCamera() {
+        assertWaitingScreenStays(from: "Camera", button: "camera.pair")
+    }
+
+    @MainActor
+    func testPairingStaysOnTheWaitingScreenWhenOpenedFromTheClipboard() {
+        assertWaitingScreenStays(from: "Clipboard", button: "clip.pair")
+    }
 }
