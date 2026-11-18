@@ -2081,22 +2081,6 @@
         }
       }
     },
-    "Format: %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Format: %@"
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Biçim: %@"
-          }
-        }
-      }
-    },
     "Nothing shared yet" : {
       "localizations" : {
         "en" : {
@@ -2189,6 +2173,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ bu telefona bir sonraki bağlanışında gönderdiklerinizi alır."
+          }
+        }
+      }
+    },
+    "Photo format: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Photo format: %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fotoğraf biçimi: %@"
           }
         }
       }
