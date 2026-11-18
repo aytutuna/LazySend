@@ -621,7 +621,7 @@ final class AppModel: ObservableObject {
         return nil
     }
 
-    private func enqueue(_ entryId: String,_ work: @escaping @MainActor () async -> Void) {
+    func enqueue(_ entryId: String,_ work: @escaping @MainActor () async -> Void) {
         jobs.append(Job(entryId: entryId, work: work))
         guard pump == nil else { return }
         beginGrace()
