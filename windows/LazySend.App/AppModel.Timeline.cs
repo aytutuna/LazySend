@@ -60,6 +60,9 @@ public sealed partial class AppModel
 
     public event EventHandler<string>? Notice;
 
+    /// <summary>Something that arrived was put on the clipboard because the sender asked; the argument is the sender's name.</summary>
+    public event EventHandler<string>? Copied;
+
     private void StartTimeline()
     {
         Service.Router.TextReceived += (_, item) => _ui.BeginInvoke(() => AddReceivedText(item));
@@ -152,6 +155,11 @@ public sealed partial class AppModel
         row.Heading = link ? $"Link from {item.DeviceName}" : $"Text from {item.DeviceName}";
         row.Detail = Stamp(item.Received);
         Push(row);
+        if (arrived && item.Clip == true && ClipboardFiles.Put(link ? item.Url : item.Text, null))
+        {
+            Copied?.Invoke(this, item.DeviceName);
+            return;
+        }
         if (arrived && !link && Settings.CopyReceivedText) CopyToClipboard(item.Text);
         if (arrived) Arrived?.Invoke(this, row);
     }
@@ -172,7 +180,8 @@ public sealed partial class AppModel
         row.Detail = $"{LinkDetector.FormatSize(file.Size)}, from {file.DeviceName}, {Stamp(now)}";
         Push(row);
         LoadThumbnail(row, file.Path, file.Size);
-        Arrived?.Invoke(this, row);
+        if (file.Clip && ClipboardFiles.Put(null, file.Path)) Copied?.Invoke(this, file.DeviceName);
+        else Arrived?.Invoke(this, row);
     }
 
     private void AddGalleryFile(ReceivedFile file, DateTimeOffset now)
