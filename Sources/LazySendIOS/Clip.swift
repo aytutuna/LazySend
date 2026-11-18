@@ -25,7 +25,7 @@ enum ClipContent: Equatable {
             return .text(address)
         case "file":
             guard let file = file, let size = try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize else { return nil }
-            let type = UTType(filenameExtension: file.pathExtension) ?? .data
+            let type = UTType(filenameExtension: file.pathExtension).flatMap { $0.isDynamic ? nil : $0 } ?? .data
             if type.conforms(to: .image) {
                 return size <= maxImageBytes ? .image(file, type) : nil
             }
