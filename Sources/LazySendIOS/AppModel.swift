@@ -295,47 +295,47 @@ final class AppModel: ObservableObject {
     }
 
 
-    func sendNote(_ text: String, to pc: PairedPc) throws {
-        var request = try ItemRequest.note(text)
+    func sendNote(_ text: String, to pc: PairedPc, clip: Bool? = nil) throws {
+        var request = try ItemRequest.note(text, clip: clip)
         request.sendId = newSendId()
         drainShareQueue()
         let id = "out-" + UUID().uuidString
         timeline.add(TimelineEntry(id: id, direction: .sent, kind: request.kind == "link" ? .link : .text, pcName: pc.name,
-                                   title: request.url ?? request.text ?? ""))
+                                   title: request.url ?? request.text ?? "", clip: clip))
         enqueue(id) { _ = await self.post(request, to: pc, entryId: id) }
     }
 
     /// `scoped` is for URLs from the document picker, which are copied first; picked photos are temp files already.
-    func sendFiles(_ urls: [URL], to pc: PairedPc, scoped: Bool = false) {
+    func sendFiles(_ urls: [URL], to pc: PairedPc, scoped: Bool = false, clip: Bool? = nil) {
         drainShareQueue()
         for url in urls {
             let id = "out-" + UUID().uuidString
             timeline.add(TimelineEntry(id: id, direction: .sent, kind: .file, pcName: pc.name, title: url.lastPathComponent, pcId: pc.id,
-                                       sendId: newSendId()))
+                                       sendId: newSendId(), clip: clip))
             enqueue(id) { await self.deliverFile(url, scoped: scoped, to: pc, entryId: id) }
         }
     }
 
-    func sendNote(_ text: String, to target: Target) throws {
+    func sendNote(_ text: String, to target: Target, clip: Bool? = nil) throws {
         if let phone = HostedPhones.id(ofTarget: target.id) {
-            try host.sendNote(text, to: phone)
+            try host.sendNote(text, to: phone, clip: clip)
         } else if let pc = pcs.first(where: { $0.id == target.id }) {
-            try sendNote(text, to: pc)
+            try sendNote(text, to: pc, clip: clip)
         }
     }
 
-    func sendFiles(_ urls: [URL], to target: Target, scoped: Bool = false) {
+    func sendFiles(_ urls: [URL], to target: Target, scoped: Bool = false, clip: Bool? = nil) {
         notice = nil
         if let phone = HostedPhones.id(ofTarget: target.id) {
             Task {
                 do {
-                    try await host.sendFiles(urls, to: phone, scoped: scoped)
+                    try await host.sendFiles(urls, to: phone, scoped: scoped, clip: clip)
                 } catch {
                     notice = error.localizedDescription
                 }
             }
         } else if let pc = pcs.first(where: { $0.id == target.id }) {
-            sendFiles(urls, to: pc, scoped: scoped)
+            sendFiles(urls, to: pc, scoped: scoped, clip: clip)
         }
     }
 
@@ -664,7 +664,7 @@ final class AppModel: ObservableObject {
         let mime = UTType(filenameExtension: file.pathExtension)?.preferredMIMEType
         let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
         let outcome = await upload(file, name: file.lastPathComponent, mime: mime, modified: modified, to: pc, entryId: entryId,
-                                   resumeItemId: resumeItemId, sendId: timeline.get(entryId)?.sendId) { [weak self] id in
+                                   resumeItemId: resumeItemId, sendId: timeline.get(entryId)?.sendId, clip: timeline.get(entryId)?.clip) { [weak self] id in
             self?.timeline.update(entryId) { $0.itemId = id }
             self?.timeline.save()
         }
@@ -682,10 +682,10 @@ final class AppModel: ObservableObject {
 
     // `remember` gets the computer's id for the file as soon as it is known, so a later run can carry on with it.
     private func upload(_ file: URL, name: String, mime: String?, modified: Date?, to pc: PairedPc, entryId: String,
-                        resumeItemId: String? = nil, sendId: String? = nil, remember: @escaping @MainActor (String) -> Void) async -> Sent {
+                        resumeItemId: String? = nil, sendId: String? = nil, clip: Bool? = nil, remember: @escaping @MainActor (String) -> Void) async -> Sent {
         let request: ItemRequest
         do {
-            request = try await Task.detached { try ItemRequest.file(at: file, name: name, mime: mime, modified: modified, sendId: sendId) }.value
+            request = try await Task.detached { try ItemRequest.file(at: file, name: name, mime: mime, modified: modified, sendId: sendId, clip: clip) }.value
         } catch {
             finish(entryId, .failed, error.localizedDescription)
             return .failed

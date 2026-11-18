@@ -432,16 +432,16 @@ final class HostModel: ObservableObject {
     }
 
     @discardableResult
-    func sendNote(_ text: String, to id: String) throws -> OutboxItem {
+    func sendNote(_ text: String, to id: String, clip: Bool? = nil) throws -> OutboxItem {
         guard let service = service, let device = devices.first(where: { $0.id == id }) else { throw HostSendError.notPaired }
-        let request = try ItemRequest.note(text)
+        let request = try ItemRequest.note(text, clip: clip)
         let item: OutboxItem
         do {
             item = try queue(request, text, for: id, in: service)
         } catch OutboxError.tooMany {
             throw HostSendError.tooMany(device.name)
         }
-        addSent(item, kind: item.kind == "link" ? .link : .text, title: item.url ?? item.text ?? text, device: device)
+        addSent(item, kind: item.kind == "link" ? .link : .text, title: item.url ?? item.text ?? text, device: device, clip: clip)
         return item
     }
 
@@ -449,17 +449,17 @@ final class HostModel: ObservableObject {
     private func queue(_ request: ItemRequest, _ text: String, for id: String, in service: LinkService) throws -> OutboxItem {
         if request.kind == "link", let url = request.url {
             do {
-                return try service.outbox.queueLink(id, url)
+                return try service.outbox.queueLink(id, url, clip: request.clip)
             } catch OutboxError.badLink {
             }
         }
-        return try service.outbox.queueText(id, text.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression))
+        return try service.outbox.queueText(id, text.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression), clip: request.clip)
     }
 
     /// Queues the files for the phone. Each is copied into the app first (a picked file is moved), so it stays
     /// readable until the phone has it. Returns how many were queued.
     @discardableResult
-    func sendFiles(_ urls: [URL], to id: String, scoped: Bool = false, names: [String]? = nil) async throws -> Int {
+    func sendFiles(_ urls: [URL], to id: String, scoped: Bool = false, names: [String]? = nil, clip: Bool? = nil) async throws -> Int {
         guard let service = service, let device = devices.first(where: { $0.id == id }) else { throw HostSendError.notPaired }
         var staged: [URL] = []
         var failure: Error?
@@ -475,10 +475,10 @@ final class HostModel: ObservableObject {
             }
         }
         let files = staged.map { (url: $0, bookmark: Data?.none, mime: UTType(filenameExtension: $0.pathExtension)?.preferredMIMEType) }
-        let queued = service.outbox.queueFiles(id, files)
+        let queued = service.outbox.queueFiles(id, files, clip: clip)
         for file in staged.dropFirst(queued.count) { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
         for item in queued {
-            addSent(item, kind: .file, title: item.name ?? "", device: device)
+            addSent(item, kind: .file, title: item.name ?? "", device: device, clip: clip)
         }
         staging.subtract(staged.map { $0.deletingLastPathComponent().lastPathComponent })
         sweepOutgoing()
@@ -487,10 +487,10 @@ final class HostModel: ObservableObject {
         return queued.count
     }
 
-    private func addSent(_ item: OutboxItem, kind: EntryKind, title: String, device: PairedDevice) {
+    private func addSent(_ item: OutboxItem, kind: EntryKind, title: String, device: PairedDevice, clip: Bool? = nil) {
         timeline.add(TimelineEntry(id: HostModel.sentPrefix + item.id, direction: .sent, kind: kind, pcName: device.name, title: title,
                                    detail: String(localized: "Waiting for \(device.name) to connect"), state: .active,
-                                   totalBytes: item.size ?? 0, pcId: HostedPhones.target(device.id), itemId: item.id))
+                                   totalBytes: item.size ?? 0, pcId: HostedPhones.target(device.id), itemId: item.id, clip: clip))
     }
 
     /// What left the outbox was picked up by the phone, or went with the phone when it was removed; what is still

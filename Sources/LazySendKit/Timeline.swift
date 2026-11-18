@@ -44,11 +44,13 @@ public struct TimelineEntry: Codable, Identifiable, Equatable, Sendable {
     public var localFile: String?
     /// The id this send carries to the computer, kept across retries and restarts.
     public var sendId: String?
+    /// Sent or received to be put on the clipboard.
+    public var clip: Bool?
 
     public init(id: String, time: Date = Date(), direction: Direction, kind: EntryKind, pcName: String, title: String, detail: String = "",
                 state: EntryState = .active, bytes: Int64 = 0, totalBytes: Int64 = 0, count: Int = 0, totalCount: Int = 0,
                 fileName: String? = nil, mime: String? = nil, pcId: String? = nil, itemId: String? = nil, localFile: String? = nil,
-                sendId: String? = nil) {
+                sendId: String? = nil, clip: Bool? = nil) {
         self.id = id
         self.time = time
         self.direction = direction
@@ -67,6 +69,7 @@ public struct TimelineEntry: Codable, Identifiable, Equatable, Sendable {
         self.itemId = itemId
         self.localFile = localFile
         self.sendId = sendId
+        self.clip = clip
     }
 }
 
