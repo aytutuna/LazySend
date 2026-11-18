@@ -32,9 +32,11 @@ class FilesFilterTest {
     @Test
     fun lensButtonsFollowWhatTheCameraCanZoom() {
         assertEquals(listOf(0.5f, 1f, 2f), lensStops(0.5f, 8f))
+        assertEquals(listOf(0.6f, 1f, 2f), lensStops(0.6f, 8f))
         assertEquals(listOf(1f, 2f), lensStops(1f, 5f))
         assertEquals(listOf(1f), lensStops(1f, 1.5f))
-        assertEquals(listOf(0.5f, 1f), lensStops(0.6f, 1.9f))
+        assertEquals(listOf(1f), lensStops(0.95f, 1.9f))
+        assertEquals(listOf(0.94f, 1f), lensStops(0.94f, 1.9f))
     }
 
     @Test
