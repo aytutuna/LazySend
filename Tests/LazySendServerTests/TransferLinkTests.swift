@@ -61,6 +61,26 @@ final class TransferLinkTests: XCTestCase {
         lock.unlock()
     }
 
+    func testClipIsLeftOutOfAFileThatCompletesMoreThanFiveMinutesAfterItBegan() async throws {
+        var files: [ReceivedFile] = []
+        let lock = NSLock()
+        harness.service.inbox.onFileReceived = { file in
+            lock.lock()
+            files.append(file)
+            lock.unlock()
+        }
+        let content = bytes(1000)
+        let quick = try await phone.client.postItem(ItemRequest(kind: "file", name: "quick.bin", size: 1000, clip: true))
+        harness.clock.now += 4 * 60
+        _ = try await phone.put(quick.id, offset: 0, content)
+        let slow = try await phone.client.postItem(ItemRequest(kind: "file", name: "slow.bin", size: 1000, clip: true))
+        harness.clock.now += 6 * 60
+        _ = try await phone.put(slow.id, offset: 0, content)
+        lock.lock()
+        XCTAssertEqual(files.map(\.clip), [true, false])
+        lock.unlock()
+    }
+
     func testBadTextAndLinksAreRefused() async throws {
         await expectRefused(400, "badRequest") { _ = try await phone.client.postItem(ItemRequest(kind: "text", text: "")) }
         await expectRefused(400, "badRequest") { _ = try await phone.client.postItem(ItemRequest(kind: "text")) }

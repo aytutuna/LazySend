@@ -416,7 +416,7 @@ public final class Inbox: @unchecked Sendable {
         writers[file.id] = nil
         lock.unlock()
         onFileReceived?(ReceivedFile(deviceId: file.deviceId, deviceName: file.deviceName, url: placed, size: file.size, sourceId: file.sourceId,
-                                 clip: file.clip == true))
+                                 clip: file.clip == true && (file.finished ?? file.started).timeIntervalSince(file.started) <= LinkProtocol.clipMaxAge))
     }
 
     /// Tags the file as downloaded, so Gatekeeper's checks apply to what a phone sends (an app, a script). There is

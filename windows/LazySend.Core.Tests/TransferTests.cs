@@ -77,6 +77,28 @@ public class TransferTests
     }
 
     [Fact]
+    public async Task ClipIsLeftOutOfAFileThatCompletesMoreThanFiveMinutesAfterItBegan()
+    {
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+        var files = new List<ReceivedFile>();
+        h.Service.Inbox.FileReceived += (_, file) => files.Add(file);
+        var content = Bytes(1000);
+
+        using var quick = await phone.PostAsync(Protocol.ItemsPath, new ItemRequest(ItemKind.File, Name: "quick.bin", Size: content.Length, Clip: true));
+        var quickId = (await Harness.ReadAsync<ItemState>(quick)).Id;
+        h.Now += TimeSpan.FromMinutes(4);
+        (await phone.PutChunkAsync(quickId, 0, content)).Dispose();
+
+        using var slow = await phone.PostAsync(Protocol.ItemsPath, new ItemRequest(ItemKind.File, Name: "slow.bin", Size: content.Length, Clip: true));
+        var slowId = (await Harness.ReadAsync<ItemState>(slow)).Id;
+        h.Now += TimeSpan.FromMinutes(6);
+        (await phone.PutChunkAsync(slowId, 0, content)).Dispose();
+
+        Assert.Equal([true, false], files.Select(f => f.Clip));
+    }
+
+    [Fact]
     public async Task BadTextAndLinksAreRefused()
     {
         await using var h = new Harness();

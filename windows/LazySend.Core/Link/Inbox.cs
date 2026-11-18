@@ -394,7 +394,8 @@ public sealed class Inbox
         if (file.Modified is { } modified) BestEffort(() => File.SetLastWriteTimeUtc(path, modified.UtcDateTime));
         writer?.Hash?.Dispose();
         _writers.TryRemove(file.Id, out _);
-        FileReceived?.Invoke(this, new ReceivedFile(file.DeviceId, file.DeviceName, path, file.Size, file.SourceId, file.Clip));
+        FileReceived?.Invoke(this, new ReceivedFile(file.DeviceId, file.DeviceName, path, file.Size, file.SourceId,
+            file.Clip && file.Finished - file.Started <= Protocol.ClipMaxAge));
     }
 
     /// <summary>Tags the file as coming from the internet zone, so SmartScreen and Office checks apply to what a phone sends (.exe, .lnk, .url…).</summary>
