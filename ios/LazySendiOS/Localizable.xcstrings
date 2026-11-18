@@ -2112,6 +2112,22 @@
           }
         }
       }
+    },
+    "Type something to copy on %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Type something to copy on %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ cihazında kopyalanacak bir şey yazın"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"
