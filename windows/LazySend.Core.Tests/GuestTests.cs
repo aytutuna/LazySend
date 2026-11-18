@@ -328,7 +328,7 @@ public class GuestConnectionTests
 
         await guest.Service.Receiver.CollectAsync(client, host.Id, 0, CancellationToken.None);
 
-        Assert.Equal([null, true], texts.Select(t => t.Clip));
+        Assert.Equal([true, null], texts.Select(t => t.Clip));
         Assert.True(Assert.Single(files).Clip);
     }
 
