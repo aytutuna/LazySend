@@ -166,6 +166,8 @@ public partial class MainWindow : Window
         bool clip = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
         if (!clip && Keyboard.FocusedElement is TextBoxBase) return;
         e.Handled = true;
+        // Holding the keys down would send the clipboard over and over.
+        if (clip && e.IsRepeat) return;
         SendClipboard(clip);
     }
 
@@ -192,9 +194,13 @@ public partial class MainWindow : Window
                 }
                 _model.SendFiles([saved], clip);
             }
-            else if (Clipboard.ContainsText())
+            else if (Clipboard.ContainsText() && !string.IsNullOrWhiteSpace(Clipboard.GetText()))
             {
                 _model.SendText(Clipboard.GetText(), clip);
+            }
+            else
+            {
+                ShowNotice("Nothing to send on the clipboard");
             }
         }
         catch (System.Runtime.InteropServices.COMException)
