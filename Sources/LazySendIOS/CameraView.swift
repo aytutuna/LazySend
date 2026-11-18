@@ -150,21 +150,15 @@ struct CameraView: View {
             }
             .accessibilityIdentifier("camera.format")
             Spacer()
-            if let target = model.selectedTarget {
-                Menu {
-                    Picker("Send to", selection: Binding(get: { target.id }, set: { model.select($0) })) {
-                        ForEach(model.targets) { Text($0.name).tag($0.id) }
-                    }
-                } label: {
-                    Label(target.name, systemImage: target.phone ? "iphone" : "laptopcomputer")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(Color.black.opacity(0.4), in: Capsule())
-                }
-                .accessibilityIdentifier("camera.target")
+            TargetMenu { target in
+                Label(target.name, systemImage: target.phone ? "iphone" : "laptopcomputer")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.black.opacity(0.4), in: Capsule())
             }
+            .accessibilityIdentifier("camera.target")
         }
         .padding(.horizontal)
         .padding(.top, 8)
