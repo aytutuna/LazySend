@@ -37,10 +37,12 @@ public sealed class PhoneRow(string id, string name, string platform) : INotifyP
 
 public sealed partial class AppModel
 {
-    private static readonly string[] ImageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".heic"];
     private static readonly TimeSpan GalleryIdle = TimeSpan.FromSeconds(8);
     private const int MaxRows = 500;
-    private const long MaxThumbnailPixels = 50_000_000;
+    private static readonly TimeSpan ClipJoin = TimeSpan.FromSeconds(10);
+    private readonly List<string> _clipFiles = [];
+    private string _clipDevice = "";
+    private DateTimeOffset _clipAt;
     private static readonly SemaphoreSlim ThumbnailSlots = new(2);
 
     private readonly Dictionary<string, TimelineItem> _galleries = [];
@@ -60,7 +62,7 @@ public sealed partial class AppModel
 
     public event EventHandler<string>? Notice;
 
-    /// <summary>Something that arrived was put on the clipboard because the sender asked; the argument is the sender's name.</summary>
+    /// <summary>Something that arrived was put on the clipboard because the sender asked; the argument says so ("Copied from Pixel").</summary>
     public event EventHandler<string>? Copied;
 
     private void StartTimeline()
@@ -157,7 +159,8 @@ public sealed partial class AppModel
         Push(row);
         if (arrived && item.Clip == true && ClipboardFiles.Put(link ? item.Url : item.Text, null))
         {
-            Copied?.Invoke(this, item.DeviceName);
+            _clipFiles.Clear();
+            Copied?.Invoke(this, $"Copied from {item.DeviceName}");
             return;
         }
         if (arrived && !link && Settings.CopyReceivedText) CopyToClipboard(item.Text);
@@ -180,8 +183,25 @@ public sealed partial class AppModel
         row.Detail = $"{LinkDetector.FormatSize(file.Size)}, from {file.DeviceName}, {Stamp(now)}";
         Push(row);
         LoadThumbnail(row, file.Path, file.Size);
-        if (file.Clip && ClipboardFiles.Put(null, file.Path)) Copied?.Invoke(this, file.DeviceName);
-        else Arrived?.Invoke(this, row);
+        if (file.Clip && CopyClipFile(file)) return;
+        Arrived?.Invoke(this, row);
+    }
+
+    /// <summary>Files that arrive from the same device within seconds of each other are put on the clipboard together.</summary>
+    private bool CopyClipFile(ReceivedFile file)
+    {
+        var now = DateTimeOffset.UtcNow;
+        if (_clipDevice != file.DeviceId || now - _clipAt > ClipJoin) _clipFiles.Clear();
+        _clipFiles.Add(file.Path);
+        _clipDevice = file.DeviceId;
+        _clipAt = now;
+        if (!ClipboardFiles.Put(null, _clipFiles))
+        {
+            _clipFiles.Clear();
+            return false;
+        }
+        Copied?.Invoke(this, _clipFiles.Count == 1 ? $"Copied from {file.DeviceName}" : $"Copied {_clipFiles.Count} files from {file.DeviceName}");
+        return true;
     }
 
     private void AddGalleryFile(ReceivedFile file, DateTimeOffset now)
@@ -376,7 +396,7 @@ public sealed partial class AppModel
     /// <summary>Decodes the picture on the pool, two at a time, and puts it on the row when ready.</summary>
     private void LoadThumbnail(TimelineItem row, string path, long size)
     {
-        if (size > 64L * 1024 * 1024 || !ImageExtensions.Contains(System.IO.Path.GetExtension(path), StringComparer.OrdinalIgnoreCase)) return;
+        if (size > ClipboardFiles.MaxImageBytes || !ClipboardFiles.IsImage(path)) return;
         _ = Task.Run(async () =>
         {
             await ThumbnailSlots.WaitAsync().ConfigureAwait(false);
@@ -398,7 +418,7 @@ public sealed partial class AppModel
         {
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             var frame = BitmapDecoder.Create(stream, BitmapCreateOptions.IgnoreColorProfile, BitmapCacheOption.None).Frames[0];
-            if ((long)frame.PixelWidth * frame.PixelHeight > MaxThumbnailPixels) return null;
+            if ((long)frame.PixelWidth * frame.PixelHeight > ClipboardFiles.MaxPixels) return null;
             stream.Position = 0;
             var image = new BitmapImage();
             image.BeginInit();

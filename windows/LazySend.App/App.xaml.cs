@@ -52,7 +52,7 @@ public partial class App : Application
         }
         _model.Start();
         _model.Arrived += OnArrived;
-        _model.Copied += (_, name) => _tray?.Balloon("Lazy Send", $"Copied from {name}", force: true);
+        _model.Copied += (_, text) => _tray?.Balloon("Lazy Send", text, force: true);
         _model.PairingRequested += (_, name) =>
         {
             if (MainWindow is not { IsVisible: true }) _tray?.Balloon("Pairing request", $"{name} wants to pair. Open Lazy Send to answer.", force: true);
