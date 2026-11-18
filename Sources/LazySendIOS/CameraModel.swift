@@ -28,6 +28,7 @@ final class CameraModel: ObservableObject {
     private var configured = false
     private var camera: AVCaptureDevice?
     private var running = false
+    private var activation: Task<Void, Never>?
     private var base = 1.0
     private var highest = 1.0
     private var zoomNow = 1.0
@@ -45,8 +46,14 @@ final class CameraModel: ObservableObject {
         watching.append(center.addObserver(forName: AVCaptureSession.interruptionEndedNotification, object: session, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.interrupted = false }
         })
-        watching.append(center.addObserver(forName: AVCaptureSession.runtimeErrorNotification, object: session, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.restart() }
+        watching.append(center.addObserver(forName: AVCaptureSession.didStartRunningNotification, object: session, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.interrupted = false }
+        })
+        watching.append(center.addObserver(forName: AVCaptureSession.runtimeErrorNotification, object: session, queue: .main) { [weak self] note in
+            let error = note.userInfo?[AVCaptureSessionErrorKey] as? AVError
+            MainActor.assumeIsolated {
+                if error?.code == .mediaServicesWereReset { self?.restart() }
+            }
         })
     }
 
@@ -58,17 +65,24 @@ final class CameraModel: ObservableObject {
 
     var session: AVCaptureSession { capture.session }
 
-    /// The camera runs while its tab is in front and the app is active.
-    func setActive(_ active: Bool) async {
+    /// The camera runs while its tab is in front and the app is active. A later call replaces one still waiting for permission.
+    func setActive(_ active: Bool) {
+        activation?.cancel()
+        activation = Task { await self.activate(active) }
+    }
+
+    private func activate(_ active: Bool) async {
         if !active {
             running = false
             let box = capture
             box.queue.async { box.stop() }
             return
         }
+        interrupted = false
         var state = CameraAvailability.current
         if state == .available, AVCaptureDevice.authorizationStatus(for: .video) == .notDetermined {
             _ = await AVCaptureDevice.requestAccess(for: .video)
+            guard !Task.isCancelled else { return }
             state = CameraAvailability.current
         }
         availability = state
@@ -83,10 +97,11 @@ final class CameraModel: ObservableObject {
     }
 
     func retry() {
-        Task { await setActive(true) }
+        setActive(true)
     }
 
     func flip() {
+        guard !busy else { return }
         switchCamera(to: position == .back ? .front : .back)
     }
 
@@ -98,7 +113,12 @@ final class CameraModel: ObservableObject {
             if setup != nil, wanted { box.start() }
             Task { @MainActor in
                 guard let setup else {
-                    self.availability = .noCamera
+                    // The camera in use stays; only a first setup that fails means there is none.
+                    if self.configured {
+                        self.problem = String(localized: "The camera could not be switched.")
+                    } else {
+                        self.availability = .noCamera
+                    }
                     return
                 }
                 self.configured = true

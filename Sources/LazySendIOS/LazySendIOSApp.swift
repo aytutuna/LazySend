@@ -48,6 +48,9 @@ struct RootView: View {
         .onChange(of: phase, initial: true) { _, new in
             model.sceneChanged(new)
         }
+        .onChange(of: tab == .camera && phase == .active, initial: true) { _, active in
+            camera.setActive(active)
+        }
     }
 
     private func pair() {

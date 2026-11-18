@@ -27,7 +27,6 @@ struct CameraView: View {
                 chrome(wide: wide)
             }
         }
-        .task(id: active) { await camera.setActive(active) }
         .onChange(of: camera.lastName) { _, _ in sentHidden = false }
         .onChange(of: entry?.state) { _, state in
             guard state == .done else { return }
@@ -168,8 +167,8 @@ struct CameraView: View {
                 .frame(width: 52, height: 52)
                 .background(Color.black.opacity(0.4), in: Circle())
         }
-        .opacity(camera.availability == .available ? 1 : 0.4)
-        .disabled(camera.availability != .available)
+        .opacity(camera.availability == .available && !camera.busy ? 1 : 0.4)
+        .disabled(camera.availability != .available || camera.busy)
         .accessibilityLabel("Switch camera")
         .accessibilityIdentifier("camera.flip")
     }
