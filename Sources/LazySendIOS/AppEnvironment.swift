@@ -56,13 +56,19 @@ struct AppEnvironment {
     var advertiser: Advertiser?
     /// The addresses a pairing code and `hello` list; nil for the ones the phone has.
     var addresses: (() -> [String])?
+    /// Seconds a pairing waits before it starts, so a UI test can look at the waiting screen (-slowPairing); 0 in the app.
+    var pairDelay: TimeInterval = 0
 
     static let quiet = Discovery(announced: { _ in [:] }, subnets: { [] }, probe: { _, _ in [] })
 
     @MainActor
     static func live() -> AppEnvironment {
         let arguments = ProcessInfo.processInfo.arguments
-        if arguments.contains("-uiTesting") { return temporary(demo: arguments.contains("-demoData"), notifier: .silent) }
+        if arguments.contains("-uiTesting") {
+            var env = temporary(demo: arguments.contains("-demoData"), notifier: .silent)
+            if arguments.contains("-slowPairing") { env.pairDelay = 12 }
+            return env
+        }
         let fm = FileManager.default
         return AppEnvironment(
             folder: AppGroup.folder(),

@@ -7,9 +7,9 @@ import XCTest
 
 extension XCUIApplication {
     @MainActor
-    static func launched(demo: Bool = false, approval: Bool = false, tab: String? = "Files") -> XCUIApplication {
+    static func launched(demo: Bool = false, approval: Bool = false, tab: String? = "Files", slowPairing: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-uiTesting"] + (demo ? ["-demoData"] : []) + (approval ? ["-demoApproval"] : [])
+        app.launchArguments = ["-uiTesting"] + (demo ? ["-demoData"] : []) + (approval ? ["-demoApproval"] : []) + (slowPairing ? ["-slowPairing"] : [])
         app.launch()
         if let tab {
             let button = app.tabBars.buttons[tab]

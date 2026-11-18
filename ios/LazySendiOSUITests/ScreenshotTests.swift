@@ -134,12 +134,13 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertFalse(app.item("receive.paired").exists)
     }
 
-    // A well-formed code for a computer that is not there (192.0.2.1 is reserved for documentation), pasted in as text.
+    // A well-formed code for a computer that is not there, typed in as text; -slowPairing holds the pairing for a while so the
+    // waiting screen can be looked at before it fails.
     private static let unreachableCode = "lazysend://pair?v=1&id=office-pc-1&n=Office%20PC&fp=AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE&a=192.0.2.1&p=9&t=AgICAgICAgICAgICAgICAg"
 
     @MainActor
     private func assertWaitingScreenStays(from tab: String, button: String) {
-        let app = XCUIApplication.launched(tab: nil)
+        let app = XCUIApplication.launched(tab: nil, slowPairing: true)
         if tab != "Camera" { app.tabBars.buttons[tab].tap() }
         let open = app.item(button)
         XCTAssertTrue(open.waitForExistence(timeout: 30))
