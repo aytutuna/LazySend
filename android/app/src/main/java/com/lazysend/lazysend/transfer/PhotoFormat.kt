@@ -3,7 +3,6 @@ package com.lazysend.lazysend.transfer
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Canvas
 import android.graphics.ImageDecoder
 import android.graphics.Matrix
 import android.media.ExifInterface
@@ -22,12 +21,17 @@ enum class PhotoFormat(val mime: String?, val extension: String?) {
 }
 
 /**
- * Pictures in a format of their own are converted. Left as they are: a GIF or an animated picture (which would lose its frames),
- * a vector picture, AVIF, and camera raw files (image/x-...), which are not photos to flatten.
+ * JPEG is for phone photos in HEIC, HEIF or WebP; a PNG, which may be a screenshot, stays lossless and nothing with transparency is
+ * flattened. PNG converts any still picture. Left as they are under both: a GIF or an animated picture (which would lose its
+ * frames), a vector picture, AVIF, and camera raw files (image/x-...).
  */
-fun converts(format: PhotoFormat, mime: String?): Boolean =
-    format.mime != null && mime != null && mime.startsWith("image/") && mime != format.mime &&
-        mime !in KEPT && !(mime.startsWith("image/x-") && mime != "image/x-ms-bmp")
+fun converts(format: PhotoFormat, mime: String?): Boolean = mime != null && when (format) {
+    PhotoFormat.Original -> false
+    PhotoFormat.Jpeg -> mime in JPEG_SOURCES
+    PhotoFormat.Png -> mime.startsWith("image/") && mime != "image/png" && mime !in KEPT && !(mime.startsWith("image/x-") && mime != "image/x-ms-bmp")
+}
+
+private val JPEG_SOURCES = setOf("image/heic", "image/heif", "image/webp")
 
 private val KEPT = setOf("image/gif", "image/svg+xml", "image/avif", "image/avif-sequence", "image/apng")
 
@@ -48,6 +52,16 @@ fun isAnimated(mime: String?, head: ByteArray): Boolean = when (mime) {
         control >= 0 && (data < 0 || control < data)
     }
     else -> false
+}
+
+/** Whether the start of a WebP file says it has transparency (the alpha flag of its extended header, or of a lossless one). */
+fun hasAlpha(mime: String?, head: ByteArray): Boolean {
+    if (mime != "image/webp" || head.size < 25 || String(head, 0, 4, Charsets.ISO_8859_1) != "RIFF" || String(head, 8, 4, Charsets.ISO_8859_1) != "WEBP") return false
+    return when (String(head, 12, 4, Charsets.ISO_8859_1)) {
+        "VP8X" -> head[20].toInt() and 0x10 != 0
+        "VP8L" -> head[24].toInt() and 0x10 != 0
+        else -> false
+    }
 }
 
 private const val JPEG_QUALITY = 92
@@ -86,8 +100,8 @@ fun convertPhoto(context: Context, source: Uri, name: String, mime: String?, for
     var folder: File? = null
     return try {
         val head = context.contentResolver.openInputStream(source)?.use { it.readNBytes(64 * 1024) } ?: return null
-        if (isAnimated(mime, head)) return null
-        val bitmap = decode(context, source)?.let { flatten(it, format) } ?: return null
+        if (isAnimated(mime, head) || (format == PhotoFormat.Jpeg && hasAlpha(mime, head))) return null
+        val bitmap = decode(context, source) ?: return null
         folder = File(parent, UUID.randomUUID().toString()).also { it.mkdirs() }
         val out = File(folder, convertedName(name, format))
         out.outputStream().use {
@@ -122,17 +136,6 @@ private fun copyExif(context: Context, source: Uri, target: File) {
     } catch (e: Exception) {
         // The picture is fine without them.
     }
-}
-
-// A JPEG has no transparency, so a picture that has some is put on white.
-private fun flatten(bitmap: Bitmap, format: PhotoFormat): Bitmap {
-    if (format == PhotoFormat.Png || !bitmap.hasAlpha()) return bitmap
-    val flat = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
-    Canvas(flat).apply {
-        drawColor(android.graphics.Color.WHITE)
-        drawBitmap(bitmap, 0f, 0f, null)
-    }
-    return flat
 }
 
 // The orientation is applied to the pixels, since neither a PNG nor a re-encoded file should depend on a tag.

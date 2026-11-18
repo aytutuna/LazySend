@@ -8,8 +8,26 @@ import org.junit.Test
 class PhotoFormatTest {
     @Test
     fun picturesInAnotherFormatAreConverted() {
-        for (mime in listOf("image/heic", "image/webp", "image/png", "image/bmp")) assertTrue(mime, converts(PhotoFormat.Jpeg, mime))
+        for (mime in listOf("image/heic", "image/heif", "image/webp")) assertTrue(mime, converts(PhotoFormat.Jpeg, mime))
         for (mime in listOf("image/heic", "image/webp", "image/jpeg", "image/bmp")) assertTrue(mime, converts(PhotoFormat.Png, mime))
+    }
+
+    @Test
+    fun aPngOrAnotherStillPictureIsNotMadeIntoAJpeg() {
+        for (mime in listOf("image/png", "image/bmp", "image/x-ms-bmp", "image/jpeg")) assertFalse(mime, converts(PhotoFormat.Jpeg, mime))
+    }
+
+    @Test
+    fun aWebpWithTransparencyIsLeftAloneUnderJpeg() {
+        val plain = "RIFF\u0000\u0000\u0000\u0000WEBPVP8X\u000a\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000".toByteArray(Charsets.ISO_8859_1)
+        val extended = plain.copyOf().also { it[20] = 0x10 }
+        val lossless = "RIFF\u0000\u0000\u0000\u0000WEBPVP8L\u0000\u0000\u0000\u0000\u002f\u0000\u0000\u0000\u0000".toByteArray(Charsets.ISO_8859_1)
+        val losslessAlpha = lossless.copyOf().also { it[24] = 0x10 }
+        assertFalse(hasAlpha("image/webp", plain))
+        assertTrue(hasAlpha("image/webp", extended))
+        assertFalse(hasAlpha("image/webp", lossless))
+        assertTrue(hasAlpha("image/webp", losslessAlpha))
+        assertFalse(hasAlpha("image/png", extended))
     }
 
     @Test
@@ -39,7 +57,7 @@ class PhotoFormatTest {
         for (format in listOf(PhotoFormat.Jpeg, PhotoFormat.Png)) {
             for (mime in listOf("image/x-adobe-dng", "image/x-canon-cr2", "image/x-sony-arw", "image/avif", "image/apng")) assertFalse("$format $mime", converts(format, mime))
         }
-        assertTrue(converts(PhotoFormat.Jpeg, "image/x-ms-bmp"))
+        assertTrue(converts(PhotoFormat.Png, "image/x-ms-bmp"))
     }
 
     @Test
