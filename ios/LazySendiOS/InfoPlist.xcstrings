@@ -1,0 +1,70 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "NSCameraUsageDescription" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lazy Send uses the camera to take photos you send to your computer and to read the pairing code on its screen."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lazy Send, bilgisayarınıza göndereceğiniz fotoğrafları çekmek ve ekranındaki eşleştirme kodunu okumak için kamerayı kullanır."
+          }
+        }
+      }
+    },
+    "NSLocalNetworkUsageDescription" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lazy Send looks for your computer on your local network, so you can send things to it and receive things from it, and lets other phones on the network connect to this one while the app is open."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lazy Send, bilgisayarınıza bir şey gönderebilmeniz ve ondan alabilmeniz için yerel ağınızda bilgisayarınızı arar; uygulama açıkken diğer telefonların bu telefona bağlanmasına da izin verir."
+          }
+        }
+      }
+    },
+    "NSPhotoLibraryAddUsageDescription" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lazy Send saves the photos and videos your computer sends, and the photos you take with it, to your photo library."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lazy Send, bilgisayarınızın gönderdiği fotoğraf ve videoları ve onunla çektiğiniz fotoğrafları fotoğraf arşivinize kaydeder."
+          }
+        }
+      }
+    },
+    "NSPhotoLibraryUsageDescription" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lazy Send sends the photos and videos you choose to your computer. Choosing All photos and videos sends the whole library."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lazy Send, seçtiğiniz fotoğraf ve videoları bilgisayarınıza gönderir. Tüm fotoğraflar ve videolar'ı seçmek tüm arşivi gönderir."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

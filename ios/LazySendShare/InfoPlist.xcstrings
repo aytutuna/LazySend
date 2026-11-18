@@ -1,0 +1,22 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "NSLocalNetworkUsageDescription" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lazy Send looks for your computer on your local network, so you can send things to it."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lazy Send, bilgisayarınıza bir şey gönderebilmeniz için yerel ağınızda bilgisayarınızı arar."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}
