@@ -53,13 +53,12 @@ import com.lazysend.lazysend.ui.PairScreen
 import com.lazysend.lazysend.ui.PcsScreen
 import com.lazysend.lazysend.ui.PhotoAccess
 import com.lazysend.lazysend.ui.ReceiveScreen
-import com.lazysend.lazysend.ui.SendScreen
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 
 private enum class Tab { Camera, Files, Clipboard }
 
-private enum class Screen { Main, Pair, Send, Pcs, Receive }
+private enum class Screen { Main, Pair, Pcs, Receive }
 
 class MainActivity : ComponentActivity() {
     private val model: AppViewModel by viewModels()
@@ -93,7 +92,6 @@ class MainActivity : ComponentActivity() {
         var cameraAsked by rememberSaveable { mutableStateOf(false) }
         val state by model.state.collectAsState()
         val pair by model.pair.collectAsState()
-        val notice by model.notice.collectAsState()
 
         val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
             localNetworkDenied = isLocalNetworkDenied(this@MainActivity)
@@ -121,8 +119,8 @@ class MainActivity : ComponentActivity() {
         }
         fun requestPhotos() = photoPermissions.launch(photoPermissionList())
 
-        val files = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris -> send(uris) }
-        val photos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris -> send(uris) }
+        val files = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris -> model.sendPicked(uris, photos = false) }
+        val photos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris -> model.sendPicked(uris, photos = true) }
 
         // Receiving runs while this screen is in front. Leaving the app only declines what waits; the code is closed when the person goes back.
         LaunchedEffect(screen) {
@@ -195,6 +193,8 @@ class MainActivity : ComponentActivity() {
                         onTaken = model::photoTaken,
                         onFailed = model::cameraFailed,
                         onClearProblem = model::clearCameraProblem,
+                        format = state.format,
+                        onFormat = model::photoFormat,
                     )
                     Tab.Clipboard -> ClipboardScreen(
                         target = target,
@@ -215,7 +215,9 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onPcs = { screen = Screen.Pcs },
                                 onReceive = { screen = Screen.Receive },
-                                onSend = { screen = Screen.Send },
+                                onPhotos = { photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) },
+                                onFiles = { files.launch("*/*") },
+                                onFormat = model::photoFormat,
                                 onSelect = model::select,
                                 onGallery = {
                                     if (photoAccess(this@MainActivity) == PhotoAccess.None) {
@@ -245,23 +247,6 @@ class MainActivity : ComponentActivity() {
                             onCode = model::pair,
                             onRetry = model::startPairing,
                             onBack = { screen = Screen.Main },
-                        )
-                        Screen.Send -> SendScreen(
-                            pcName = state.pcs.firstOrNull { it.id == state.selected }?.name.orEmpty(),
-                            notice = notice,
-                            onText = model::sendText,
-                            onFiles = {
-                                model.clearNotice()
-                                files.launch("*/*")
-                            },
-                            onPhotos = {
-                                model.clearNotice()
-                                photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
-                            },
-                            onBack = {
-                                model.clearNotice()
-                                screen = Screen.Main
-                            },
                         )
                         Screen.Receive -> ReceiveScreen(
                             receive,
@@ -305,12 +290,6 @@ class MainActivity : ComponentActivity() {
 
     // From Android 17 other devices on the network reach this phone only with the local network permission.
     private var localNetworkDenied by mutableStateOf(false)
-
-    private fun send(uris: List<Uri>) {
-        model.selectedGuest()?.let { return SendService.queueFiles(this, it.id, uris) }
-        val pc = model.selectedPc() ?: return
-        SendService.sendFiles(this, pc.id, uris)
-    }
 
     private fun share(text: String) {
         startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), null))

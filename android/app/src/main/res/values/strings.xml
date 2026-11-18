@@ -23,7 +23,6 @@
 
     <string name="empty_title">Nothing paired yet</string>
     <string name="empty_body">Open Lazy Send on your PC, choose Pair a phone and scan the code it shows.</string>
-    <string name="timeline_empty">What you send and receive shows up here.</string>
     <string name="connected_over">Connected over %1$s</string>
     <string name="not_reachable">%1$s is not reachable</string>
     <string name="sent_to">To %1$s</string>
@@ -45,13 +44,6 @@
     <string name="allow_all_photos">Allow all</string>
     <string name="photo_permission_needed">Lazy Send needs access to your photos and videos to send them.</string>
 
-    <string name="send_title">Send to %1$s</string>
-    <string name="send_text_hint">Type or paste text or a link</string>
-    <string name="send_text_button">Send text</string>
-    <string name="pick_files">Pick files</string>
-    <string name="pick_photos">Pick photos</string>
-    <string name="note_sent">Sent</string>
-    <string name="note_queued">Queued. It is delivered when the other device checks in.</string>
 
     <string name="pair_title">Pair with your PC</string>
     <string name="pair_scan_hint">Point the camera at the code on your PC.</string>
@@ -97,6 +89,15 @@
     <string name="remove_guest_body">%1$s is forgotten here, and what waited for it is dropped.</string>
     <string name="gallery_received">%1$d received</string>
 
+    <string name="files_empty_title">Nothing shared yet</string>
+    <string name="files_empty_body">Photos and files you send or receive show up here.</string>
+    <string name="add_description">Add</string>
+    <string name="add_photos">Photos</string>
+    <string name="add_files">Files</string>
+    <string name="format_menu">Photo format: %1$s</string>
+    <string name="format_jpeg">JPEG</string>
+    <string name="format_original">Original</string>
+    <string name="format_png">PNG</string>
     <string name="copied_from">Copied from %1$s</string>
 
     <string name="tab_camera">Camera</string>

@@ -56,6 +56,9 @@ class ScreenshotsTest {
     }
 
     @Test
+    fun filesEmpty() = capture("files-empty") { MainScreen(MainState(pcs, "desktop-0001", emptyList()), MainActions()) }
+
+    @Test
     fun galleryProgress() = capture("gallery-sync") {
         MainScreen(MainState(pcs, "desktop-0001", listOf(timeline.first()), PhotoAccess.Partial), MainActions())
     }
@@ -79,9 +82,6 @@ class ScreenshotsTest {
 
     @Test
     fun pairDeclined() = capture("pair-declined") { PairScreen(PairUi.Failed("Pairing was declined on the computer."), { _, _ -> }, {}, {}, scanner = false) }
-
-    @Test
-    fun sendScreen() = capture("send") { SendScreen("Aytu's PC", null, {}, {}, {}, {}) }
 
     @Test
     fun pcsScreen() = capture("pcs") { PcsScreen(pcs, {}, {}, {}) }

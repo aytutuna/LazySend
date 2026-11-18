@@ -20,6 +20,9 @@ import com.lazysend.lazysend.link.LinkException
 import com.lazysend.lazysend.link.PairingCode
 import com.lazysend.lazysend.link.PairingCodeException
 import com.lazysend.lazysend.transfer.Pasted
+import com.lazysend.lazysend.transfer.PhotoFormat
+import com.lazysend.lazysend.transfer.convertPhoto
+import com.lazysend.lazysend.transfer.convertedName
 import com.lazysend.lazysend.transfer.SendService
 import com.lazysend.lazysend.transfer.clipboardName
 import com.lazysend.lazysend.transfer.pasted
@@ -60,7 +63,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var pairJob: Job? = null
 
     val pair = MutableStateFlow<PairUi>(PairUi.Scanning)
-    val notice = MutableStateFlow<String?>(null)
 
     /** The last photo the camera took, which the camera tab shows while it is sent. */
     val shot = MutableStateFlow<Shot?>(null)
@@ -70,8 +72,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     val state: StateFlow<MainState> = combine(
         combine(graph.pcs.pcs, graph.host.core.guests.guests, graph.host.core.feed.progress) { pcs, guests, feeds -> Triple(pcs, guests, feeds) },
-        graph.timeline.entries, graph.connector.current, selected, photoAccess,
-    ) { (pcs, guests, feeds), entries, links, pick, access ->
+        graph.timeline.entries, graph.connector.current, selected, combine(photoAccess, graph.settings.photoFormat) { access, format -> access to format },
+    ) { (pcs, guests, feeds), entries, links, pick, (access, format) ->
         val rows = pcs.map { PcRow(it.id, it.name, links[it.id]?.label) } + guests.map { PcRow(GUEST + it.id, it.name, null, guest = true) }
         val chosen = pick?.takeIf { id -> rows.any { it.id == id } } ?: rows.firstOrNull()?.id
         MainState(
@@ -79,6 +81,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             selected = chosen,
             entries = entries,
             photoAccess = access,
+            format = format,
             feed = chosen?.takeIf { it.startsWith(GUEST) }?.let { feeds[it.removePrefix(GUEST)] },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MainState(emptyList(), null, emptyList()))
@@ -97,22 +100,48 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun saveCameraPhotos(on: Boolean) = graph.settings.saveCameraPhotos(on)
 
+    fun photoFormat(format: PhotoFormat) = graph.settings.photoFormat(format)
+
+    /**
+     * Sends what was picked in the Files tab at once to the selected device. Photos are converted to the chosen format as each one is
+     * sent, by the sending service, so leaving the screen does not lose the pick; files are sent exactly as they are.
+     */
+    fun sendPicked(uris: List<Uri>, photos: Boolean) {
+        val context = getApplication<Application>()
+        val format = graph.settings.photoFormat.value.takeIf { photos }
+        val guest = selectedGuest()
+        val pc = selectedPc()
+        when {
+            guest != null -> SendService.queueFiles(context, guest.id, uris, format = format)
+            pc != null -> SendService.sendFiles(context, pc.id, uris, format = format)
+        }
+    }
+
     /** Where the next camera photo goes, named by the time and by milliseconds too when the plain name is taken. */
     suspend fun newPhotoFile(): File = withContext(Dispatchers.IO) {
         val dir = cacheFolder("camera")
         val sent = graph.timeline.entries.value
-        File(dir, photoName(System.currentTimeMillis()) { name -> File(dir, name).exists() || sent.any { it.direction == Direction.Sent && it.title == name } })
+        // The shot is captured as a JPEG and may be converted after, so both names must be free.
+        fun taken(name: String) = File(dir, name).exists() || sent.any { it.direction == Direction.Sent && it.title == name }
+        File(dir, photoName(System.currentTimeMillis()) { name -> taken(name) || taken(convertedName(name, PhotoFormat.Png)) })
     }
 
     /** A photo the camera saved: it goes at once to the selected device, to be put on its clipboard. */
     fun photoTaken(file: File) {
         val at = System.currentTimeMillis()
-        shot.value = Shot(file.name, null)
+        val format = graph.settings.photoFormat.value
         viewModelScope.launch(Dispatchers.IO) {
+            // The camera's JPEG is already upright and tagged; only a PNG is made from it, with the turn applied to the pixels.
+            val ready = if (format == PhotoFormat.Png) {
+                convertPhoto(getApplication(), Uri.fromFile(file), file.name, "image/jpeg", format, file.parentFile!!)?.also { file.delete() } ?: file
+            } else {
+                file
+            }
+            shot.value = Shot(ready.name, null)
             // Saved first, so a send that fails never loses the photo.
-            if (graph.settings.saveCameraPhotos.value) saveToGallery(file)
-            if (!sendClipped(file, cameraProblem, at)) return@launch
-            shot.value = Shot(file.name, jpegThumbnail(file))
+            if (graph.settings.saveCameraPhotos.value) saveToGallery(ready)
+            if (!sendClipped(ready, cameraProblem, at)) return@launch
+            shot.value = Shot(ready.name, jpegThumbnail(ready))
         }
     }
 
@@ -188,7 +217,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun cacheFolder(name: String): File {
         val dir = File(getApplication<Application>().cacheDir, name).apply { mkdirs() }
-        dir.listFiles()?.filter { System.currentTimeMillis() - it.lastModified() > DAY }?.forEach { it.delete() }
+        dir.listFiles()?.filter { System.currentTimeMillis() - it.lastModified() > DAY }?.forEach { it.deleteRecursively() }
         return dir
     }
 
@@ -216,7 +245,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun saveToGallery(file: File) {
         try {
-            val part = graph.files.create(file.name, "image/jpeg")
+            val part = graph.files.create(file.name, if (file.extension == "png") "image/png" else "image/jpeg")
             graph.files.append(part).use { out -> file.inputStream().use { it.copyTo(out) } }
             graph.files.finish(part, file.lastModified())
         } catch (e: Exception) {
@@ -274,22 +303,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 ids.forEach { id -> graph.pcs.get(id)?.let { launch { graph.receiver.watch(it) } } }
             }
         }
-    }
-
-    fun sendText(text: String) {
-        val guest = selectedGuest()
-        val pc = selectedPc()
-        viewModelScope.launch(Dispatchers.IO) {
-            notice.value = when {
-                guest != null -> graph.host.queueText(guest, text) ?: getApplication<Application>().getString(R.string.note_queued)
-                pc != null -> graph.sender.sendText(pc, text) ?: getApplication<Application>().getString(R.string.note_sent)
-                else -> return@launch
-            }
-        }
-    }
-
-    fun clearNotice() {
-        notice.value = null
     }
 
     fun startPairing() {

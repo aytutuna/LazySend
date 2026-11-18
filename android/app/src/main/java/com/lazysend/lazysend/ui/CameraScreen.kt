@@ -15,6 +15,7 @@ import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
+import androidx.camera.core.ZoomState
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
@@ -37,7 +38,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.Observer
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
 import com.lazysend.lazysend.R
@@ -76,7 +77,9 @@ import com.lazysend.lazysend.data.Direction
 import com.lazysend.lazysend.data.EntryKind
 import com.lazysend.lazysend.data.EntryState
 import com.lazysend.lazysend.data.TimelineEntry
+import com.lazysend.lazysend.transfer.PhotoFormat
 import java.io.File
+import kotlin.math.abs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -103,6 +106,8 @@ fun CameraScreen(
     onTaken: (File) -> Unit,
     onFailed: (String) -> Unit,
     onClearProblem: () -> Unit,
+    format: PhotoFormat,
+    onFormat: (PhotoFormat) -> Unit,
 ) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current
@@ -141,6 +146,8 @@ fun CameraScreen(
             try {
                 camera = bound.bindToLifecycle(lifecycle, if (front) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA, preview, capture)
                 shownFront = front
+                // Starts at 1x, the main lens.
+                camera?.cameraControl?.setZoomRatio(1f)
                 broken = false
             } catch (e: Exception) {
                 // The camera in use stays; only a first setup that fails means there is none.
@@ -158,6 +165,14 @@ fun CameraScreen(
             provider?.unbind(preview, capture)
             camera = null
         }
+    }
+
+    var zoom by remember { mutableStateOf<ZoomState?>(null) }
+    DisposableEffect(camera) {
+        val live = camera?.cameraInfo?.zoomState
+        val observer = Observer<ZoomState> { zoom = it }
+        live?.observe(lifecycle, observer)
+        onDispose { live?.removeObserver(observer) }
     }
 
     // The shot is tagged for how the phone is held, also when the screen's rotation is locked.
@@ -239,14 +254,17 @@ fun CameraScreen(
             Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (hasFlash) FlashButton(flash) { flash = nextFlash(flash) }
                 Box(Modifier.weight(1f))
-                targets.firstOrNull { it.id == selected }?.let { Target(it, targets, onSelect) }
+                FormatChip(format, onFormat)
+                Box(Modifier.padding(start = 8.dp))
+                targets.firstOrNull { it.id == selected }?.let { TargetChip(it, targets, onSelect, Scrim, Color.White) }
             }
             problem?.let {
                 Text(it, Modifier.padding(8.dp).background(MaterialTheme.colorScheme.error, RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 6.dp), color = MaterialTheme.colorScheme.onError, style = MaterialTheme.typography.bodySmall)
             }
             Box(Modifier.weight(1f))
             val ready = camera != null && !busy && targets.isNotEmpty()
-            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp), verticalAlignment = Alignment.Top) {
+            LensPills(zoom) { camera?.cameraControl?.setZoomRatio(it) }
+            Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 20.dp), verticalAlignment = Alignment.Top) {
                 Box(Modifier.weight(1f), contentAlignment = Alignment.TopStart) { Thumb(shot, entries, targets.firstOrNull { it.id == selected }?.name, onHistory) }
                 Shutter(ready) {
                     onClearProblem()
@@ -305,26 +323,40 @@ private fun FlashButton(mode: Int, onClick: () -> Unit) {
 }
 
 @Composable
-private fun Target(current: PcRow, all: List<PcRow>, onSelect: (String) -> Unit) {
+private fun FormatChip(format: PhotoFormat, onFormat: (PhotoFormat) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         Text(
-            current.name,
+            formatLabel(format),
             Modifier.clip(RoundedCornerShape(50)).background(Scrim).clickable { open = true }.padding(horizontal = 14.dp, vertical = 8.dp),
             color = Color.White,
             style = MaterialTheme.typography.labelLarge,
         )
         DropdownMenu(open, { open = false }) {
-            all.forEach { row ->
-                DropdownMenuItem(
-                    text = { Text(row.name) },
-                    trailingIcon = { if (row.id == current.id) Icon(painterResource(R.drawable.ic_check), null) },
-                    onClick = {
-                        open = false
-                        onSelect(row.id)
-                    },
-                )
+            FormatItems(format) {
+                open = false
+                onFormat(it)
             }
+        }
+    }
+}
+
+@Composable
+private fun LensPills(state: ZoomState?, onZoom: (Float) -> Unit) {
+    val now = state?.zoomRatio ?: 1f
+    val stops = lensStops(state?.minZoomRatio ?: 1f, state?.maxZoomRatio ?: 1f)
+    // While a pinch is between two lenses the live value is shown in its place.
+    val shown = if (stops.any { abs(it - now) < 0.05f }) stops else (stops + now).sorted()
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+        shown.forEach { value ->
+            val selected = abs(value - now) < 0.05f
+            Text(
+                zoomLabel(value),
+                Modifier.padding(horizontal = 4.dp).clip(CircleShape).background(if (selected) Color.White else Scrim)
+                    .clickable { onZoom(value) }.padding(horizontal = 12.dp, vertical = 6.dp),
+                color = if (selected) Color.Black else Color.White,
+                style = MaterialTheme.typography.labelLarge,
+            )
         }
     }
 }

@@ -5,4 +5,5 @@
     <external-path name="received_movies" path="Movies/Lazy Send/" />
     <cache-path name="camera" path="camera/" />
     <cache-path name="clipboard" path="clipboard/" />
+    <cache-path name="converted" path="converted/" />
 </paths>
