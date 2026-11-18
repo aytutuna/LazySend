@@ -2,6 +2,7 @@
 import LazySendKit
 import LazySendServer
 import SwiftUI
+import UIKit
 
 struct PcsView: View {
     @EnvironmentObject private var model: AppModel
@@ -54,6 +55,14 @@ struct PcsView: View {
                     get: { model.savesCameraToPhotos },
                     set: { model.setSavesCameraToPhotos($0) }))
                     .accessibilityIdentifier("pcs.saveCameraPhotos")
+                if model.cameraPhotosDenied {
+                    Text("Photos access is off, so camera photos are not saved.").foregroundStyle(.secondary)
+                    Button("Open Settings") {
+                        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                        UIApplication.shared.open(url, options: [:], completionHandler: nil)
+                    }
+                    .accessibilityIdentifier("pcs.photosSettings")
+                }
             }
         }
         .navigationTitle("Paired devices")

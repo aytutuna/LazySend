@@ -72,6 +72,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var links: [String: LinkKind] = [:]
     @Published private(set) var savesToPhotos: Bool
     @Published private(set) var savesCameraToPhotos: Bool
+    /// Photos add access was refused when "Save camera photos to Photos" was turned on.
+    @Published private(set) var cameraPhotosDenied = false
     @Published private(set) var photoNotice: PhotoNotice?
     @Published private(set) var galleryRunning = false
     @Published private(set) var feeds: [String: GalleryFeedProgress] = [:]
@@ -318,6 +320,7 @@ final class AppModel: ObservableObject {
     func setSavesCameraToPhotos(_ on: Bool) {
         guard on else {
             savesCameraToPhotos = false
+            cameraPhotosDenied = false
             env.defaults.set(false, forKey: Keys.cameraPhotos)
             return
         }
@@ -325,6 +328,7 @@ final class AppModel: ObservableObject {
             let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
             let allowed = status == .authorized || status == .limited
             self.savesCameraToPhotos = allowed
+            self.cameraPhotosDenied = !allowed
             self.env.defaults.set(allowed, forKey: Keys.cameraPhotos)
         }
     }
