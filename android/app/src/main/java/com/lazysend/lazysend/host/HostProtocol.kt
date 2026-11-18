@@ -25,6 +25,9 @@ const val MAX_GUESTS = 16
 const val MAX_QUEUED = 1000
 const val MAX_REPLY_ITEMS = 100
 const val MAX_REPLY_INLINE = 4L * 1024 * 1024
+
+/** An outbox item queued longer ago than this is listed without its clip flag. */
+const val CLIP_MAX_AGE_MS = 5 * 60 * 1000L
 const val MAX_NAME_BYTES = 128
 const val SERVICE_TYPE = "_lazysend._tcp"
 

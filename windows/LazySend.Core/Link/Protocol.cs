@@ -52,6 +52,8 @@ public static class Protocol
     public const int MaxOutboxItemsPerReply = 100;
     /// <summary>Text and links sent inline in one outbox reply; a reply holds at least one item whatever its size.</summary>
     public const int MaxOutboxInlineBytes = 4 * 1024 * 1024;
+    /// <summary>An outbox item queued longer ago than this is listed without its clip flag.</summary>
+    public static readonly TimeSpan ClipMaxAge = TimeSpan.FromMinutes(5);
 
     public static readonly JsonSerializerOptions Json = new()
     {

@@ -172,6 +172,8 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
             Directory.CreateDirectory(directory);
             return File.Exists(part) ? new FileInfo(part).Length : 0;
         });
+        // A download that carries on from a part left by an earlier try is not a fresh arrival, so it does not take the clipboard.
+        bool resumed = have > 0;
         if (size >= 0 && have > size)
         {
             Local(() => File.Delete(part));
@@ -237,7 +239,7 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
             }
         }
         _fullReported = false;
-        FileReceived?.Invoke(this, new ReceivedFile(host.Id, host.Name, path, size, GalleryIndex.IsValidSourceId(item.SourceId) ? item.SourceId : null, item.Clip == true));
+        FileReceived?.Invoke(this, new ReceivedFile(host.Id, host.Name, path, size, GalleryIndex.IsValidSourceId(item.SourceId) ? item.SourceId : null, item.Clip == true && !resumed));
     }
 
     private static async Task<int> ReadWithinAsync(Stream body, byte[] buffer, CancellationToken cancellation)

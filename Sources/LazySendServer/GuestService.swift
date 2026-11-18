@@ -231,7 +231,7 @@ public final class GuestService: @unchecked Sendable {
         }.value
         let send = PendingSend(hostId: id, sendId: sendId, path: url.standardizedFileURL.path, size: request.size ?? 0,
                                modified: PendingSend.seconds(modified ?? Date(timeIntervalSince1970: 0)), sha256: request.sha256 ?? "",
-                               bookmark: bookmark, clip: clip)
+                               bookmark: bookmark)
         try await sendPending(send, url: url, request: request, onProgress: onProgress)
     }
 
@@ -262,7 +262,7 @@ public final class GuestService: @unchecked Sendable {
             throw ResumeError.changed(url.lastPathComponent)
         }
         let request = ItemRequest(kind: "file", name: url.lastPathComponent, size: send.size, mime: values?.contentType?.preferredMIMEType,
-                                  modified: ISO8601DateFormatter().string(from: modified), sha256: send.sha256, sendId: send.sendId, clip: send.clip)
+                                  modified: ISO8601DateFormatter().string(from: modified), sha256: send.sha256, sendId: send.sendId)
         try await sendPending(send, url: url, request: request, onProgress: onProgress)
     }
 

@@ -195,7 +195,7 @@ class Receiver(
         timeline.add(
             TimelineEntry(
                 id, previous?.time ?: clock(), Direction.Received, EntryKind.File, pc.name, name,
-                state = EntryState.Active, bytes = part.size, totalBytes = size, uri = part.uri, mime = item.mime, clip = item.clip == true,
+                state = EntryState.Active, bytes = part.size, totalBytes = size, uri = part.uri, mime = item.mime, clip = item.clip == true && previous == null,
             ),
         )
         try {

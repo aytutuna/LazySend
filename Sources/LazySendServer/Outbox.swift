@@ -27,7 +27,8 @@ public struct OutboxItem: Codable, Equatable, Identifiable, Sendable {
 
     var entry: OutboxEntry {
         OutboxEntry(id: id, kind: kind, text: text, url: url, name: name, size: size, mime: mime, sourceId: sourceId,
-                    taken: plausibleTaken.map { ISO8601DateFormatter().string(from: $0) }, clip: clip)
+                    taken: plausibleTaken.map { ISO8601DateFormatter().string(from: $0) },
+                    clip: clip == true && Date().timeIntervalSince(queued) <= LinkProtocol.clipMaxAge ? true : nil)
     }
 
     var inlineBytes: Int {

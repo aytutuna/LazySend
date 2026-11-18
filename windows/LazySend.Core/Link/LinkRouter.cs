@@ -367,7 +367,7 @@ public sealed class LinkRouter
         {
             long bytes = Encoding.UTF8.GetByteCount(item.Text ?? "") + Encoding.UTF8.GetByteCount(item.Url ?? "");
             if (entries.Count > 0 && (entries.Count >= Protocol.MaxOutboxItemsPerReply || inline + bytes > Protocol.MaxOutboxInlineBytes)) break;
-            entries.Add(item.ToEntry());
+            entries.Add(item.ToEntry(now));
             inline += bytes;
         }
         return LinkResponse.Json(200, new OutboxResponse(entries, entries.Count < items.Count ? true : null));

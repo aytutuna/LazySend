@@ -333,6 +333,29 @@ public class GuestConnectionTests
     }
 
     [Fact]
+    public async Task ADownloadThatCarriesOnFromAPartDoesNotClip()
+    {
+        await using var h = new Harness();
+        using var guest = new GuestRig(h);
+        var host = await guest.PairAsync();
+        string source = Path.Combine(h.Root, "half.bin");
+        byte[] content = RandomNumberGenerator.GetBytes(3000);
+        await File.WriteAllBytesAsync(source, content);
+        var item = h.Service.Outbox.QueueFile(guest.GuestId, source, clip: true);
+        string folder = Path.Combine(guest.Paths.DefaultReceiveRoot, "Test PC");
+        Directory.CreateDirectory(folder);
+        await File.WriteAllBytesAsync(Path.Combine(folder, item.Id + ".part"), content[..500]);
+        ReceivedFile? arrived = null;
+        guest.Service.Receiver.FileReceived += (_, file) => arrived = file;
+        using var client = await guest.Service.Connector.ConnectAsync(host.Id, CancellationToken.None);
+
+        await guest.Service.Receiver.CollectAsync(client, host.Id, 0, CancellationToken.None);
+
+        Assert.False(arrived?.Clip);
+        Assert.Equal(content, await File.ReadAllBytesAsync(arrived!.Path));
+    }
+
+    [Fact]
     public async Task PairingAgainKeepsWatchingWithTheNewSecret()
     {
         await using var h = new Harness();

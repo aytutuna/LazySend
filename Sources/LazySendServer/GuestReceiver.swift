@@ -17,6 +17,8 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
     private var parts: [String: URL] = [:]
     // The gallery files being written, so the timeline keeps one row open across slow files.
     private var galleryActive = Set<String>()
+    // Items that went on from a part left by an earlier try: not a fresh arrival, so they do not take the clipboard.
+    private var resumedParts = Set<String>()
     // The files finished lately, so one the host lists again because its acknowledgement was lost is only acknowledged.
     private var finished: [String] = []
     private var reportedStorage = false
@@ -89,6 +91,7 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
         lock.lock()
         handles[item.id] = handle
         parts[item.id] = part
+        if have > 0 { resumedParts.insert(item.id) }
         if item.gallerySource != nil { galleryActive.insert(item.id) }
         reportedStorage = false
         lock.unlock()
@@ -144,6 +147,7 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
         lock.lock()
         parts[item.id] = nil
         galleryActive.remove(item.id)
+        let resumed = resumedParts.remove(item.id) != nil
         reportedFull = false
         finished.append(item.id)
         if finished.count > GuestReceiver.finishedKept { finished.removeFirst(finished.count - GuestReceiver.finishedKept) }
@@ -155,7 +159,7 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
         }
         guard let host = host else { return }
         guest?.onFileReceived?(ReceivedFile(deviceId: host.id, deviceName: host.name, url: target, size: item.size ?? 0, sourceId: item.gallerySource,
-                                           clip: item.clip == true))
+                                           clip: item.clip == true && !resumed))
     }
 
     var isReceivingGallery: Bool {

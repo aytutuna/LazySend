@@ -10,6 +10,8 @@ public enum LinkProtocol {
     public static let chunkBytes = 8 * 1024 * 1024
     public static let galleryBatch = 1000
     public static let maxOutboxWait = 25
+    /// An outbox item queued longer ago than this (seconds) is listed without its clip flag.
+    public static let clipMaxAge: TimeInterval = 300
     public static let maxTextBytes = 1024 * 1024
     public static let maxAddresses = 8
     public static let serviceName = "lazysend"

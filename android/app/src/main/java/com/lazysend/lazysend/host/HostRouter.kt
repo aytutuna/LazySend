@@ -276,7 +276,7 @@ class HostRouter(
             val bytes = (item.text?.toByteArray()?.size ?: 0) + (item.url?.toByteArray()?.size ?: 0)
             if (entries.isNotEmpty() && (entries.size >= MAX_REPLY_ITEMS || inline + bytes > MAX_REPLY_INLINE)) break
             entries.add(
-                OutboxEntry(item.id, item.kind, item.text, item.url, item.name, item.size, item.mime, item.sourceId, item.taken?.let { Instant.ofEpochMilli(it) }?.takeIf { it.atZone(ZoneOffset.UTC).year in 1980..2100 }?.toString(), item.clip.takeIf { it }),
+                OutboxEntry(item.id, item.kind, item.text, item.url, item.name, item.size, item.mime, item.sourceId, item.taken?.let { Instant.ofEpochMilli(it) }?.takeIf { it.atZone(ZoneOffset.UTC).year in 1980..2100 }?.toString(), (item.clip && now - item.queued <= CLIP_MAX_AGE_MS).takeIf { it }),
             )
             inline += bytes
         }

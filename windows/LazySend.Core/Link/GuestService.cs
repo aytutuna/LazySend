@@ -198,7 +198,7 @@ public sealed class GuestService : IDisposable
     public async Task SendFileAsync(string hostId, string path, IProgress<long>? progress, CancellationToken cancellation, bool clip = false)
     {
         var request = HostSender.FileRequest(path) with { SendId = Protocol.NewSendId(), Clip = clip ? true : null };
-        var send = new PendingSend(hostId, request.SendId!, System.IO.Path.GetFullPath(path), request.Size!.Value, request.Modified!.Value, request.Sha256!, clip);
+        var send = new PendingSend(hostId, request.SendId!, System.IO.Path.GetFullPath(path), request.Size!.Value, request.Modified!.Value, request.Sha256!);
         await SendPendingAsync(send, request, progress, cancellation).ConfigureAwait(false);
     }
 
@@ -220,7 +220,7 @@ public sealed class GuestService : IDisposable
             _pending.Remove(send.SendId);
             throw new IOException($"{info.Name} is gone or has changed since it was left unfinished.");
         }
-        var request = new ItemRequest(ItemKind.File, Name: info.Name, Size: send.Size, Modified: send.Modified, Sha256: send.Sha256, SendId: send.SendId, Clip: send.Clip ? true : null);
+        var request = new ItemRequest(ItemKind.File, Name: info.Name, Size: send.Size, Modified: send.Modified, Sha256: send.Sha256, SendId: send.SendId);
         await SendPendingAsync(send, request, progress, cancellation).ConfigureAwait(false);
     }
 

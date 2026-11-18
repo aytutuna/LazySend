@@ -19,7 +19,7 @@ public sealed class OutboxItem
     public bool Clip { get; set; }
     public DateTimeOffset Queued { get; set; }
 
-    public OutboxEntry ToEntry() => new(Id, Kind, Text, Url, Name, Size, Mime, SourceId, Taken is { Year: >= 1980 and <= 2100 } taken ? taken.ToString("o", CultureInfo.InvariantCulture) : null, Clip ? true : null);
+    public OutboxEntry ToEntry(DateTimeOffset? now = null) => new(Id, Kind, Text, Url, Name, Size, Mime, SourceId, Taken is { Year: >= 1980 and <= 2100 } taken ? taken.ToString("o", CultureInfo.InvariantCulture) : null, Clip && (now ?? DateTimeOffset.UtcNow) - Queued <= Protocol.ClipMaxAge ? true : null);
 }
 
 public sealed class OutboxFile

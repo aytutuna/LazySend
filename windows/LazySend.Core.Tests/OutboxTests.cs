@@ -54,6 +54,21 @@ public class OutboxTests
     }
 
     [Fact]
+    public async Task ClipIsDroppedFromItemsQueuedMoreThanFiveMinutesAgo()
+    {
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+        h.Service.Outbox.QueueText(phone.Id, "old", clip: true);
+        h.Now += TimeSpan.FromMinutes(4);
+        h.Service.Outbox.QueueText(phone.Id, "newer", clip: true);
+        h.Now += TimeSpan.FromMinutes(2);
+
+        var items = (await PollAsync(phone, 0)).Items;
+
+        Assert.Equal([null, true], items.Select(i => i.Clip));
+    }
+
+    [Fact]
     public void OutboxFileWrittenBeforeGalleryFieldsStillLoads()
     {
         string path = Path.Combine(Path.GetTempPath(), "lazysend-outbox-" + Guid.NewGuid().ToString("N") + ".json");

@@ -1,7 +1,7 @@
 namespace LazySend.Core;
 
 /// <summary>A file sent to a computer that is not finished: enough to carry on after the app was closed.</summary>
-public sealed record PendingSend(string HostId, string SendId, string Path, long Size, DateTimeOffset Modified, string Sha256, bool Clip = false);
+public sealed record PendingSend(string HostId, string SendId, string Path, long Size, DateTimeOffset Modified, string Sha256);
 
 public sealed class PendingFile
 {

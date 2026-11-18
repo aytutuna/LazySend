@@ -11,7 +11,6 @@ public struct PendingSend: Codable, Equatable, Sendable {
     public var sha256: String
     /// Security-scoped, so a sandboxed app can open a file it was given outside its container again.
     public var bookmark: Data?
-    public var clip: Bool?
 
     static func seconds(_ date: Date) -> Int64 {
         Int64(date.timeIntervalSince1970.rounded(.down))
