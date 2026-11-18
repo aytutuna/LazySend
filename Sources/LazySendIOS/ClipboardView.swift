@@ -60,6 +60,8 @@ struct ClipboardView: View {
     let pair: () -> Void
     @State private var problem: String?
     @State private var preview: URL?
+    @State private var text = ""
+    @FocusState private var typing: Bool
 
     private static let kinds: [UTType] = [.image, .url, .plainText]
 
@@ -78,6 +80,18 @@ struct ClipboardView: View {
                             if let problem {
                                 Text(problem).foregroundStyle(.red)
                             }
+                        }
+                        .padding(.vertical, 4)
+                        VStack(alignment: .leading, spacing: 10) {
+                            TextField("Type something to copy on \(target.name)", text: $text, axis: .vertical)
+                                .lineLimit(1...6)
+                                .focused($typing)
+                                .submitLabel(.send)
+                                .accessibilityIdentifier("clip.text")
+                            Button("Send") { sendText(to: target) }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                .accessibilityIdentifier("clip.send")
                         }
                         .padding(.vertical, 4)
                     } else {
@@ -119,6 +133,18 @@ struct ClipboardView: View {
             } catch {
                 problem = error.localizedDescription
             }
+        }
+    }
+
+    // A lone web address goes as a link and anything else as text, which sendNote decides.
+    private func sendText(to target: AppModel.Target) {
+        do {
+            try model.sendNote(text, to: target, clip: true)
+            text = ""
+            typing = false
+            problem = nil
+        } catch {
+            problem = error.localizedDescription
         }
     }
 
