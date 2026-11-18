@@ -467,7 +467,7 @@ public final class LinkRouter: @unchecked Sendable {
         for item in items {
             let bytes = item.inlineBytes
             if !entries.isEmpty && (entries.count >= Limits.maxOutboxItemsPerReply || inline + bytes > Limits.maxOutboxInlineBytes) { break }
-            entries.append(item.entry)
+            entries.append(item.listed(at: now))
             inline += bytes
         }
         return .json(200, OutboxReply(items: entries, more: entries.count < items.count))

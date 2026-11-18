@@ -25,10 +25,13 @@ public struct OutboxItem: Codable, Equatable, Identifiable, Sendable {
         return taken
     }
 
-    var entry: OutboxEntry {
+    var entry: OutboxEntry { listed(at: Date()) }
+
+    /// What the guest is told of the item at `now`; the clip flag is left out once the item is older than `LinkProtocol.clipMaxAge`.
+    func listed(at now: Date) -> OutboxEntry {
         OutboxEntry(id: id, kind: kind, text: text, url: url, name: name, size: size, mime: mime, sourceId: sourceId,
                     taken: plausibleTaken.map { ISO8601DateFormatter().string(from: $0) },
-                    clip: clip == true && Date().timeIntervalSince(queued) <= LinkProtocol.clipMaxAge ? true : nil)
+                    clip: clip == true && now.timeIntervalSince(queued) <= LinkProtocol.clipMaxAge ? true : nil)
     }
 
     var inlineBytes: Int {

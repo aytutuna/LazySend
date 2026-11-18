@@ -58,10 +58,11 @@ final class OutboxLinkTests: XCTestCase {
     func testClipIsDroppedFromItemsQueuedMoreThanFiveMinutesAgo() {
         var item = OutboxItem(kind: "text", text: "x", clip: true)
         XCTAssertEqual(item.entry.clip, true)
-        item.queued = Date().addingTimeInterval(-240)
-        XCTAssertEqual(item.entry.clip, true)
-        item.queued = Date().addingTimeInterval(-360)
-        XCTAssertNil(item.entry.clip)
+        let now = Date()
+        item.queued = now.addingTimeInterval(-240)
+        XCTAssertEqual(item.listed(at: now).clip, true)
+        item.queued = now.addingTimeInterval(-360)
+        XCTAssertNil(item.listed(at: now).clip)
     }
 
     func testPollReturnsPendingItemsAtOnce() async throws {
