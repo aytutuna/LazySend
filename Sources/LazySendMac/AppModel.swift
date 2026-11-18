@@ -103,6 +103,11 @@ public final class AppModel: ObservableObject {
     private var reconcileAgain = false
     private let locator = FileLocator()
     private var receiveScope: URL?
+    private var clipFiles: [URL] = []
+    private var clipDevice = ""
+    private var clipAt = Date.distantPast
+    private static let clipJoin: TimeInterval = 10
+    private static let maxClipImageBytes = 64 * 1024 * 1024
 
     init(service: LinkService, advertiser: Advertiser? = nil, guest: GuestService? = nil, pasteboard: NSPasteboard = .general,
          scratch: URL? = nil, notify: @escaping (String, String) -> Void = { _, _ in }) {
@@ -386,6 +391,7 @@ public final class AppModel: ObservableObject {
         let body = link ? (item.url ?? "") : String((item.text ?? "").prefix(120))
         if item.clip == true, let text = link ? item.url : item.text, !text.isEmpty {
             copy(text)
+            clipFiles = []
             notify("Copied from \(item.deviceName)", body)
             return
         }
@@ -404,8 +410,10 @@ public final class AppModel: ObservableObject {
         row.heading = file.url.lastPathComponent
         row.detail = "\(AppModel.size(file.size)), from \(file.deviceName), \(AppModel.stamp(now))"
         push(row)
-        if file.clip, copyFile(file.url) {
-            notify("Copied from \(file.deviceName)", file.url.lastPathComponent)
+        if file.clip, copyClipFile(file) {
+            let many = clipFiles.count > 1
+            notify(many ? "Copied \(clipFiles.count) files from \(file.deviceName)" : "Copied from \(file.deviceName)",
+                   many ? clipFiles.map(\.lastPathComponent).joined(separator: ", ") : file.url.lastPathComponent)
             return
         }
         notify("File from \(file.deviceName)", file.url.lastPathComponent)
@@ -526,7 +534,10 @@ public final class AppModel: ObservableObject {
                 return false
             }
         }
-        if let text = pasteboard.string(forType: .string) { return sendText(text, clip: clip) }
+        if let text = pasteboard.string(forType: .string), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return sendText(text, clip: clip)
+        }
+        notice = "Nothing to send on the clipboard"
         return false
     }
 
@@ -780,15 +791,30 @@ public final class AppModel: ObservableObject {
         pasteboard.setString(text, forType: .string)
     }
 
-    /// The file's URL goes on the pasteboard, and a picture also as image data, so Finder and Preview each get what they ask for.
-    private func copyFile(_ url: URL) -> Bool {
+    /// Files that arrive from the same device within seconds of each other go on the pasteboard together.
+    private func copyClipFile(_ file: ReceivedFile) -> Bool {
+        let now = Date()
+        if clipDevice != file.deviceId || now.timeIntervalSince(clipAt) > AppModel.clipJoin { clipFiles = [] }
+        clipFiles.append(file.url)
+        clipDevice = file.deviceId
+        clipAt = now
+        let alone = clipFiles.count == 1
+        pasteboard.clearContents()
+        if pasteboard.writeObjects(clipFiles.map { pasteboardItem(for: $0, withImage: alone) }) { return true }
+        clipFiles = []
+        return false
+    }
+
+    /// The file's URL, and for a picture of a common format its own bytes too, so Finder and Preview each get what they ask for.
+    private func pasteboardItem(for url: URL, withImage: Bool) -> NSPasteboardItem {
         let item = NSPasteboardItem()
         item.setString(url.absoluteString, forType: .fileURL)
-        if UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true, let tiff = NSImage(contentsOf: url)?.tiffRepresentation {
-            item.setData(tiff, forType: .tiff)
+        if withImage, let type = UTType(filenameExtension: url.pathExtension), [UTType.png, .jpeg, .heic, .tiff].contains(where: { type.conforms(to: $0) }),
+           (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? .max <= AppModel.maxClipImageBytes,
+           let data = try? Data(contentsOf: url, options: .mappedIfSafe) {
+            item.setData(data, forType: NSPasteboard.PasteboardType(type.identifier))
         }
-        pasteboard.clearContents()
-        return pasteboard.writeObjects([item])
+        return item
     }
 
     static func trimmingEnd(_ text: String) -> String {

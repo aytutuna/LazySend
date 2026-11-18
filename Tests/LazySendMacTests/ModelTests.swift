@@ -222,11 +222,26 @@ final class ModelTests: XCTestCase {
         model.addFile(ReceivedFile(deviceId: phone.id, deviceName: phone.name, url: picture, size: 100, sourceId: nil, clip: true))
         let both = fixture.pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
         XCTAssertEqual(both?.map(\.lastPathComponent), ["red.png"])
-        XCTAssertNotNil(fixture.pasteboard.data(forType: .tiff))
+        XCTAssertEqual(fixture.pasteboard.data(forType: .png), try Data(contentsOf: picture))
 
         fixture.pasteboard.clearContents()
         model.addFile(ReceivedFile(deviceId: phone.id, deviceName: phone.name, url: text, size: 1000, sourceId: nil))
         XCTAssertNil(fixture.pasteboard.pasteboardItems?.first)
+    }
+
+    func testClipFilesFromOneDeviceInQuickSuccessionGoOnTheClipboardTogether() async throws {
+        let phone = try await fixture.pair()
+        let first = try fixture.file("one.txt")
+        let second = try fixture.file("two.txt")
+        model.addFile(ReceivedFile(deviceId: phone.id, deviceName: phone.name, url: first, size: 1000, sourceId: nil, clip: true))
+        model.addFile(ReceivedFile(deviceId: phone.id, deviceName: phone.name, url: second, size: 1000, sourceId: nil, clip: true))
+        let both = fixture.pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
+        XCTAssertEqual(both?.map(\.lastPathComponent), ["one.txt", "two.txt"])
+        let text = fixture.service.history.add(phone, kind: "text", text: "words", url: nil, now: Date(), clip: true)
+        model.addText(text, arrived: true)
+        model.addFile(ReceivedFile(deviceId: phone.id, deviceName: phone.name, url: first, size: 1000, sourceId: nil, clip: true))
+        let again = fixture.pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
+        XCTAssertEqual(again?.map(\.lastPathComponent), ["one.txt"])
     }
 
     func testReceivedTextIsNotCopiedUnlessAsked() async throws {
@@ -343,6 +358,7 @@ final class ModelTests: XCTestCase {
         try await fixture.pair()
         fixture.pasteboard.clearContents()
         XCTAssertFalse(model.sendPasteboard())
+        XCTAssertEqual(model.notice, "Nothing to send on the clipboard")
     }
 
     func testOpenWithQueuesTheFilesForThePhone() async throws {
