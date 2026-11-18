@@ -80,6 +80,9 @@ final class AppModel: ObservableObject {
     /// The banner for what was just put on the pasteboard, "Copied from <device>".
     @Published private(set) var copied: String?
 
+    /// The pairing of a computer that is under way, kept here so it survives the Pair screen being built again.
+    lazy var pairing = PairModel(app: self)
+
     private var galleryTask: Task<Void, Never>?
     private var galleryRun = 0
     private var gallerySaved = 0
@@ -278,6 +281,7 @@ final class AppModel: ObservableObject {
     }
 
     func pair(_ code: PairingCode) async throws -> PairedPc {
+        if env.pairDelay > 0 { try await Task.sleep(nanoseconds: UInt64(env.pairDelay * 1_000_000_000)) }
         let pc = try await Pairing.pair(code, phoneName: env.phoneName, appVersion: env.appVersion, connector: connector, store: store)
         refreshPcs()
         select(pc.id)

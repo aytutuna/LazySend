@@ -37,5 +37,18 @@ final class PairModelTests: XCTestCase {
         pair.retry()
         XCTAssertEqual(pair.step, .scanning)
     }
+
+    func testOpeningPairAgainKeepsAPairingThatIsWaitingAndResetsAFinishedOne() async throws {
+        let app = AppModel(env: .temporary())
+        let expected = try PairingCode.parse(codeText()).checkCode
+        app.pairing.submit(codeText())
+        app.pairing.begin()
+        XCTAssertEqual(app.pairing.step, .waiting(checkCode: expected))
+        await app.pairing.finished()
+        guard case .failed = app.pairing.step else { return XCTFail("the pairing should have failed") }
+        app.pairing.begin()
+        XCTAssertEqual(app.pairing.step, .scanning)
+        XCTAssertEqual(app.pairing.pasted, "")
+    }
 }
 #endif

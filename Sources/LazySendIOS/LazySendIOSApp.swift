@@ -7,6 +7,8 @@ struct RootView: View {
     @Environment(\.scenePhase) private var phase
     @State private var path: [Route] = []
     @State private var tab = AppTab.camera
+    // The tab Pair was opened from, which the app goes back to when Pair closes.
+    @State private var pairOrigin: AppTab?
     @StateObject private var camera = CameraModel()
 
     var body: some View {
@@ -17,12 +19,12 @@ struct RootView: View {
             }
             Tab("Files", systemImage: "folder", value: AppTab.files) {
                 NavigationStack(path: $path) {
-                    MainView(timeline: model.timeline, go: { path.append($0) })
+                    MainView(timeline: model.timeline, go: go)
                         .navigationDestination(for: Route.self) { route in
                             switch route {
                             case .send: SendView()
-                            case .pair: PairView(app: model)
-                            case .pcs: PcsView(go: { path.append($0) })
+                            case .pair: PairView(pair: model.pairing)
+                            case .pcs: PcsView(go: go)
                             case .receive: ReceiveView(host: model.host)
                             }
                         }
@@ -51,13 +53,26 @@ struct RootView: View {
         .onChange(of: tab == .camera && phase == .active, initial: true) { _, active in
             camera.setActive(active)
         }
+        .onChange(of: path) { old, new in
+            if old.contains(.pair), !new.contains(.pair), let origin = pairOrigin {
+                pairOrigin = nil
+                tab = origin
+            }
+        }
+    }
+
+    private func go(_ route: Route) {
+        if route == .pair { model.pairing.begin() }
+        path.append(route)
     }
 
     private func pair() {
+        pairOrigin = tab
         openFiles([.pair])
     }
 
     private func openFiles(_ route: [Route]) {
+        if route.contains(.pair) { model.pairing.begin() }
         path = route
         tab = .files
     }

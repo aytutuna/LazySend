@@ -49,18 +49,23 @@ final class PairModel: ObservableObject {
         step = .scanning
     }
 
+    /// Pair is opened: a finished or failed pairing starts over, one still waiting for the computer stays as it is.
+    func begin() {
+        guard task == nil else { return }
+        step = .scanning
+        parseError = nil
+        pasted = ""
+    }
+
     func finished() async {
         await task?.value
     }
 }
 
+/// The pairing state lives in AppModel.pairing, so a view that is built again still shows the step the pairing is at.
 struct PairView: View {
-    @StateObject private var pair: PairModel
+    @ObservedObject var pair: PairModel
     @Environment(\.dismiss) private var dismiss
-
-    init(app: AppModel) {
-        _pair = StateObject(wrappedValue: PairModel(app: app))
-    }
 
     var body: some View {
         ScrollView {
@@ -71,7 +76,7 @@ struct PairView: View {
         }
         .navigationTitle("Pair with your PC")
         .navigationBarTitleDisplayMode(.inline)
-        .onChange(of: pair.step) { _, step in
+        .onChange(of: pair.step, initial: true) { _, step in
             if case .paired = step { dismiss() }
         }
     }

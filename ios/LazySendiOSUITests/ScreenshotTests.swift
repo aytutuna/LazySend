@@ -73,6 +73,18 @@ final class ScreenshotTests: XCTestCase {
     }
 
     @MainActor
+    func testTheClipboardTextBoxEnablesSendOnlyWithText() {
+        let app = XCUIApplication.launched(demo: true, tab: "Clipboard")
+        let field = app.item("clip.text")
+        XCTAssertTrue(field.waitForExistence(timeout: 30))
+        XCTAssertFalse(app.item("clip.send").isEnabled)
+        field.tap()
+        field.typeText("the door code is 4821")
+        XCTAssertTrue(app.item("clip.send").isEnabled)
+        attach(app, as: "11-clipboard-text")
+    }
+
+    @MainActor
     func testTheCameraWithoutAComputerOffersPairing() {
         let app = XCUIApplication.launched(tab: nil)
         XCTAssertTrue(app.item("camera.pairTitle").waitForExistence(timeout: 30))
@@ -120,5 +132,44 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(app.item("receive.shortCode").waitForExistence(timeout: 30))
         XCTAssertFalse(app.alerts.firstMatch.exists)
         XCTAssertFalse(app.item("receive.paired").exists)
+    }
+
+    // A well-formed code for a computer that is not there, typed in as text; -slowPairing holds the pairing for a while so the
+    // waiting screen can be looked at before it fails.
+    private static let unreachableCode = "lazysend://pair?v=1&id=office-pc-1&n=Office%20PC&fp=AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE&a=192.0.2.1&p=9&t=AgICAgICAgICAgICAgICAg"
+
+    @MainActor
+    private func assertWaitingScreenStays(from tab: String, button: String) {
+        let app = XCUIApplication.launched(tab: nil, slowPairing: true)
+        if tab != "Camera" { app.tabBars.buttons[tab].tap() }
+        let open = app.item(button)
+        XCTAssertTrue(open.waitForExistence(timeout: 30))
+        open.tap()
+        let field = app.item("pair.paste")
+        XCTAssertTrue(field.waitForExistence(timeout: 30))
+        field.tap()
+        field.typeText(ScreenshotTests.unreachableCode)
+        let connect = app.item("pair.connect")
+        XCTAssertTrue(connect.waitForExistence(timeout: 30))
+        connect.tap()
+        let code = app.item("pair.checkCode")
+        XCTAssertTrue(code.waitForExistence(timeout: 30))
+        let later = expectation(description: "a few seconds pass")
+        later.isInverted = true
+        wait(for: [later], timeout: 4)
+        XCTAssertTrue(code.exists)
+        XCTAssertFalse(app.item("pair.paste").exists)
+        XCTAssertFalse(app.item("pair.scanner.message").exists)
+        attach(app, as: "10-pair-waiting")
+    }
+
+    @MainActor
+    func testPairingStaysOnTheWaitingScreenWhenOpenedFromTheCamera() {
+        assertWaitingScreenStays(from: "Camera", button: "camera.pair")
+    }
+
+    @MainActor
+    func testPairingStaysOnTheWaitingScreenWhenOpenedFromTheClipboard() {
+        assertWaitingScreenStays(from: "Clipboard", button: "clip.pair")
     }
 }
