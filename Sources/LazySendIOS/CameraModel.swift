@@ -139,15 +139,7 @@ final class CameraModel: ObservableObject {
                 self.lowest = setup.lowest
                 self.zoomNow = setup.base
                 self.zoomLevel = 1
-                var values = [1.0]
-                if setup.lowest < setup.base { values.insert(setup.lowest / setup.base, at: 0) }
-                // The telephoto lens is the third button where the phone has one; else the second step is the main lens digitally doubled.
-                if let tele = setup.telephoto, tele > setup.base, tele <= setup.highest {
-                    values.append(tele / setup.base)
-                } else if setup.telephoto == nil, setup.base * 2 <= setup.highest {
-                    values.append(2)
-                }
-                self.stops = values.map { LensStop(value: $0) }
+                self.stops = CameraModel.lensStops(base: setup.base, lowest: setup.lowest, highest: setup.highest, telephoto: setup.telephoto)
                 self.hasFlash = setup.flash
                 if !setup.flash { self.flash = false }
                 self.followRotation()
@@ -226,6 +218,19 @@ final class CameraModel: ObservableObject {
             let small = await Task.detached { CameraModel.thumbnail(of: photo) }.value
             thumbnail = small
         }
+    }
+
+    /// The lens buttons as multiples of the main lens: the ultra wide where the zoom goes below it, 1, and the telephoto lens where the
+    /// phone has one, else the main lens doubled if the zoom reaches that far.
+    nonisolated static func lensStops(base: Double, lowest: Double, highest: Double, telephoto: Double?) -> [LensStop] {
+        var values = [1.0]
+        if lowest < base { values.insert(lowest / base, at: 0) }
+        if let tele = telephoto {
+            if tele > base, tele <= highest { values.append(tele / base) }
+        } else if base * 2 <= highest {
+            values.append(2)
+        }
+        return values.map { LensStop(value: $0) }
     }
 
     nonisolated static func thumbnail(of photo: Data) -> UIImage? {
