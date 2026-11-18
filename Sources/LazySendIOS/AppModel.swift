@@ -594,8 +594,10 @@ final class AppModel: ObservableObject {
 
     func stopSending() {
         held.formUnion(jobs.map(\.entryId))
+        held.formUnion(alongside.keys)
         if let current = current { held.insert(current) }
         pump?.cancel()
+        for task in alongside.values { task.cancel() }
     }
 
     func waitForSends() async {
@@ -604,7 +606,7 @@ final class AppModel: ObservableObject {
     }
 
     // A shot or paste does not wait behind an earlier upload; it runs in its own task.
-    private func start(_ entryId: String, clip: Bool?, _ work: @escaping @MainActor () async -> Void) {
+    func start(_ entryId: String, clip: Bool?, _ work: @escaping @MainActor () async -> Void) {
         guard clip == true else { return enqueue(entryId, work) }
         beginGrace()
         alongside[entryId] = Task {
@@ -651,6 +653,7 @@ final class AppModel: ObservableObject {
         grace = UIApplication.shared.beginBackgroundTask(withName: "send") { [weak self] in
             MainActor.assumeIsolated {
                 self?.pump?.cancel()
+                self?.alongside.values.forEach { $0.cancel() }
                 // A continued processing task is given its own time, so the gallery only stops with that one.
                 if !BackgroundGallery.isRunning { self?.galleryTask?.cancel() }
                 self?.endGrace(force: true)

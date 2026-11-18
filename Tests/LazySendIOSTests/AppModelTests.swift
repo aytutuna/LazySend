@@ -49,6 +49,18 @@ final class AppModelTests: XCTestCase {
         }
     }
 
+    func testStopCancelsAClipSendRunningBesideTheQueue() async throws {
+        let (model, _) = try pairedModel()
+        var cancelled = false
+        model.start("clip-1", clip: true) {
+            do { try await Task.sleep(nanoseconds: 60_000_000_000) } catch { cancelled = true }
+        }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        model.stopSending()
+        await model.waitForSends()
+        XCTAssertTrue(cancelled)
+    }
+
     func testAClipSendIsNotHeldUpByAStuckJob() async throws {
         let (model, pc) = try pairedModel()
         var release: CheckedContinuation<Void, Never>?
