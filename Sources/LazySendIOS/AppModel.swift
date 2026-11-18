@@ -329,14 +329,28 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// A photo from the camera goes as a JPEG named by its time, to be put on the clipboard there. Returns the file's name.
-    func sendCameraPhoto(_ jpeg: Data, to target: Target) throws -> String {
-        let name = ClipName.photo()
+    /// A photo from the camera goes as a JPEG named by its time, to be put on the clipboard there. Returns the file's name,
+    /// which carries the milliseconds when another send already has the plain one, so the row can be found by it.
+    /// Throws when the file cannot be written or the device is gone, so the caller can say so.
+    func sendCameraPhoto(_ jpeg: Data, to target: Target) async throws -> String {
+        let plain = ClipName.photo()
+        let name = timeline.entries.contains { $0.direction == .sent && $0.title == plain } ? ClipName.photo(milliseconds: true) : plain
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("lazysend-photo-" + UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let file = folder.appendingPathComponent(name)
-        try jpeg.write(to: file)
-        sendFiles([file], to: target, clip: true)
+        do {
+            try jpeg.write(to: file)
+            if let phone = HostedPhones.id(ofTarget: target.id) {
+                try await host.sendFiles([file], to: phone, clip: true)
+            } else if let pc = pcs.first(where: { $0.id == target.id }) {
+                sendFiles([file], to: pc, clip: true)
+            } else {
+                throw HostSendError.notPaired
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: folder)
+            throw error
+        }
         if savesCameraToPhotos { addToPhotos(jpeg) }
         return name
     }

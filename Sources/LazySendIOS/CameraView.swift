@@ -212,11 +212,11 @@ struct CameraView: View {
     }
 
     private var statusLine: String? {
-        guard camera.lastName != nil, let target = model.selectedTarget else { return nil }
+        guard camera.lastName != nil, let who = entry?.pcName ?? model.selectedTarget?.name else { return nil }
         switch entry?.state {
-        case .done: return sentHidden ? nil : String(localized: "Sent to \(target.name)")
+        case .done: return sentHidden ? nil : String(localized: "Sent to \(who)")
         case .failed: return String(localized: "Not sent")
-        default: return String(localized: "Waiting for \(target.name)")
+        default: return String(localized: "Waiting for \(who)")
         }
     }
 
@@ -230,7 +230,7 @@ struct CameraView: View {
                 return
             }
             do {
-                camera.shot(try model.sendCameraPhoto(jpeg, to: target), jpeg: jpeg)
+                camera.shot(try await model.sendCameraPhoto(jpeg, to: target), jpeg: jpeg)
             } catch {
                 camera.problem = error.localizedDescription
             }

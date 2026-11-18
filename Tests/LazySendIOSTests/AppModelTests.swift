@@ -55,6 +55,17 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(model.timeline.entries.isEmpty)
     }
 
+    func testACameraPhotoForADeviceThatIsGoneIsRefused() async throws {
+        let model = AppModel(env: .temporary())
+        do {
+            _ = try await model.sendCameraPhoto(Data([0xFF, 0xD8]), to: AppModel.Target(id: "gone", name: "Gone", phone: false))
+            XCTFail("the send should have been refused")
+        } catch {
+            XCTAssertEqual(error as? HostSendError, .notPaired)
+        }
+        XCTAssertTrue(model.timeline.entries.isEmpty)
+    }
+
     func testSharedItemStaysQueuedWhileThePcIsUnreachable() async throws {
         let (model, pc) = try pairedModel()
         try model.queue.add(QueuedItem(id: "share-0001", pcId: pc.id, kind: "text", text: "from the share sheet"))

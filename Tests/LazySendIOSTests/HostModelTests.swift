@@ -225,7 +225,7 @@ final class HostModelTests: XCTestCase {
         let target = try XCTUnwrap(model.targets.first { $0.phone })
         try model.sendNote("the door code is 4821", to: target, clip: true)
         try model.sendNote("not for the clipboard", to: target)
-        _ = try model.sendCameraPhoto(Data([0xFF, 0xD8, 0xFF, 0xD9]), to: target)
+        _ = try await model.sendCameraPhoto(Data([0xFF, 0xD8, 0xFF, 0xD9]), to: target)
         let queued = await fixture.until { model.timeline.entries.filter { $0.direction == .sent }.count == 3 }
         XCTAssertTrue(queued)
         let items = try await guest.client.outbox(wait: 0).items

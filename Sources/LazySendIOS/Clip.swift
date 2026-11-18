@@ -51,19 +51,19 @@ enum ClipContent: Equatable {
 
 /// The names of what the camera and the clipboard send, with the time they were made.
 enum ClipName {
-    static func photo(_ date: Date = Date()) -> String {
-        "Photo \(stamp(date)).jpg"
+    static func photo(_ date: Date = Date(), milliseconds: Bool = false) -> String {
+        "Photo \(stamp(date, milliseconds: milliseconds)).jpg"
     }
 
     static func clipboard(_ date: Date = Date(), ext: String = "png") -> String {
         "Clipboard \(stamp(date)).\(ext)"
     }
 
-    private static func stamp(_ date: Date) -> String {
+    private static func stamp(_ date: Date, milliseconds: Bool = false) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.dateFormat = "yyyy-MM-dd HH.mm.ss"
+        formatter.dateFormat = milliseconds ? "yyyy-MM-dd HH.mm.ss.SSS" : "yyyy-MM-dd HH.mm.ss"
         return formatter.string(from: date)
     }
 }

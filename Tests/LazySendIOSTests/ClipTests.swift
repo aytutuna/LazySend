@@ -52,6 +52,7 @@ final class ClipTests: XCTestCase {
         let date = Calendar(identifier: .gregorian).date(from: parts) ?? Date()
         XCTAssertEqual(ClipName.photo(date), "Photo 2026-11-18 14.03.22.jpg")
         XCTAssertEqual(ClipName.clipboard(date), "Clipboard 2026-11-18 14.03.22.png")
+        XCTAssertEqual(ClipName.photo(date, milliseconds: true), "Photo 2026-11-18 14.03.22.000.jpg")
         XCTAssertEqual(ClipName.clipboard(date, ext: "jpg"), "Clipboard 2026-11-18 14.03.22.jpg")
     }
 
