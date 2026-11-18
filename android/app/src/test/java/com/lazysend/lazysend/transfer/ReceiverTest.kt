@@ -41,7 +41,8 @@ class ReceiverTest {
     private val paired = Pc("desktop-test-01", "Test PC", encodeBase64Url(pc.pin), listOf(pc.endpoint.host), pc.endpoint.port, TEST_SECRET)
     private val index = GalleryIndex(File(dir, "guest-index"))
     private val partsFile = File(dir, "gallery-parts.json")
-    private val receiver = Receiver(PcConnector(store, null), timeline, files, index, GalleryParts(partsFile), { _, _, _ -> })
+    private val clipped = mutableListOf<Pair<ClipContent, String>>()
+    private val receiver = Receiver(PcConnector(store, null), timeline, files, index, GalleryParts(partsFile), { _, _, _ -> }, onClip = { content, from -> clipped += content to from })
 
     @After
     fun stop() {
@@ -76,6 +77,39 @@ class ReceiverTest {
 
         assertTrue(timeline.get("in-t1")!!.clip)
         assertFalse(timeline.get("in-t2")!!.clip)
+    }
+
+    @Test
+    fun textLinksAndFilesWithTheClipFlagAreHandedToTheClipboard() = runBlocking {
+        pc.outboxFile = bytes(3_000)
+        pc.outbox += OutboxEntry("t1", "text", text = "copy me", clip = true)
+        pc.outbox += OutboxEntry("t2", "text", text = "leave me")
+        pc.outbox += OutboxEntry("l1", "link", url = "https://alazy.app/", clip = true)
+        pc.outbox += OutboxEntry("f1", "file", name = "shot.jpg", size = 3_000, mime = "image/jpeg", clip = true)
+        pc.outbox += OutboxEntry("f2", "file", name = "plain.jpg", size = 3_000, mime = "image/jpeg")
+
+        receiver.collect(paired, pc.client(), 0)
+
+        assertEquals(
+            listOf<Pair<ClipContent, String>>(
+                ClipContent.Text("copy me") to "Test PC",
+                ClipContent.Link("https://alazy.app/") to "Test PC",
+                ClipContent.Saved("mem://1", "image/jpeg", "shot.jpg") to "Test PC",
+            ),
+            clipped,
+        )
+    }
+
+    @Test
+    fun aFileCarriedOnFromAPartIsNotClipped() = runBlocking {
+        pc.outboxFile = bytes(5_000)
+        pc.outbox += OutboxEntry("out1", "file", name = "x.bin", size = 5_000, clip = true)
+        partial("out1", files.seed(2_000), 5_000)
+
+        receiver.collect(paired, pc.client(), 0)
+
+        assertEquals(EntryState.Done, timeline.get("in-out1")!!.state)
+        assertTrue(clipped.isEmpty())
     }
 
     @Test

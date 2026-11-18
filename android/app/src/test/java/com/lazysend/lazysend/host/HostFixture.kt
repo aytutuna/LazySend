@@ -24,13 +24,14 @@ class HostFixture(
     headMs: Long = 10_000,
     assets: () -> List<Asset>? = { null },
     openAsset: (Asset) -> java.io.InputStream = { throw java.io.IOException("No library.") },
+    clock: () -> Long = System::currentTimeMillis,
 ) : AutoCloseable {
     val dir = File.createTempFile("host", "").also { it.delete(); it.mkdirs() }
     val files = MemFiles(0)
     var free = 100L * 1024 * 1024 * 1024
     private val keys = KeyPairGenerator.getInstance("EC").apply { initialize(ECGenParameterSpec("secp256r1")) }.generateKeyPair()
     val identity = HostIdentity(File(dir, "cert.der"), keys.private, keys.public, { "Pixel" })
-    val core = HostCore(File(dir, "host"), files, { "host-test-0001" }, { "Pixel host" }, { free }, assets = assets, openAsset = openAsset)
+    val core = HostCore(File(dir, "host"), files, { "host-test-0001" }, { "Pixel host" }, { free }, clock = clock, assets = assets, openAsset = openAsset)
     val server = HostServer(identity.sslContext(), core.router, core.limiter, networks, headMs = headMs)
     val port = server.start(0)
 

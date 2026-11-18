@@ -25,13 +25,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.lazysend.lazysend.data.EntryKind
 import com.lazysend.lazysend.data.TimelineEntry
 import com.lazysend.lazysend.transfer.SendService
+import com.lazysend.lazysend.transfer.shareableUri
 import com.lazysend.lazysend.ui.AppViewModel
 import com.lazysend.lazysend.ui.LazySendTheme
 import com.lazysend.lazysend.ui.MainActions
@@ -230,7 +230,7 @@ class MainActivity : ComponentActivity() {
         val intent = if (entry.kind == EntryKind.Link) {
             Intent(Intent.ACTION_VIEW, Uri.parse(entry.title))
         } else {
-            Intent(Intent.ACTION_VIEW).setDataAndType(shareable(Uri.parse(entry.uri ?: return)), entry.mime ?: "*/*")
+            Intent(Intent.ACTION_VIEW).setDataAndType(shareableUri(this, Uri.parse(entry.uri ?: return)), entry.mime ?: "*/*")
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         try {
@@ -239,10 +239,6 @@ class MainActivity : ComponentActivity() {
             // Nothing on this phone opens it.
         }
     }
-
-    // Other apps are refused a file:// address, so files saved before Android 10 are handed over through a provider.
-    private fun shareable(uri: Uri): Uri =
-        if (uri.scheme == "file") FileProvider.getUriForFile(this, "$packageName.files", java.io.File(uri.path!!)) else uri
 
     companion object {
         const val LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK"

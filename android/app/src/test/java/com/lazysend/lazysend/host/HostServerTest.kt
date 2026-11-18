@@ -282,6 +282,40 @@ class HostServerTest {
     }
 
     @Test
+    fun anOutboxEntryQueuedMoreThanFiveMinutesAgoIsListedWithoutClip() = runBlocking<Unit> {
+        var now = 1_800_000_000_000L
+        HostFixture(clock = { now }).use { late ->
+            val credentials = late.pair()
+            val client = late.client(credentials)
+            late.core.outbox.queueText(credentials.deviceId, "old", clip = true)
+            now += CLIP_MAX_AGE_MS
+            late.core.outbox.queueText(credentials.deviceId, "edge", clip = true)
+            now += 1
+            assertEquals(listOf("old", "edge"), client.outbox(0).items.map { it.text })
+            assertEquals(listOf(null, true), client.outbox(0).items.map { it.clip })
+        }
+    }
+
+    @Test
+    fun aFileIsClippedOnlyWhenItsUploadCompletesWithinFiveMinutes() = runBlocking<Unit> {
+        var now = 1_800_000_000_000L
+        HostFixture(clock = { now }).use { late ->
+            val clipped = CopyOnWriteArrayList<String>()
+            late.core.inbox.onClip = { clipped.add(it.name) }
+            val client = late.client(late.pair())
+            val data = ByteArray(100) { it.toByte() }
+            val quick = client.postItem(ItemRequest("file", name = "quick.jpg", size = 100, clip = true))
+            val slow = client.postItem(ItemRequest("file", name = "slow.jpg", size = 100, clip = true))
+            val plain = client.postItem(ItemRequest("file", name = "plain.jpg", size = 100))
+            assertTrue(client.putChunk(quick.id, 0, 100, source(data)).done)
+            now += CLIP_MAX_AGE_MS + 1
+            assertTrue(client.putChunk(slow.id, 0, 100, source(data)).done)
+            assertTrue(client.putChunk(plain.id, 0, 100, source(data)).done)
+            assertEquals(listOf("quick.jpg"), clipped)
+        }
+    }
+
+    @Test
     fun outboxItemsWaitThenArriveAndGoWhenAcknowledged() = runBlocking<Unit> {
         val credentials = host.pair()
         val client = host.client(credentials)

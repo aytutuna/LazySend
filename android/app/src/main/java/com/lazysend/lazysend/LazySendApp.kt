@@ -11,6 +11,7 @@ import com.lazysend.lazysend.host.GalleryIndex
 import com.lazysend.lazysend.host.HostAdvertiser
 import com.lazysend.lazysend.host.HostController
 import com.lazysend.lazysend.host.HostIdentity
+import com.lazysend.lazysend.transfer.Clipper
 import com.lazysend.lazysend.transfer.MediaAssets
 import com.lazysend.lazysend.transfer.NsdFinder
 import com.lazysend.lazysend.transfer.GalleryParts
@@ -31,12 +32,13 @@ class AppGraph(private val app: Application) {
     val pcs = PcStore(File(app.filesDir, "pcs.json"), box::seal, box::open)
     val timeline = Timeline(File(app.filesDir, "timeline.json"))
     val notifications = Notifications(app)
+    private val clipper = Clipper(app)
     val connector = PcConnector(pcs, NsdFinder(app), OkHttpClient())
     private val media = MediaAssets(app)
     val sender = Sender(app, connector, timeline, media)
     val receiver = Receiver(
         connector, timeline, files, GalleryIndex(File(app.filesDir, "guest-index")), GalleryParts(File(app.filesDir, "gallery-parts.json")),
-        notifications::received,
+        notifications::received, onClip = clipper::put,
     )
 
     private fun deviceName() = Settings.Global.getString(app.contentResolver, "device_name")?.takeIf { it.isNotBlank() } ?: Build.MODEL
@@ -53,7 +55,7 @@ class AppGraph(private val app: Application) {
             val key = HostIdentity.androidKey()
             HostIdentity(File(app.filesDir, "host/cert.der"), key.private, key.public, ::deviceName)
         },
-        advertiser = HostAdvertiser(app), notifyReceived = notifications::received,
+        advertiser = HostAdvertiser(app), notifyReceived = notifications::received, onClip = clipper::put,
         assets = { if (MainActivity.photoAccess(app) == PhotoAccess.None) null else media.list() },
         openAsset = { app.contentResolver.openInputStream(it.uri) ?: throw IOException("Cannot open ${it.uri}") },
     )

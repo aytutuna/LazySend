@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <external-path name="received" path="Download/Lazy Send/" />
+    <external-path name="received_pictures" path="Pictures/Lazy Send/" />
+    <external-path name="received_movies" path="Movies/Lazy Send/" />
+    <cache-path name="camera" path="camera/" />
+    <cache-path name="clipboard" path="clipboard/" />
 </paths>

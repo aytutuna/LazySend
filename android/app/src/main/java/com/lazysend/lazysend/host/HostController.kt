@@ -10,6 +10,8 @@ import com.lazysend.lazysend.data.Timeline
 import com.lazysend.lazysend.data.TimelineEntry
 import com.lazysend.lazysend.link.DEFAULT_PORT
 import com.lazysend.lazysend.transfer.Asset
+import com.lazysend.lazysend.transfer.ClipContent
+import com.lazysend.lazysend.transfer.clipContent
 import com.lazysend.lazysend.transfer.ReceivedFiles
 import com.lazysend.lazysend.transfer.Subnet
 import java.io.File
@@ -64,6 +66,7 @@ class HostController(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     assets: () -> List<Asset>? = { null },
     openAsset: (Asset) -> InputStream = { throw java.io.IOException("No library.") },
+    private val onClip: (ClipContent, String) -> Unit = { _, _ -> },
 ) {
     private val shown = MutableStateFlow(ReceiveState())
     val core = HostCore(root, files, hostId, hostName, freeSpace, clock, assets, openAsset, scope) { shown.value.running }
@@ -97,12 +100,14 @@ class HostController(
         core.inbox.onBegun = { file -> if (file.sourceId == null) begun(file) }
         core.inbox.onProgress = { file, bytes -> if (file.sourceId == null) timeline.update("in-${file.id}") { it.copy(bytes = bytes) } }
         core.inbox.onFinished = ::finished
+        core.inbox.onClip = { file -> onClip(ClipContent.Saved(file.uri, file.mime, file.name), file.deviceName) }
         core.router.onText = { guest, kind, text, clip ->
             val id = newId()
             timeline.add(
                 TimelineEntry(id, clock(), Direction.Received, if (kind == "link") EntryKind.Link else EntryKind.Text, guest.name, text, state = EntryState.Done, clip = clip),
             )
             notifyReceived(id.hashCode(), guest.name, text)
+            if (clip) clipContent(if (kind == "link") EntryKind.Link else EntryKind.Text, text, null, null)?.let { onClip(it, guest.name) }
         }
         core.router.onAcknowledged = { item ->
             timeline.update("out-${item.id}") { it.copy(state = EntryState.Done, detail = "", bytes = it.totalBytes) }
@@ -356,7 +361,7 @@ class HostController(
                 ),
             )
         } else {
-            timeline.update("in-${file.id}") { it.copy(state = EntryState.Done, bytes = file.size, uri = file.uri) }
+            timeline.update("in-${file.id}") { it.copy(state = EntryState.Done, bytes = file.size, uri = file.uri, clip = file.clips()) }
             notifyReceived(file.id.hashCode(), file.deviceName, file.name)
         }
         timeline.save()

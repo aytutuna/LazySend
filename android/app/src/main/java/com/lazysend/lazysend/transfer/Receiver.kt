@@ -41,6 +41,7 @@ class Receiver(
     private val galleryParts: GalleryParts,
     private val notify: (id: Int, title: String, text: String) -> Unit,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val onClip: (ClipContent, String) -> Unit = { _, _ -> },
 ) {
     // The foreground watch and the periodic check can both ask for the same item; one at a time per PC keeps them off each other's file.
     private val locks = ConcurrentHashMap<String, Mutex>()
@@ -141,6 +142,7 @@ class Receiver(
                 val kind = if (item.kind == "link") EntryKind.Link else EntryKind.Text
                 timeline.add(TimelineEntry(id, clock(), Direction.Received, kind, pc.name, body, state = EntryState.Done, clip = item.clip == true))
                 notify(id.hashCode(), pc.name, body)
+                if (item.clip == true) clipContent(kind, body, null, null)?.let { onClip(it, pc.name) }
             }
             "file" -> if (isValidSourceId(item.sourceId)) downloadGalleryFile(pc, client, item) else downloadFile(pc, client, item, id)
         }
@@ -211,6 +213,7 @@ class Receiver(
         timeline.update(id) { it.copy(state = EntryState.Done, bytes = size, uri = saved) }
         timeline.save()
         notify(id.hashCode(), pc.name, name)
+        if (timeline.get(id)?.clip == true) clipContent(EntryKind.File, name, saved, item.mime)?.let { onClip(it, pc.name) }
     }
 
     private suspend fun download(

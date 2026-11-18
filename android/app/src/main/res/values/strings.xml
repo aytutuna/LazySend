@@ -97,6 +97,8 @@
     <string name="remove_guest_body">%1$s is forgotten here, and what waited for it is dropped.</string>
     <string name="gallery_received">%1$d received</string>
 
+    <string name="copied_from">Copied from %1$s</string>
+
     <string name="share_no_pc">Pair a PC in Lazy Send first.</string>
     <string name="share_choose_pc">Send to</string>
     <string name="share_sending">Sending to %1$s</string>

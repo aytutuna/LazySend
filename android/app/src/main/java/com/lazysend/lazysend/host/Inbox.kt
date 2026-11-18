@@ -32,7 +32,10 @@ class IncomingFile(
     var finished: Long? = null,
     val sendId: String? = null,
     val clip: Boolean = false,
-)
+) {
+    /** A file is clipped only when its guest asked for it and the upload was done within [CLIP_MAX_AGE_MS] of its first post. */
+    fun clips() = clip && sourceId == null && (finished ?: started) - started <= CLIP_MAX_AGE_MS
+}
 
 /**
  * Files from guests: begun with the item's metadata, filled in chunks into a half-written file in the folder they will end
@@ -62,6 +65,9 @@ class Inbox(
     var onProgress: (IncomingFile, Long) -> Unit = { _, _ -> }
     var onBegun: (IncomingFile) -> Unit = {}
     var onFinished: (IncomingFile) -> Unit = {}
+
+    /** Called after [onFinished] for a file whose guest asked for it to be clipped and which got here in time. */
+    var onClip: (IncomingFile) -> Unit = {}
 
     private class Writer {
         val gate = Semaphore(1)
@@ -331,6 +337,7 @@ class Inbox(
         if (removed) return
         if (indexed && file.sendId == null) File(directory, "${file.id}.json").delete() else runCatching { save(file) }
         onFinished(file)
+        if (file.clips()) onClip(file)
     }
 
     private fun hashPart(file: IncomingFile): String {
