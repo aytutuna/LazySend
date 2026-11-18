@@ -145,22 +145,6 @@
         }
       }
     },
-    "What you send and receive shows up here." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "What you send and receive shows up here."
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gönderdikleriniz ve aldıklarınız burada görünür."
-          }
-        }
-      }
-    },
     "To %@" : {
       "localizations" : {
         "en" : {
@@ -2189,6 +2173,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Fotoğraf biçimi: %@"
+          }
+        }
+      }
+    },
+    "Could not load %lld items" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not load %lld items"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld öğe yüklenemedi"
           }
         }
       }
