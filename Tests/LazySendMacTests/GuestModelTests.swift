@@ -234,6 +234,23 @@ final class GuestModelTests: XCTestCase {
         XCTAssertNil(model.notice)
     }
 
+    func testTheClipboardGoesToAComputerWithTheClipFlag() async throws {
+        _ = try await fixture.pairByLink()
+        var seen: [ReceivedItem] = []
+        fixture.host.router.onTextReceived = { seen.append($0) }
+        XCTAssertTrue(model.sendText("plain"))
+        await assertEventually { model.timeline.first?.canCancel == false }
+        XCTAssertTrue(model.sendText("copy me", clip: true))
+        await assertEventually { model.timeline.first?.canCancel == false }
+        XCTAssertEqual(seen.map(\.clip), [nil, true])
+
+        var landed: [ReceivedFile] = []
+        fixture.host.inbox.onFileReceived = { landed.append($0) }
+        XCTAssertEqual(model.sendFiles([try fixture.file("clipped.txt", bytes: 300)], clip: true), 1)
+        await assertEventually { model.timeline.first?.canCancel == false }
+        XCTAssertEqual(landed.map(\.clip), [true])
+    }
+
     // What an earlier run leaves: the computer has the first `sent` bytes and this Mac has the entry.
     private func leaveUnfinished(_ pc: PairedPc, _ url: URL, size: Int64, sent: Int) async throws {
         let content = try Data(contentsOf: url)

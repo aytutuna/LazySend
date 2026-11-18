@@ -320,6 +320,25 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual([UInt8](header), [0x89, 0x50, 0x4E, 0x47])
     }
 
+    func testSendingTheClipboardAsksThePhoneToCopyIt() async throws {
+        let phone = try await fixture.pair()
+        fixture.pasteboard.clearContents()
+        fixture.pasteboard.setString("for your clipboard", forType: .string)
+        XCTAssertTrue(model.sendPasteboard())
+        XCTAssertTrue(model.sendPasteboard(clip: true))
+        XCTAssertEqual(fixture.service.outbox.pending(phone.id).map(\.clip), [nil, true])
+
+        fixture.pasteboard.clearContents()
+        fixture.pasteboard.setString("https://example.com/", forType: .string)
+        XCTAssertTrue(model.sendPasteboard(clip: true))
+        XCTAssertEqual(fixture.service.outbox.pending(phone.id).last?.clip, true)
+
+        fixture.pasteboard.clearContents()
+        fixture.pasteboard.writeObjects([try fixture.file("clip.txt") as NSURL])
+        XCTAssertTrue(model.sendPasteboard(clip: true))
+        XCTAssertEqual(fixture.service.outbox.pending(phone.id).last?.clip, true)
+    }
+
     func testAnEmptyPasteboardSendsNothing() async throws {
         try await fixture.pair()
         fixture.pasteboard.clearContents()

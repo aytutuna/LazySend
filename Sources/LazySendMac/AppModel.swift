@@ -446,18 +446,18 @@ public final class AppModel: ObservableObject {
     }
 
     @discardableResult
-    public func sendText(_ text: String) -> Bool {
+    public func sendText(_ text: String, clip: Bool = false) -> Bool {
         guard let phone = target() else { return false }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
-        if phone.computer { return sendNote(text, to: phone) }
+        if phone.computer { return sendNote(text, to: phone, clip: clip) }
         do {
-            let note = try ItemRequest.note(text)
+            let note = try ItemRequest.note(text, clip: clip ? true : nil)
             let item: OutboxItem
             if note.kind == "link", let url = note.url {
-                item = try service.outbox.queueLink(phone.id, url)
+                item = try service.outbox.queueLink(phone.id, url, clip: note.clip)
             } else {
-                item = try service.outbox.queueText(phone.id, AppModel.trimmingEnd(text))
+                item = try service.outbox.queueText(phone.id, AppModel.trimmingEnd(text), clip: note.clip)
             }
             addSent(item, deviceName: phone.name)
             return true
@@ -470,7 +470,7 @@ public final class AppModel: ObservableObject {
     }
 
     @discardableResult
-    public func sendFiles(_ urls: [URL]) -> Int {
+    public func sendFiles(_ urls: [URL], clip: Bool = false) -> Int {
         guard let phone = target() else { return 0 }
         var readable: [URL] = []
         var problem: String?
@@ -487,7 +487,7 @@ public final class AppModel: ObservableObject {
         }
         var started = 0
         if phone.computer {
-            for url in readable { sendFile(url, to: phone) }
+            for url in readable { sendFile(url, to: phone, clip: clip) }
             started = readable.count
         } else {
             var files: [(url: URL, bookmark: Data?, mime: String?)] = []
@@ -498,7 +498,7 @@ public final class AppModel: ObservableObject {
                 files.append((url, bookmark, AppModel.mime(of: url)))
             }
             // One save for the whole drop, however many files it holds.
-            let queued = files.isEmpty ? [] : service.outbox.queueFiles(phone.id, files)
+            let queued = files.isEmpty ? [] : service.outbox.queueFiles(phone.id, files, clip: clip ? true : nil)
             for item in queued { addSent(item, deviceName: phone.name) }
             if queued.count < files.count { problem = "Too many items are waiting for \(phone.name). Wait until it picks some up." }
             started = queued.count
@@ -508,10 +508,11 @@ public final class AppModel: ObservableObject {
     }
 
     /// What is on the pasteboard goes to the selected phone: files as they are, a picture as a PNG, text as a note.
+    /// With `clip` the device is asked to put it on its own clipboard too.
     @discardableResult
-    public func sendPasteboard() -> Bool {
+    public func sendPasteboard(clip: Bool = false) -> Bool {
         if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], !urls.isEmpty {
-            return sendFiles(urls) > 0
+            return sendFiles(urls, clip: clip) > 0
         }
         if let image = NSImage(pasteboard: pasteboard), let png = AppModel.png(image) {
             let name = "Pasted image \(Int(Date().timeIntervalSince1970)).png"
@@ -519,13 +520,13 @@ public final class AppModel: ObservableObject {
                 try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
                 let url = scratch.appendingPathComponent(name)
                 try png.write(to: url)
-                return sendFiles([url]) > 0
+                return sendFiles([url], clip: clip) > 0
             } catch {
                 notice = "The picture could not be prepared for sending."
                 return false
             }
         }
-        if let text = pasteboard.string(forType: .string) { return sendText(text) }
+        if let text = pasteboard.string(forType: .string) { return sendText(text, clip: clip) }
         return false
     }
 
@@ -600,17 +601,17 @@ public final class AppModel: ObservableObject {
         if !service.outbox.acknowledge(row.deviceId, outboxId) { refreshSent() }
     }
 
-    private func sendNote(_ text: String, to computer: PhoneRow) -> Bool {
+    private func sendNote(_ text: String, to computer: PhoneRow, clip: Bool) -> Bool {
         guard let guest = guest else { return false }
         let note: ItemRequest
         do {
-            note = try ItemRequest.note(text)
+            note = try ItemRequest.note(text, clip: clip ? true : nil)
         } catch {
             notice = "That text is too long to send (the limit is 1 MiB)."
             return false
         }
         let link = note.kind == "link"
-        let sent = link ? note : ItemRequest(kind: "text", text: AppModel.trimmingEnd(text))
+        let sent = link ? note : ItemRequest(kind: "text", text: AppModel.trimmingEnd(text), clip: note.clip)
         var row = TimelineRow(id: UUID().uuidString, kind: link ? .link : .text, sent: true, deviceId: computer.hostId, deviceName: computer.name,
                               time: Date(), text: link ? sent.url : sent.text)
         row.heading = link ? "Link to \(computer.name)" : "Text to \(computer.name)"
@@ -619,7 +620,7 @@ public final class AppModel: ObservableObject {
         return true
     }
 
-    private func sendFile(_ url: URL, to computer: PhoneRow) {
+    private func sendFile(_ url: URL, to computer: PhoneRow, clip: Bool) {
         guard let guest = guest else { return }
         var row = TimelineRow(id: UUID().uuidString, kind: .file, sent: true, deviceId: computer.hostId, deviceName: computer.name, time: Date(),
                               fileURL: url)
@@ -630,7 +631,7 @@ public final class AppModel: ObservableObject {
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             let bookmark = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
-            try await guest.sendFile(at: url, to: id, bookmark: bookmark, onProgress: progress)
+            try await guest.sendFile(at: url, to: id, bookmark: bookmark, clip: clip ? true : nil, onProgress: progress)
         }
     }
 

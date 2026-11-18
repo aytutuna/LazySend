@@ -97,6 +97,12 @@ struct MainView: View {
             } label: {
                 Label("Send files", systemImage: "doc.badge.plus")
             }
+            Button {
+                model.sendPasteboard(clip: true)
+            } label: {
+                Label("Send clipboard", systemImage: "doc.on.clipboard")
+            }
+            .help("Send the clipboard and have the device copy it (Command-Shift-V)")
             Button("Send") { send() }
                 .keyboardShortcut(.return, modifiers: .command)
                 .buttonStyle(.borderedProminent)

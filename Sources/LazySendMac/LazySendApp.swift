@@ -84,6 +84,12 @@ public struct LazySendApp: App {
                 }
                 .keyboardShortcut("k", modifiers: [.command, .shift])
             }
+            CommandGroup(after: .pasteboard) {
+                Button("Send Clipboard") {
+                    AppHost.shared.model?.sendPasteboard(clip: true)
+                }
+                .keyboardShortcut("v", modifiers: [.command, .shift])
+            }
         }
         Settings {
             if let model = AppHost.shared.model { SettingsView(model: model) }
