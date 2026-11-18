@@ -109,7 +109,7 @@ struct MainView: View {
     }
 }
 
-private struct EntryRow: View {
+struct EntryRow: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.openURL) private var openURL
     let entry: TimelineEntry
