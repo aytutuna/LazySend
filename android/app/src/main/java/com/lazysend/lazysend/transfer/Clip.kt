@@ -38,6 +38,20 @@ fun clipContent(kind: EntryKind, title: String, uri: String?, mime: String?): Cl
     EntryKind.Gallery -> null
 }
 
+/** What the clipboard holds that can be sent. */
+sealed interface Pasted {
+    data class Note(val text: String) : Pasted
+
+    data class Attachment(val uri: String, val mime: String) : Pasted
+}
+
+/** A content address of a picture or other file wins over text; a note must have something in it. */
+fun pasted(text: CharSequence?, uri: String?, mime: String?): Pasted? = when {
+    uri != null && mime != null && !mime.startsWith("text/") -> Pasted.Attachment(uri, mime)
+    !text.isNullOrBlank() -> Pasted.Note(text.toString())
+    else -> null
+}
+
 private val STAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd HH.mm.ss", Locale.ROOT)
 private val STAMP_MS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH.mm.ss.SSS", Locale.ROOT)
 

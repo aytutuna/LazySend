@@ -99,6 +99,31 @@
 
     <string name="copied_from">Copied from %1$s</string>
 
+    <string name="tab_camera">Camera</string>
+    <string name="tab_files">Files</string>
+    <string name="tab_clipboard">Clipboard</string>
+    <string name="pair_device">Pair a device</string>
+    <string name="open_settings">Open settings</string>
+    <string name="camera_none">No camera on this device</string>
+    <string name="camera_denied">Camera access is off. Allow it in settings to take photos.</string>
+    <string name="camera_pair_title">Pair a device to send photos</string>
+    <string name="camera_photo_failed">The photo could not be taken.</string>
+    <string name="camera_switch_failed">The camera could not be switched.</string>
+    <string name="camera_save_failed">The photo could not be saved to the gallery.</string>
+    <string name="camera_sent_to">Sent to %1$s</string>
+    <string name="camera_waiting">Waiting for %1$s</string>
+    <string name="camera_history">Photo history</string>
+    <string name="camera_flip">Switch camera</string>
+    <string name="flash_off">Flash off</string>
+    <string name="flash_auto">Flash auto</string>
+    <string name="flash_on">Flash on</string>
+    <string name="save_camera_photos">Save camera photos to the gallery</string>
+    <string name="target_gone">That device is not paired any more.</string>
+    <string name="clip_hint">Paste here to put it on %1$s\'s clipboard.</string>
+    <string name="clip_pair_title">Pair a device to send what you copy.</string>
+    <string name="clip_empty">What you put on a clipboard, and what is put on this one, shows up here.</string>
+    <string name="nothing_to_send">Nothing to send on the clipboard</string>
+
     <string name="share_no_pc">Pair a PC in Lazy Send first.</string>
     <string name="share_choose_pc">Send to</string>
     <string name="share_sending">Sending to %1$s</string>

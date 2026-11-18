@@ -186,7 +186,7 @@ private fun Connection(state: MainState, actions: MainActions) {
 }
 
 @Composable
-private fun Entry(entry: TimelineEntry, actions: MainActions) {
+internal fun Entry(entry: TimelineEntry, actions: MainActions) {
     val context = LocalContext.current
     val sent = entry.direction == Direction.Sent
     Card {

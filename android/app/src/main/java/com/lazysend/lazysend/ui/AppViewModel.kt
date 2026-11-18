@@ -1,18 +1,30 @@
 package com.lazysend.lazysend.ui
 
 import android.app.Application
+import android.content.ClipboardManager
+import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Build
+import android.webkit.MimeTypeMap
+import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.lazysend.lazysend.BuildConfig
 import com.lazysend.lazysend.LazySendApp
 import com.lazysend.lazysend.R
+import com.lazysend.lazysend.data.Direction
 import com.lazysend.lazysend.data.Pc
 import com.lazysend.lazysend.host.Approval
 import com.lazysend.lazysend.host.Guest
 import com.lazysend.lazysend.link.LinkException
 import com.lazysend.lazysend.link.PairingCode
 import com.lazysend.lazysend.link.PairingCodeException
+import com.lazysend.lazysend.transfer.Pasted
+import com.lazysend.lazysend.transfer.SendService
+import com.lazysend.lazysend.transfer.clipboardName
+import com.lazysend.lazysend.transfer.pasted
+import com.lazysend.lazysend.transfer.photoName
+import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -28,17 +40,28 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+private const val DAY = 24 * 60 * 60 * 1000L
+
+/** The camera's last photo, by file name, with a small picture of it once that is ready. */
+class Shot(val name: String, val thumbnail: Bitmap?)
+
 /** Rows of the devices that are guests of this phone have this in front of their id, so a device that is both has two rows. */
 private const val GUEST = "guest:"
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val graph = (app as LazySendApp).graph
-    private val selected = MutableStateFlow<String?>(null)
+    private val selected = MutableStateFlow(graph.settings.target)
     private val photoAccess = MutableStateFlow(PhotoAccess.None)
     private var pairJob: Job? = null
 
     val pair = MutableStateFlow<PairUi>(PairUi.Scanning)
     val notice = MutableStateFlow<String?>(null)
+
+    /** The last photo the camera took, which the camera tab shows while it is sent. */
+    val shot = MutableStateFlow<Shot?>(null)
+    val cameraProblem = MutableStateFlow<String?>(null)
+    val clipProblem = MutableStateFlow<String?>(null)
+    val saveCameraPhotos: StateFlow<Boolean> get() = graph.settings.saveCameraPhotos
 
     val state: StateFlow<MainState> = combine(
         combine(graph.pcs.pcs, graph.host.core.guests.guests, graph.host.core.feed.progress) { pcs, guests, feeds -> Triple(pcs, guests, feeds) },
@@ -64,6 +87,110 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun select(id: String) {
         selected.value = id
+        graph.settings.target = id
+    }
+
+    fun saveCameraPhotos(on: Boolean) = graph.settings.saveCameraPhotos(on)
+
+    /** Where the next camera photo goes, named by the time and by milliseconds too when the plain name is taken. */
+    fun newPhotoFile(): File {
+        val dir = cacheFolder("camera")
+        val sent = graph.timeline.entries.value
+        return File(dir, photoName(System.currentTimeMillis()) { name -> File(dir, name).exists() || sent.any { it.direction == Direction.Sent && it.title == name } })
+    }
+
+    /** A photo the camera saved: it goes at once to the selected device, to be put on its clipboard. */
+    fun photoTaken(file: File) {
+        shot.value = Shot(file.name, null)
+        if (!sendClipped(file, cameraProblem)) return
+        viewModelScope.launch(Dispatchers.IO) {
+            shot.value = Shot(file.name, jpegThumbnail(file))
+            if (graph.settings.saveCameraPhotos.value) saveToGallery(file)
+        }
+    }
+
+    fun cameraFailed(message: String) {
+        cameraProblem.value = message
+    }
+
+    fun clearCameraProblem() {
+        cameraProblem.value = null
+    }
+
+    /** Sends what the clipboard holds, read now while the app is in front, to the selected device's clipboard. */
+    fun paste() {
+        val context = getApplication<Application>()
+        val clip = context.getSystemService(ClipboardManager::class.java).primaryClip?.takeIf { it.itemCount > 0 }
+        val item = clip?.getItemAt(0)
+        viewModelScope.launch(Dispatchers.IO) {
+            val uri = item?.uri
+            val mime = uri?.let { runCatching { context.contentResolver.getType(it) }.getOrNull() ?: clip.description.getMimeType(0) }
+            when (val found = pasted(item?.text, uri?.toString(), mime)) {
+                null -> clipProblem.value = context.getString(R.string.nothing_to_send)
+                is Pasted.Note -> {
+                    val guest = selectedGuest()
+                    val pc = selectedPc()
+                    when {
+                        guest != null -> SendService.queueText(context, guest.id, found.text, clip = true)
+                        pc != null -> SendService.sendText(context, pc.id, found.text, clip = true)
+                        else -> {
+                            clipProblem.value = context.getString(R.string.target_gone)
+                            return@launch
+                        }
+                    }
+                    clipProblem.value = null
+                }
+                is Pasted.Attachment -> {
+                    val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(found.mime) ?: "bin"
+                    val file = File(cacheFolder("clipboard"), clipboardName(System.currentTimeMillis(), extension))
+                    try {
+                        context.contentResolver.openInputStream(Uri.parse(found.uri))!!.use { input -> file.outputStream().use { input.copyTo(it) } }
+                    } catch (e: Exception) {
+                        clipProblem.value = context.getString(R.string.nothing_to_send)
+                        return@launch
+                    }
+                    if (sendClipped(file, clipProblem)) clipProblem.value = null
+                }
+            }
+        }
+    }
+
+    private fun cacheFolder(name: String): File {
+        val dir = File(getApplication<Application>().cacheDir, name).apply { mkdirs() }
+        dir.listFiles()?.filter { System.currentTimeMillis() - it.lastModified() > DAY }?.forEach { it.delete() }
+        return dir
+    }
+
+    // The file goes through the provider so the sending service reads its name and size like any picked file.
+    private fun sendClipped(file: File, problem: MutableStateFlow<String?>): Boolean {
+        val context = getApplication<Application>()
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+        val guest = selectedGuest()
+        val pc = selectedPc()
+        try {
+            when {
+                guest != null -> SendService.queueFiles(context, guest.id, listOf(uri), clip = true)
+                pc != null -> SendService.sendFiles(context, pc.id, listOf(uri), clip = true)
+                else -> {
+                    problem.value = context.getString(R.string.target_gone)
+                    return false
+                }
+            }
+        } catch (e: Exception) {
+            problem.value = e.message ?: context.getString(R.string.target_gone)
+            return false
+        }
+        return true
+    }
+
+    private fun saveToGallery(file: File) {
+        try {
+            val part = graph.files.create(file.name, "image/jpeg")
+            graph.files.append(part).use { out -> file.inputStream().use { it.copyTo(out) } }
+            graph.files.finish(part, file.lastModified())
+        } catch (e: Exception) {
+            cameraProblem.value = getApplication<Application>().getString(R.string.camera_save_failed)
+        }
     }
 
     fun photoAccess(access: PhotoAccess) {

@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.storage.StorageManager
 import android.provider.Settings
 import com.lazysend.lazysend.data.PcStore
+import com.lazysend.lazysend.data.AppSettings
 import com.lazysend.lazysend.data.SecretBox
 import com.lazysend.lazysend.data.Timeline
 import com.lazysend.lazysend.host.GalleryIndex
@@ -28,9 +29,10 @@ import okhttp3.OkHttpClient
 
 class AppGraph(private val app: Application) {
     private val box = SecretBox()
-    private val files = MediaFiles(app)
     val pcs = PcStore(File(app.filesDir, "pcs.json"), box::seal, box::open)
     val timeline = Timeline(File(app.filesDir, "timeline.json"))
+    val settings = AppSettings(app)
+    val files = MediaFiles(app)
     val notifications = Notifications(app)
     private val clipper = Clipper(app)
     val connector = PcConnector(pcs, NsdFinder(app), OkHttpClient())

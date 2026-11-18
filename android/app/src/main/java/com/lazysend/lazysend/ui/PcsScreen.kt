@@ -12,6 +12,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -28,7 +29,14 @@ import com.lazysend.lazysend.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PcsScreen(pcs: List<PcRow>, onRemove: (String) -> Unit, onPair: () -> Unit, onBack: () -> Unit) {
+fun PcsScreen(
+    pcs: List<PcRow>,
+    onRemove: (String) -> Unit,
+    onPair: () -> Unit,
+    onBack: () -> Unit,
+    saveCameraPhotos: Boolean = false,
+    onSaveCameraPhotos: (Boolean) -> Unit = {},
+) {
     var removing by remember { mutableStateOf<PcRow?>(null) }
     Scaffold(
         topBar = {
@@ -53,6 +61,10 @@ fun PcsScreen(pcs: List<PcRow>, onRemove: (String) -> Unit, onPair: () -> Unit, 
                 }
             }
             Button(onClick = onPair) { Text(stringResource(R.string.pair_a_pc)) }
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.save_camera_photos), Modifier.weight(1f))
+                Switch(saveCameraPhotos, onSaveCameraPhotos)
+            }
         }
     }
     removing?.let { pc ->

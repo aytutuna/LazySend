@@ -36,4 +36,13 @@ class ClipTest {
     fun aClipboardFileIsNamedByItsTimeAndType() {
         assertEquals("Clipboard 2026-11-15 14.03.22.png", clipboardName(time, "png", zone))
     }
+
+    @Test
+    fun aPictureOrFileOnTheClipboardWinsOverTextAndBlankIsNothing() {
+        assertEquals(Pasted.Attachment("content://x/1", "image/png"), pasted("a.png", "content://x/1", "image/png"))
+        assertEquals(Pasted.Note("hello"), pasted("hello", "content://x/2", "text/plain"))
+        assertEquals(Pasted.Note("https://alazy.app/"), pasted("https://alazy.app/", null, null))
+        assertNull(pasted("  ", null, null))
+        assertNull(pasted(null, "content://x/3", null))
+    }
 }

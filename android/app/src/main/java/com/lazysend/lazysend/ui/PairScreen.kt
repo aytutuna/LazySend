@@ -30,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -138,12 +139,22 @@ private fun Scan(onCode: (String, String?) -> Unit, scanner: Boolean) {
 private fun QrScanner(modifier: Modifier, onCode: (String) -> Unit) {
     val lifecycle = LocalLifecycleOwner.current
     val latest by rememberLatest(onCode)
+    // The camera is let go when this screen goes, so the camera tab can have it.
+    val release = remember { mutableStateOf<(() -> Unit)?>(null) }
+    var gone by remember { mutableStateOf(false) }
+    DisposableEffect(Unit) {
+        onDispose {
+            gone = true
+            release.value?.invoke()
+        }
+    }
     AndroidView(
         modifier = modifier,
         factory = { context ->
             PreviewView(context).also { view ->
                 val future = ProcessCameraProvider.getInstance(context)
                 future.addListener({
+                    if (gone) return@addListener
                     val provider = future.get()
                     val preview = Preview.Builder().build().also { it.surfaceProvider = view.surfaceProvider }
                     val analysis = ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
@@ -151,8 +162,8 @@ private fun QrScanner(modifier: Modifier, onCode: (String) -> Unit) {
                         setHints(mapOf(DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE), DecodeHintType.TRY_HARDER to true))
                     }
                     analysis.setAnalyzer(Executors.newSingleThreadExecutor()) { image -> decode(reader, image)?.let { ContextCompat.getMainExecutor(context).execute { latest(it) } } }
-                    provider.unbindAll()
                     provider.bindToLifecycle(lifecycle, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
+                    release.value = { provider.unbind(preview, analysis) }
                 }, ContextCompat.getMainExecutor(context))
             }
         },

@@ -17,12 +17,23 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.collectAsState
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -33,6 +44,8 @@ import com.lazysend.lazysend.data.TimelineEntry
 import com.lazysend.lazysend.transfer.SendService
 import com.lazysend.lazysend.transfer.shareableUri
 import com.lazysend.lazysend.ui.AppViewModel
+import com.lazysend.lazysend.ui.CameraScreen
+import com.lazysend.lazysend.ui.ClipboardScreen
 import com.lazysend.lazysend.ui.LazySendTheme
 import com.lazysend.lazysend.ui.MainActions
 import com.lazysend.lazysend.ui.MainScreen
@@ -43,6 +56,8 @@ import com.lazysend.lazysend.ui.ReceiveScreen
 import com.lazysend.lazysend.ui.SendScreen
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
+
+private enum class Tab { Camera, Files, Clipboard }
 
 private enum class Screen { Main, Pair, Send, Pcs, Receive }
 
@@ -71,19 +86,25 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun App() {
+        var tab by rememberSaveable { mutableStateOf(Tab.Camera) }
         var screen by rememberSaveable { mutableStateOf(Screen.Main) }
+        // The camera asks for its permission once the start-up requests have been answered, as two requests at once cancel each other.
+        var startupAsked by rememberSaveable { mutableStateOf(false) }
         val state by model.state.collectAsState()
         val pair by model.pair.collectAsState()
         val notice by model.notice.collectAsState()
 
-        val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { localNetworkDenied = isLocalNetworkDenied(this@MainActivity) }
+        val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+            localNetworkDenied = isLocalNetworkDenied(this@MainActivity)
+            startupAsked = true
+        }
         LaunchedEffect(Unit) {
             val wanted = buildList {
                 if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
                 if (Build.VERSION.SDK_INT >= 37) add(LOCAL_NETWORK)
                 if (Build.VERSION.SDK_INT <= 28) add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
             }.filter { ContextCompat.checkSelfPermission(this@MainActivity, it) != PackageManager.PERMISSION_GRANTED }
-            if (wanted.isNotEmpty()) permissions.launch(wanted.toTypedArray())
+            if (wanted.isNotEmpty()) permissions.launch(wanted.toTypedArray()) else startupAsked = true
         }
 
         val photoPermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -121,88 +142,151 @@ class MainActivity : ComponentActivity() {
             if (screen == Screen.Receive) model.leaveReceive()
             screen = Screen.Main
         }
-        if (screen != Screen.Main) BackHandler { goMain() }
-        when (screen) {
-            Screen.Main -> MainScreen(
-                state,
-                MainActions(
-                    onPair = {
-                        model.startPairing()
-                        screen = Screen.Pair
-                    },
-                    onPcs = { screen = Screen.Pcs },
-                    onReceive = { screen = Screen.Receive },
-                    onSend = { screen = Screen.Send },
-                    onSelect = model::select,
-                    onGallery = {
-                        if (photoAccess(this@MainActivity) == PhotoAccess.None) {
-                            pendingGallery = true
-                            requestPhotos()
-                        } else {
-                            model.selectedPc()?.let { SendService.syncGallery(this@MainActivity, it.id) }
-                        }
-                    },
-                    onFeed = {
-                        if (photoAccess(this@MainActivity) == PhotoAccess.None) {
-                            pendingFeed = true
-                            requestPhotos()
-                        } else {
-                            model.startFeed()
-                        }
-                    },
-                    onStopFeed = model::stopFeed,
-                    onStop = { SendService.stop(this@MainActivity) },
-                    onAllowPhotos = { requestPhotos() },
-                    onCopy = { copy(it) },
-                    onOpen = { open(it) },
-                ),
-            )
-            Screen.Pair -> PairScreen(
-                pair,
-                onCode = model::pair,
-                onRetry = model::startPairing,
-                onBack = { screen = Screen.Main },
-            )
-            Screen.Send -> SendScreen(
-                pcName = state.pcs.firstOrNull { it.id == state.selected }?.name.orEmpty(),
-                notice = notice,
-                onText = model::sendText,
-                onFiles = {
-                    model.clearNotice()
-                    files.launch("*/*")
-                },
-                onPhotos = {
-                    model.clearNotice()
-                    photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
-                },
-                onBack = {
-                    model.clearNotice()
-                    screen = Screen.Main
-                },
-            )
-            Screen.Receive -> ReceiveScreen(
-                receive,
-                onAnswer = model::answer,
-                onCopy = { copy(it) },
-                onShare = { share(it) },
-                onNewCode = model::newCode,
-                localNetworkDenied = localNetworkDenied,
-                onAllowNetwork = { permissions.launch(arrayOf(LOCAL_NETWORK)) },
-                onStop = {
-                    model.stopReceiving()
-                    goMain()
-                },
-                onBack = { goMain() },
-            )
-            Screen.Pcs -> PcsScreen(
-                state.pcs,
-                onRemove = model::remove,
-                onPair = {
-                    model.startPairing()
-                    screen = Screen.Pair
-                },
-                onBack = { screen = Screen.Main },
-            )
+        fun openTab(next: Tab) {
+            if (next != Tab.Files) goMain()
+            tab = next
+        }
+        fun pairDevice() {
+            model.startPairing()
+            screen = Screen.Pair
+            tab = Tab.Files
+        }
+        if (tab == Tab.Files && screen != Screen.Main) BackHandler { goMain() }
+        val shot by model.shot.collectAsState()
+        val cameraProblem by model.cameraProblem.collectAsState()
+        val clipProblem by model.clipProblem.collectAsState()
+        val saveCameraPhotos by model.saveCameraPhotos.collectAsState()
+        val target = state.pcs.firstOrNull { it.id == state.selected }
+        val tabs = listOf(
+            Triple(Tab.Camera, R.drawable.ic_tab_camera, R.string.tab_camera),
+            Triple(Tab.Files, R.drawable.ic_tab_files, R.string.tab_files),
+            Triple(Tab.Clipboard, R.drawable.ic_tab_clipboard, R.string.tab_clipboard),
+        )
+        Scaffold(
+            bottomBar = {
+                NavigationBar {
+                    tabs.forEach { (item, icon, label) ->
+                        NavigationBarItem(
+                            selected = tab == item,
+                            onClick = { openTab(item) },
+                            icon = { Icon(painterResource(icon), null) },
+                            label = { Text(stringResource(label)) },
+                        )
+                    }
+                }
+            },
+        ) { padding ->
+            Box(Modifier.padding(padding).consumeWindowInsets(padding)) {
+                when (tab) {
+                    Tab.Camera -> CameraScreen(
+                        canAsk = startupAsked,
+                        targets = state.pcs,
+                        selected = state.selected,
+                        entries = state.entries,
+                        shot = shot,
+                        problem = cameraProblem,
+                        onSelect = model::select,
+                        onPair = ::pairDevice,
+                        onHistory = { openTab(Tab.Files) },
+                        newFile = model::newPhotoFile,
+                        onTaken = model::photoTaken,
+                        onFailed = model::cameraFailed,
+                        onClearProblem = model::clearCameraProblem,
+                    )
+                    Tab.Clipboard -> ClipboardScreen(
+                        target = target,
+                        entries = state.entries,
+                        problem = clipProblem,
+                        onPaste = model::paste,
+                        onPair = ::pairDevice,
+                        actions = MainActions(onCopy = { copy(it) }, onOpen = { open(it) }),
+                    )
+                    Tab.Files -> when (screen) {
+                        Screen.Main -> MainScreen(
+                            state,
+                            MainActions(
+                                onPair = {
+                                    model.startPairing()
+                                    screen = Screen.Pair
+                                },
+                                onPcs = { screen = Screen.Pcs },
+                                onReceive = { screen = Screen.Receive },
+                                onSend = { screen = Screen.Send },
+                                onSelect = model::select,
+                                onGallery = {
+                                    if (photoAccess(this@MainActivity) == PhotoAccess.None) {
+                                        pendingGallery = true
+                                        requestPhotos()
+                                    } else {
+                                        model.selectedPc()?.let { SendService.syncGallery(this@MainActivity, it.id) }
+                                    }
+                                },
+                                onFeed = {
+                                    if (photoAccess(this@MainActivity) == PhotoAccess.None) {
+                                        pendingFeed = true
+                                        requestPhotos()
+                                    } else {
+                                        model.startFeed()
+                                    }
+                                },
+                                onStopFeed = model::stopFeed,
+                                onStop = { SendService.stop(this@MainActivity) },
+                                onAllowPhotos = { requestPhotos() },
+                                onCopy = { copy(it) },
+                                onOpen = { open(it) },
+                            ),
+                        )
+                        Screen.Pair -> PairScreen(
+                            pair,
+                            onCode = model::pair,
+                            onRetry = model::startPairing,
+                            onBack = { screen = Screen.Main },
+                        )
+                        Screen.Send -> SendScreen(
+                            pcName = state.pcs.firstOrNull { it.id == state.selected }?.name.orEmpty(),
+                            notice = notice,
+                            onText = model::sendText,
+                            onFiles = {
+                                model.clearNotice()
+                                files.launch("*/*")
+                            },
+                            onPhotos = {
+                                model.clearNotice()
+                                photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                            },
+                            onBack = {
+                                model.clearNotice()
+                                screen = Screen.Main
+                            },
+                        )
+                        Screen.Receive -> ReceiveScreen(
+                            receive,
+                            onAnswer = model::answer,
+                            onCopy = { copy(it) },
+                            onShare = { share(it) },
+                            onNewCode = model::newCode,
+                            localNetworkDenied = localNetworkDenied,
+                            onAllowNetwork = { permissions.launch(arrayOf(LOCAL_NETWORK)) },
+                            onStop = {
+                                model.stopReceiving()
+                                goMain()
+                            },
+                            onBack = { goMain() },
+                        )
+                        Screen.Pcs -> PcsScreen(
+                            state.pcs,
+                            onRemove = model::remove,
+                            onPair = {
+                                model.startPairing()
+                                screen = Screen.Pair
+                            },
+                            onBack = { screen = Screen.Main },
+                            saveCameraPhotos = saveCameraPhotos,
+                            onSaveCameraPhotos = model::saveCameraPhotos,
+                        )
+                    }
+                }
+            }
         }
     }
 
