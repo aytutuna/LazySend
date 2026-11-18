@@ -84,6 +84,25 @@ final class PhotoFormatTests: XCTestCase {
         }
     }
 
+    func testRawAndAvifPicturesAreNeverConverted() throws {
+        for name in ["IMG_0001.dng", "IMG_0002.DNG", "photo.avif"] {
+            let url = try write(name, try XCTUnwrap(encoded(.jpeg)))
+            XCTAssertFalse(PhotoFormatting.isConvertible(url), name)
+            XCTAssertEqual(PhotoFormatting.prepare(url, as: .png), url, name)
+        }
+    }
+
+    func testAPictureOfSeveralFramesIsNotConverted() throws {
+        let out = NSMutableData()
+        let destination = try XCTUnwrap(CGImageDestinationCreateWithData(out, UTType.png.identifier as CFString, 2, nil))
+        CGImageDestinationAddImage(destination, cgImage(), nil)
+        CGImageDestinationAddImage(destination, cgImage(), nil)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+        let url = try write("moving.png", out as Data)
+        let frames = CGImageSourceCreateWithURL(url as CFURL, nil).map { CGImageSourceGetCount($0) } ?? 0
+        XCTAssertEqual(PhotoFormatting.isConvertible(url), frames == 1)
+    }
+
     func testAPictureThatCannotBeReadIsLeftAlone() throws {
         let url = try write("broken.jpg", Data("not a picture".utf8))
         XCTAssertEqual(PhotoFormatting.prepare(url, as: .png), url)
