@@ -201,6 +201,7 @@ class MainActivity : ComponentActivity() {
                         entries = state.entries,
                         problem = clipProblem,
                         onPaste = model::paste,
+                        onSendText = model::sendClipText,
                         onPair = ::pairDevice,
                         actions = MainActions(onCopy = { copy(it) }, onOpen = { open(it) }),
                     )
