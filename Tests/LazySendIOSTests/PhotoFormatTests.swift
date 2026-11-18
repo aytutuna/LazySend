@@ -8,25 +8,26 @@ import XCTest
 
 @MainActor
 final class PhotoFormatTests: XCTestCase {
-    private func cgImage(width: Int = 8, height: Int = 4) -> CGImage {
+    private func cgImage(width: Int = 8, height: Int = 4, opaque: Bool = true) -> CGImage {
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: width, height: height), format: {
             let format = UIGraphicsImageRendererFormat()
             format.scale = 1
+            format.opaque = opaque
             return format
         }())
         let image = renderer.image { context in
-            UIColor.red.setFill()
+            (opaque ? UIColor.red : UIColor.red.withAlphaComponent(0.5)).setFill()
             context.fill(CGRect(x: 0, y: 0, width: width, height: height))
         }
         return image.cgImage!
     }
 
-    private func encoded(_ type: UTType, orientation: Int? = nil) -> Data? {
+    private func encoded(_ type: UTType, orientation: Int? = nil, opaque: Bool = true) -> Data? {
         let out = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(out, type.identifier as CFString, 1, nil) else { return nil }
         var properties: [CFString: Any] = [:]
         if let orientation { properties[kCGImagePropertyOrientation] = orientation }
-        CGImageDestinationAddImage(destination, cgImage(), properties as CFDictionary)
+        CGImageDestinationAddImage(destination, cgImage(opaque: opaque), properties as CFDictionary)
         return CGImageDestinationFinalize(destination) ? out as Data : nil
     }
 
@@ -50,12 +51,33 @@ final class PhotoFormatTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
     }
 
-    func testAPngBecomesAJpegWithTheNameChanged() throws {
-        let url = try write("shot.png", try XCTUnwrap(encoded(.png)))
-        let made = PhotoFormatting.prepare(url, as: .jpeg)
-        XCTAssertEqual(made.lastPathComponent, "shot.jpg")
-        XCTAssertTrue(isJPEG(try Data(contentsOf: made)))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+    func testAPngScreenshotWithoutTransparencyStaysAPngUnderJpeg() throws {
+        let png = try XCTUnwrap(encoded(.png, opaque: true))
+        let url = try write("Screenshot.png", png)
+        XCTAssertEqual(PhotoFormatting.prepare(url, as: .jpeg), url)
+        XCTAssertEqual(try Data(contentsOf: url), png)
+    }
+
+    func testAPngWithTransparencyStaysAPngUnderJpeg() throws {
+        let png = try XCTUnwrap(encoded(.png, opaque: false))
+        let url = try write("logo.png", png)
+        XCTAssertEqual(PhotoFormatting.prepare(url, as: .jpeg), url)
+        XCTAssertEqual(try Data(contentsOf: url), png)
+    }
+
+    func testAJpegIsAlreadyAJpegAndStaysUnderJpeg() throws {
+        let jpeg = try XCTUnwrap(encoded(.jpeg))
+        let url = try write("a.jpg", jpeg)
+        XCTAssertEqual(PhotoFormatting.prepare(url, as: .jpeg), url)
+    }
+
+    func testAConvertedJpegKeepsTheOrientationTag() throws {
+        guard let heic = encoded(.heic, orientation: 6) else { throw XCTSkip("this Simulator does not write HEIC") }
+        let made = PhotoFormatting.prepare(try write("IMG_0002.heic", heic), as: .jpeg)
+        XCTAssertEqual(made.pathExtension, "jpg")
+        let source = try XCTUnwrap(CGImageSourceCreateWithURL(made as CFURL, nil))
+        let properties = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])
+        XCTAssertEqual(properties[kCGImagePropertyOrientation] as? Int, 6)
     }
 
     func testAHeicBecomesAJpeg() throws {
@@ -92,15 +114,18 @@ final class PhotoFormatTests: XCTestCase {
         }
     }
 
+    // A real two-frame GIF under a name that says HEIC, so only its frame count can keep it from being converted.
     func testAPictureOfSeveralFramesIsNotConverted() throws {
         let out = NSMutableData()
-        let destination = try XCTUnwrap(CGImageDestinationCreateWithData(out, UTType.png.identifier as CFString, 2, nil))
+        let destination = try XCTUnwrap(CGImageDestinationCreateWithData(out, UTType.gif.identifier as CFString, 2, nil))
         CGImageDestinationAddImage(destination, cgImage(), nil)
         CGImageDestinationAddImage(destination, cgImage(), nil)
         XCTAssertTrue(CGImageDestinationFinalize(destination))
-        let url = try write("moving.png", out as Data)
+        let url = try write("moving.heic", out as Data)
         let frames = CGImageSourceCreateWithURL(url as CFURL, nil).map { CGImageSourceGetCount($0) } ?? 0
-        XCTAssertEqual(PhotoFormatting.isConvertible(url), frames == 1)
+        XCTAssertEqual(frames, 2)
+        XCTAssertFalse(PhotoFormatting.isConvertible(url))
+        XCTAssertEqual(PhotoFormatting.prepare(url, as: .png), url)
     }
 
     func testAPictureThatCannotBeReadIsLeftAlone() throws {
