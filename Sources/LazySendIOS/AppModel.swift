@@ -74,6 +74,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var savesCameraToPhotos: Bool
     /// Photos add access was refused when "Save camera photos to Photos" was turned on.
     @Published private(set) var cameraPhotosDenied = false
+    @Published private(set) var photoFormat = PhotoFormat.jpeg
     @Published private(set) var photoNotice: PhotoNotice?
     @Published private(set) var galleryRunning = false
     @Published private(set) var feeds: [String: GalleryFeedProgress] = [:]
@@ -114,6 +115,7 @@ final class AppModel: ObservableObject {
         host = HostModel(env: env, phoneId: { store.phoneId }, timeline: timeline, saved: saved)
         savesToPhotos = env.defaults.bool(forKey: Keys.photos)
         savesCameraToPhotos = env.defaults.bool(forKey: Keys.cameraPhotos)
+        photoFormat = env.defaults.string(forKey: Keys.photoFormat).flatMap(PhotoFormat.init(rawValue:)) ?? .jpeg
         host.onDevicesChanged = { [weak self] in self?.refreshPcs() }
         host.$feeds.assign(to: &$feeds)
         host.onPhotosDenied = { [weak self] in self?.photoNotice = .denied }
@@ -322,6 +324,20 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func setPhotoFormat(_ format: PhotoFormat) {
+        photoFormat = format
+        env.defaults.set(format.rawValue, forKey: Keys.photoFormat)
+    }
+
+    /// Photos picked in Files go in the chosen format; videos, GIFs and other files are left as they are.
+    func sendPhotos(_ urls: [URL], to target: Target) {
+        let format = photoFormat
+        Task {
+            let prepared = await Task.detached { urls.map { PhotoFormatting.prepare($0, as: format) } }.value
+            sendFiles(prepared, to: target)
+        }
+    }
+
     func setSavesCameraToPhotos(_ on: Bool) {
         guard on else {
             savesCameraToPhotos = false
@@ -341,9 +357,9 @@ final class AppModel: ObservableObject {
     /// A photo from the camera goes as a JPEG named by its time, to be put on the clipboard there. Returns the file's name,
     /// which carries the milliseconds when another send already has the plain one, so the row can be found by it.
     /// Throws when the file cannot be written or the device is gone, so the caller can say so.
-    func sendCameraPhoto(_ jpeg: Data, to target: Target) async throws -> String {
-        let plain = ClipName.photo()
-        let name = timeline.entries.contains { $0.direction == .sent && $0.title == plain } ? ClipName.photo(milliseconds: true) : plain
+    func sendCameraPhoto(_ jpeg: Data, ext: String = "jpg", to target: Target) async throws -> String {
+        let plain = ClipName.photo(ext: ext)
+        let name = timeline.entries.contains { $0.direction == .sent && $0.title == plain } ? ClipName.photo(milliseconds: true, ext: ext) : plain
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("lazysend-photo-" + UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let file = folder.appendingPathComponent(name)

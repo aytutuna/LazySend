@@ -109,6 +109,19 @@ struct CameraView: View {
                 .accessibilityLabel(camera.flash ? "Flash on" : "Flash off")
                 .accessibilityIdentifier("camera.flash")
             }
+            Menu {
+                Picker("Format", selection: Binding(get: { model.photoFormat }, set: { model.setPhotoFormat($0) })) {
+                    ForEach(PhotoFormat.allCases) { Text($0.title).tag($0) }
+                }
+            } label: {
+                Text(model.photoFormat.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.black.opacity(0.4), in: Capsule())
+            }
+            .accessibilityIdentifier("camera.format")
             Spacer()
             if let target = model.selectedTarget {
                 Menu {
@@ -225,12 +238,12 @@ struct CameraView: View {
         camera.problem = nil
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         Task { @MainActor in
-            guard let jpeg = await camera.takePhoto() else {
+            guard let photo = await camera.takePhoto(format: model.photoFormat) else {
                 camera.problem = String(localized: "The photo could not be taken.")
                 return
             }
             do {
-                camera.shot(try await model.sendCameraPhoto(jpeg, to: target), jpeg: jpeg)
+                camera.shot(try await model.sendCameraPhoto(photo.data, ext: photo.ext, to: target), jpeg: photo.data)
             } catch {
                 camera.problem = error.localizedDescription
             }

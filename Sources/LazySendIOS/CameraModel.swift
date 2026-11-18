@@ -179,17 +179,22 @@ final class CameraModel: ObservableObject {
         box.queue.async { box.setZoom(factor) }
     }
 
-    /// The JPEG of a photo, or nil when none could be taken.
-    func takePhoto() async -> Data? {
+    /// A photo in `format` with its file extension, or nil when none could be taken. Original is HEIC where the camera writes it,
+    /// else JPEG; PNG is made from the JPEG, with its turn put into the pixels.
+    func takePhoto(format: PhotoFormat) async -> (data: Data, ext: String)? {
         guard !busy, running else { return nil }
         busy = true
         defer { busy = false }
         let angle = rotation?.videoRotationAngleForHorizonLevelCapture ?? 90
         let box = capture
         let withFlash = flash && hasFlash
-        return await withCheckedContinuation { continuation in
-            box.capture(flash: withFlash, angle: angle) { continuation.resume(returning: $0) }
+        let shot: (Data?, String) = await withCheckedContinuation { continuation in
+            box.capture(flash: withFlash, angle: angle, original: format == .original) { continuation.resume(returning: ($0, $1)) }
         }
+        guard let data = shot.0 else { return nil }
+        guard format == .png else { return (data, shot.1) }
+        guard let png = await Task.detached(operation: { PhotoFormatting.png(fromPhoto: data) }).value else { return nil }
+        return (png, "png")
     }
 
     func shot(_ name: String, jpeg: Data) {

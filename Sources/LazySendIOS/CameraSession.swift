@@ -96,23 +96,25 @@ final class CameraSession: @unchecked Sendable {
         camera.unlockForConfiguration()
     }
 
-    /// Takes a JPEG turned by `angle`, the camera's own turn for how the phone is held, so the file's orientation is right.
-    /// `completion` gets the file's bytes, or nil.
-    func capture(flash: Bool, angle: CGFloat, completion: @escaping @Sendable (Data?) -> Void) {
+    /// Takes a JPEG, or a HEIC when `original` is asked for and the camera writes it, turned by `angle`, the camera's own turn for how
+    /// the phone is held, so the file's orientation is right. `completion` gets the file's bytes and extension, or nil bytes.
+    func capture(flash: Bool, angle: CGFloat, original: Bool, completion: @escaping @Sendable (Data?, String) -> Void) {
         queue.async {
-            guard self.session.isRunning, self.output.availablePhotoCodecTypes.contains(.jpeg),
+            let heic = original && self.output.availablePhotoCodecTypes.contains(.hevc)
+            let ext = heic ? "heic" : "jpg"
+            guard self.session.isRunning, heic || self.output.availablePhotoCodecTypes.contains(.jpeg),
                   let connection = self.output.connection(with: .video), connection.isEnabled, connection.isActive else {
-                completion(nil)
+                completion(nil, ext)
                 return
             }
             if connection.isVideoRotationAngleSupported(angle) { connection.videoRotationAngle = angle }
-            let settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.jpeg])
+            let settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: heic ? AVVideoCodecType.hevc : AVVideoCodecType.jpeg])
             if flash, self.output.supportedFlashModes.contains(.on) { settings.flashMode = .on }
             let id = settings.uniqueID
             // The output holds its delegate weakly, so it is kept here until the photo is in.
             self.pending[id] = PhotoDelegate { [weak self] data in
                 self?.queue.async { self?.pending[id] = nil }
-                completion(data)
+                completion(data, ext)
             }
             self.output.capturePhoto(with: settings, delegate: self.pending[id]!)
         }

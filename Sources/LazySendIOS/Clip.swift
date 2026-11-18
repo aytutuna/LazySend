@@ -51,8 +51,8 @@ enum ClipContent: Equatable {
 
 /// The names of what the camera and the clipboard send, with the time they were made.
 enum ClipName {
-    static func photo(_ date: Date = Date(), milliseconds: Bool = false) -> String {
-        "Photo \(stamp(date, milliseconds: milliseconds)).jpg"
+    static func photo(_ date: Date = Date(), milliseconds: Bool = false, ext: String = "jpg") -> String {
+        "Photo \(stamp(date, milliseconds: milliseconds)).\(ext)"
     }
 
     static func clipboard(_ date: Date = Date(), ext: String = "png") -> String {

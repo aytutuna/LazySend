@@ -4,10 +4,12 @@ import ImageIO
 import UniformTypeIdentifiers
 
 /// The format photos are sent in, for camera shots and for photos picked in Files.
-enum PhotoFormat: String, CaseIterable {
+enum PhotoFormat: String, CaseIterable, Identifiable {
     case jpeg
     case original
     case png
+
+    var id: String { rawValue }
 
     var title: String {
         switch self {
