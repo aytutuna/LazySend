@@ -13,40 +13,40 @@ enum Pasted: Equatable {
 
     static func load(_ providers: [NSItemProvider]) async -> Pasted? {
         for provider in providers where provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
-            if let image = await image(provider) { return image }
+            if let image = await pastedImage(provider) { return image }
         }
         for provider in providers where provider.canLoadObject(ofClass: URL.self) {
-            if let url = await url(provider), !url.isFileURL { return .link(url) }
+            if let url = await pastedURL(provider), !url.isFileURL { return .link(url) }
         }
         for provider in providers where provider.canLoadObject(ofClass: String.self) {
-            if let text = await text(provider), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return .text(text) }
+            if let text = await pastedText(provider), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return .text(text) }
         }
         return nil
     }
 
     // PNG and JPEG are kept as they are; any other picture is sent as PNG.
-    private static func image(_ provider: NSItemProvider) async -> Pasted? {
+    private static func pastedImage(_ provider: NSItemProvider) async -> Pasted? {
         let kept: [(UTType, String)] = [(.png, "png"), (.jpeg, "jpg")]
         for (type, ext) in kept where provider.hasItemConformingToTypeIdentifier(type.identifier) {
-            if let data = await data(provider, type) { return .image(data, ext: ext) }
+            if let data = await pastedData(provider, type) { return .image(data, ext: ext) }
         }
-        guard let data = await data(provider, .image), let png = UIImage(data: data)?.pngData() else { return nil }
+        guard let data = await pastedData(provider, .image), let png = UIImage(data: data)?.pngData() else { return nil }
         return .image(png, ext: "png")
     }
 
-    private static func data(_ provider: NSItemProvider, _ type: UTType) async -> Data? {
+    private static func pastedData(_ provider: NSItemProvider, _ type: UTType) async -> Data? {
         await withCheckedContinuation { continuation in
             provider.loadDataRepresentation(forTypeIdentifier: type.identifier) { data, _ in continuation.resume(returning: data) }
         }
     }
 
-    private static func url(_ provider: NSItemProvider) async -> URL? {
+    private static func pastedURL(_ provider: NSItemProvider) async -> URL? {
         await withCheckedContinuation { continuation in
             _ = provider.loadObject(ofClass: URL.self) { url, _ in continuation.resume(returning: url) }
         }
     }
 
-    private static func text(_ provider: NSItemProvider) async -> String? {
+    private static func pastedText(_ provider: NSItemProvider) async -> String? {
         await withCheckedContinuation { continuation in
             _ = provider.loadObject(ofClass: String.self) { text, _ in continuation.resume(returning: text) }
         }
