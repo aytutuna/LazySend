@@ -103,6 +103,7 @@ fun MainScreen(state: MainState, actions: MainActions) {
                     TargetChip(current, state.pcs, actions.onSelect, MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer)
                 }
                 if (!listed) {
+                    Box(Modifier.padding(horizontal = 16.dp)) { Connection(state, current, actions) }
                     Column(Modifier.weight(1f).fillMaxWidth().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(painterResource(R.drawable.ic_tab_files), null, Modifier.size(72.dp), tint = MaterialTheme.colorScheme.secondary)
                         Text(stringResource(R.string.files_empty_title), Modifier.padding(top = 16.dp), style = MaterialTheme.typography.headlineSmall)
