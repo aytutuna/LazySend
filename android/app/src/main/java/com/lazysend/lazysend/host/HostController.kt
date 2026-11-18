@@ -293,10 +293,10 @@ class HostController(
     }
 
     /** Queues text for a guest; a lone http or https address goes as a link. Returns why it was refused, or null. */
-    fun queueText(guest: Guest, text: String): String? {
+    fun queueText(guest: Guest, text: String, clip: Boolean = false): String? {
         val trimmed = text.trim()
         return try {
-            val item = if (isAcceptableUrl(trimmed) && ' ' !in trimmed) core.outbox.queueLink(guest.id, trimmed) else core.outbox.queueText(guest.id, text)
+            val item = if (isAcceptableUrl(trimmed) && ' ' !in trimmed) core.outbox.queueLink(guest.id, trimmed, clip) else core.outbox.queueText(guest.id, text, clip)
             queued(guest, item, if (item.kind == "link") EntryKind.Link else EntryKind.Text, item.url ?: item.text.orEmpty())
             null
         } catch (e: IllegalArgumentException) {
@@ -307,7 +307,7 @@ class HostController(
     }
 
     /** Copies what was picked or shared into this app's storage and queues it for a guest. */
-    fun queueUris(guest: Guest, resolver: ContentResolver, uris: List<Uri>) {
+    fun queueUris(guest: Guest, resolver: ContentResolver, uris: List<Uri>, clip: Boolean = false) {
         for (uri in uris) {
             try {
                 var name = uri.lastPathSegment ?: "file"
@@ -318,7 +318,7 @@ class HostController(
                         if (!it.isNull(1)) size = it.getLong(1)
                     }
                 }
-                val item = core.outbox.queueFile(guest.id, name, resolver.getType(uri), size) { resolver.openInputStream(uri) ?: throw java.io.IOException("Cannot open $uri") }
+                val item = core.outbox.queueFile(guest.id, name, resolver.getType(uri), size, clip = clip) { resolver.openInputStream(uri) ?: throw java.io.IOException("Cannot open $uri") }
                 queued(guest, item, EntryKind.File, item.name.orEmpty())
             } catch (e: Exception) {
                 // One file that cannot be read must not stop the ones behind it.
@@ -334,7 +334,7 @@ class HostController(
         timeline.add(
             TimelineEntry(
                 "out-${item.id}", clock(), Direction.Sent, kind, guest.name, title, detail = "Waiting for ${guest.name} to pick it up",
-                state = EntryState.Active, totalBytes = item.size ?: 0, mime = item.mime,
+                state = EntryState.Active, totalBytes = item.size ?: 0, mime = item.mime, clip = item.clip,
             ),
         )
         timeline.save()

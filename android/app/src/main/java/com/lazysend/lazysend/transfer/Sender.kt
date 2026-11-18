@@ -51,15 +51,15 @@ class Sender(
     val progress: StateFlow<SendProgress?> get() = shown
 
     /** Sends a note; a lone http(s) address goes as a link. Returns the reason when it did not arrive. */
-    suspend fun sendText(pc: Pc, text: String): String? {
+    suspend fun sendText(pc: Pc, text: String, clip: Boolean = false): String? {
         val trimmed = text.trim()
         val isLink = trimmed.length <= 8192 && Regex("https?://\\S+").matches(trimmed)
         val sendId = newSendId()
-        val item = if (isLink) ItemRequest("link", url = trimmed, sendId = sendId) else ItemRequest("text", text = text, sendId = sendId)
+        val item = if (isLink) ItemRequest("link", url = trimmed, sendId = sendId, clip = clip.takeIf { it }) else ItemRequest("text", text = text, sendId = sendId, clip = clip.takeIf { it })
         if (text.toByteArray().size > 1024 * 1024) return "That is more than the 1 MB a note can hold. Send it as a file instead."
         val entry = TimelineEntry(
             UUID.randomUUID().toString(), clock(), Direction.Sent, if (isLink) EntryKind.Link else EntryKind.Text, pc.name,
-            if (isLink) trimmed else text, state = EntryState.Active,
+            if (isLink) trimmed else text, state = EntryState.Active, clip = clip,
         )
         timeline.add(entry)
         return try {
@@ -83,8 +83,8 @@ class Sender(
         }
     }
 
-    suspend fun sendFiles(pc: Pc, uris: List<Uri>) = exclusive {
-        for (uri in uris) sendOne(pc, uri)
+    suspend fun sendFiles(pc: Pc, uris: List<Uri>, clip: Boolean = false) = exclusive {
+        for (uri in uris) sendOne(pc, uri, clip)
         shown.value = null
     }
 
@@ -111,11 +111,11 @@ class Sender(
         }
     }
 
-    private suspend fun sendOne(pc: Pc, uri: Uri) {
+    private suspend fun sendOne(pc: Pc, uri: Uri, clip: Boolean) {
         val id = UUID.randomUUID().toString()
         val sendId = newSendId()
         timeline.add(
-            TimelineEntry(id, clock(), Direction.Sent, EntryKind.File, pc.name, uri.lastPathSegment ?: "file", state = EntryState.Active),
+            TimelineEntry(id, clock(), Direction.Sent, EntryKind.File, pc.name, uri.lastPathSegment ?: "file", state = EntryState.Active, clip = clip),
         )
         try {
             val meta = withContext(Dispatchers.IO) { describe(uri) }
@@ -124,7 +124,7 @@ class Sender(
             val source = DataSource { offset -> open(uri, offset) }
             shown.value = SendProgress(meta.name, pc.name, 0, meta.size)
             val hash = withContext(Dispatchers.IO) { sha256Hex(source) }
-            val request = ItemRequest("file", name = meta.name, size = meta.size, mime = meta.mime, modified = meta.modified, sha256 = hash, sendId = sendId)
+            val request = ItemRequest("file", name = meta.name, size = meta.size, mime = meta.mime, modified = meta.modified, sha256 = hash, sendId = sendId, clip = clip.takeIf { it })
             var lastReport = 0L
             Uploader(refresher(pc, first)).sendFile(request, source) { sent ->
                 val now = System.nanoTime()

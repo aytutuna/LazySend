@@ -52,6 +52,30 @@ class SenderTest {
     }
 
     @Test
+    fun theClipFlagGoesOnlyWhenAskedFor() = runBlocking<Unit> {
+        val sender = sender()
+        val file = File(dir, "shot.jpg").also { it.writeBytes(ByteArray(300) { b -> b.toByte() }) }
+
+        sender.sendText(paired, "plain")
+        sender.sendText(paired, "copy me", clip = true)
+        sender.sendFiles(paired, listOf(Uri.fromFile(file)))
+        sender.sendFiles(paired, listOf(Uri.fromFile(file)), clip = true)
+
+        assertEquals(listOf(null, true, null, true), pc.items.map { it.clip })
+        assertEquals(listOf(false, true, false, true), timeline.entries.value.reversed().map { it.clip })
+    }
+
+    @Test
+    fun aGallerySyncNeverAsksForTheClipboard() = runBlocking<Unit> {
+        val file = File(dir, "old.jpg").also { it.writeBytes(ByteArray(300)) }
+        val asset = Asset("external_primary:image:7", Uri.fromFile(file), "old.jpg", 300, "image/jpeg", 0)
+
+        sender(asset).syncGallery(paired)
+
+        assertEquals(listOf<Boolean?>(null), pc.items.map { it.clip })
+    }
+
+    @Test
     fun anAssetThatCannotBeReadIsSkippedNotRetried() = runBlocking {
         val gone = Asset("external_primary:image:1", Uri.parse("content://nothing/1"), "gone.jpg", 10, "image/jpeg", 0)
 

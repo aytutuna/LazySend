@@ -58,14 +58,15 @@ class SendService : Service() {
         ServiceCompat.startForeground(this, NOTIFICATION_ID, first, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         val pc = intent?.getStringExtra(EXTRA_PC)?.let(graph.pcs::get)
         when (intent?.action) {
-            ACTION_FILES -> if (pc != null) gate.launch { graph.sender.sendFiles(pc, uris(intent)) }
+            ACTION_FILES -> if (pc != null) gate.launch { graph.sender.sendFiles(pc, uris(intent), intent.getBooleanExtra(EXTRA_CLIP, false)) }
             ACTION_GALLERY -> if (pc != null) gate.launch { graph.sender.syncGallery(pc) }
-            ACTION_TEXT -> if (pc != null) intent.getStringExtra(EXTRA_TEXT)?.let { text -> gate.launch { graph.sender.sendText(pc, text) } }
+            ACTION_TEXT -> if (pc != null) intent.getStringExtra(EXTRA_TEXT)?.let { text -> gate.launch { graph.sender.sendText(pc, text, intent.getBooleanExtra(EXTRA_CLIP, false)) } }
             ACTION_QUEUE -> intent.getStringExtra(EXTRA_GUEST)?.let(graph.host.core.guests::get)?.let { guest ->
                 val text = intent.getStringExtra(EXTRA_TEXT)
+                val clip = intent.getBooleanExtra(EXTRA_CLIP, false)
                 gate.launch {
                     withContext(Dispatchers.IO) {
-                        if (text != null) graph.host.queueText(guest, text) else graph.host.queueUris(guest, contentResolver, uris(intent))
+                        if (text != null) graph.host.queueText(guest, text, clip) else graph.host.queueUris(guest, contentResolver, uris(intent), clip)
                     }
                 }
             }
@@ -123,34 +124,35 @@ class SendService : Service() {
         private const val EXTRA_PC = "pc"
         private const val EXTRA_GUEST = "guest"
         private const val EXTRA_TEXT = "text"
+        private const val EXTRA_CLIP = "clip"
         private const val NOTIFICATION_ID = 1
 
-        fun sendFiles(context: Context, pcId: String, uris: List<Uri>) {
+        fun sendFiles(context: Context, pcId: String, uris: List<Uri>, clip: Boolean = false) {
             if (uris.isEmpty()) return
-            val intent = Intent(context, SendService::class.java).setAction(ACTION_FILES).putExtra(EXTRA_PC, pcId)
+            val intent = Intent(context, SendService::class.java).setAction(ACTION_FILES).putExtra(EXTRA_PC, pcId).putExtra(EXTRA_CLIP, clip)
             intent.clipData = clip(uris)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             ContextCompat.startForegroundService(context, intent)
         }
 
-        fun sendText(context: Context, pcId: String, text: String) {
+        fun sendText(context: Context, pcId: String, text: String, clip: Boolean = false) {
             ContextCompat.startForegroundService(
-                context, Intent(context, SendService::class.java).setAction(ACTION_TEXT).putExtra(EXTRA_PC, pcId).putExtra(EXTRA_TEXT, text),
+                context, Intent(context, SendService::class.java).setAction(ACTION_TEXT).putExtra(EXTRA_PC, pcId).putExtra(EXTRA_TEXT, text).putExtra(EXTRA_CLIP, clip),
             )
         }
 
         /** Queues what was picked or shared for a guest of this phone; it is copied here, so the source can go away. */
-        fun queueFiles(context: Context, guestId: String, uris: List<Uri>) {
+        fun queueFiles(context: Context, guestId: String, uris: List<Uri>, clip: Boolean = false) {
             if (uris.isEmpty()) return
-            val intent = Intent(context, SendService::class.java).setAction(ACTION_QUEUE).putExtra(EXTRA_GUEST, guestId)
+            val intent = Intent(context, SendService::class.java).setAction(ACTION_QUEUE).putExtra(EXTRA_GUEST, guestId).putExtra(EXTRA_CLIP, clip)
             intent.clipData = clip(uris)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             ContextCompat.startForegroundService(context, intent)
         }
 
-        fun queueText(context: Context, guestId: String, text: String) {
+        fun queueText(context: Context, guestId: String, text: String, clip: Boolean = false) {
             ContextCompat.startForegroundService(
-                context, Intent(context, SendService::class.java).setAction(ACTION_QUEUE).putExtra(EXTRA_GUEST, guestId).putExtra(EXTRA_TEXT, text),
+                context, Intent(context, SendService::class.java).setAction(ACTION_QUEUE).putExtra(EXTRA_GUEST, guestId).putExtra(EXTRA_TEXT, text).putExtra(EXTRA_CLIP, clip),
             )
         }
 
