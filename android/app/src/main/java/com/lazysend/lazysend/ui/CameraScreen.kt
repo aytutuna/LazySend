@@ -193,12 +193,7 @@ fun CameraScreen(
             Box(Modifier.offset { IntOffset((at.x - 36.dp.toPx()).toInt(), (at.y - 36.dp.toPx()).toInt()) }.size(72.dp).border(1.5.dp, Color.White, RoundedCornerShape(4.dp)))
         }
 
-        Column(Modifier.fillMaxSize().statusBarsPadding(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (hasFlash) FlashButton(flash) { flash = nextFlash(flash) }
-                Box(Modifier.weight(1f))
-                targets.firstOrNull { it.id == selected }?.let { Target(it, targets, onSelect) }
-            }
+        Column(Modifier.align(Alignment.Center), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (targets.isEmpty()) {
                 Panel {
                     Text(stringResource(R.string.camera_pair_title), color = Color.White, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
@@ -214,6 +209,14 @@ fun CameraScreen(
                         }) { Text(stringResource(R.string.open_settings)) }
                     }
                 }
+            }
+        }
+
+        Column(Modifier.fillMaxSize().statusBarsPadding(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (hasFlash) FlashButton(flash) { flash = nextFlash(flash) }
+                Box(Modifier.weight(1f))
+                targets.firstOrNull { it.id == selected }?.let { Target(it, targets, onSelect) }
             }
             problem?.let {
                 Text(it, Modifier.padding(8.dp).background(MaterialTheme.colorScheme.error, RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 6.dp), color = MaterialTheme.colorScheme.onError, style = MaterialTheme.typography.bodySmall)
@@ -304,7 +307,7 @@ private fun Target(current: PcRow, all: List<PcRow>, onSelect: (String) -> Unit)
 @Composable
 private fun Panel(content: @Composable () -> Unit) {
     Column(
-        Modifier.padding(16.dp).background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(14.dp)).padding(16.dp),
+        Modifier.padding(16.dp).background(Color(0xFF2A2A2A), RoundedCornerShape(14.dp)).padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) { content() }
