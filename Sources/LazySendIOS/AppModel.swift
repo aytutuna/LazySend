@@ -416,7 +416,7 @@ final class AppModel: ObservableObject {
         }
         let itemId = entry.itemId
         enqueue(entryId) {
-            await self.sendStaged(file, to: pc, entryId: entryId, resumeItemId: itemId)
+            await self.sendStaged(file, to: pc, entryId: entryId, resumeItemId: itemId, clip: nil)
             self.resuming.remove(entryId)
         }
     }
@@ -691,7 +691,7 @@ final class AppModel: ObservableObject {
         }
         timeline.update(entryId) { $0.localFile = entryId + "/" + file.lastPathComponent }
         timeline.save()
-        await sendStaged(file, to: pc, entryId: entryId, resumeItemId: nil)
+        await sendStaged(file, to: pc, entryId: entryId, resumeItemId: nil, clip: timeline.get(entryId)?.clip)
     }
 
     // A picked file is ours already and is moved; one from the document picker is copied while access to it lasts.
@@ -715,11 +715,11 @@ final class AppModel: ObservableObject {
         return target
     }
 
-    private func sendStaged(_ file: URL, to pc: PairedPc, entryId: String, resumeItemId: String?) async {
+    private func sendStaged(_ file: URL, to pc: PairedPc, entryId: String, resumeItemId: String?, clip: Bool?) async {
         let mime = UTType(filenameExtension: file.pathExtension)?.preferredMIMEType
         let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
         let outcome = await upload(file, name: file.lastPathComponent, mime: mime, modified: modified, to: pc, entryId: entryId,
-                                   resumeItemId: resumeItemId, sendId: timeline.get(entryId)?.sendId, clip: timeline.get(entryId)?.clip) { [weak self] id in
+                                   resumeItemId: resumeItemId, sendId: timeline.get(entryId)?.sendId, clip: clip) { [weak self] id in
             self?.timeline.update(entryId) { $0.itemId = id }
             self?.timeline.save()
         }

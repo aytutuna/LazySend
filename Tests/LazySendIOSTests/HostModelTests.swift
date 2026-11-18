@@ -239,6 +239,37 @@ final class HostModelTests: XCTestCase {
         XCTAssertEqual(model.timeline.entries.filter { $0.clip == true }.count, 2)
     }
 
+    func testAResumedSendDoesNotAskForTheClipboardButAFreshOneDoes() async throws {
+        await fixture.startReceiving()
+        let code = try PairingCode.parse(try XCTUnwrap(host.pairing).link)
+        let guest = AppModel(env: .temporary())
+        let pairing = Task { try await guest.pair(code) }
+        let asked = await fixture.until { self.host.approval != nil }
+        XCTAssertTrue(asked)
+        host.answerApproval(true)
+        let pc = try await pairing.value
+
+        let folder = guest.env.support.appendingPathComponent("picked-" + UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let fresh = folder.appendingPathComponent("fresh.txt")
+        try Data("fresh".utf8).write(to: fresh)
+        guest.sendFiles([fresh], to: pc, clip: true)
+        await guest.waitForSends()
+
+        let kept = guest.env.support.appendingPathComponent("Outgoing/out-kept", isDirectory: true)
+        try FileManager.default.createDirectory(at: kept, withIntermediateDirectories: true)
+        try Data("kept".utf8).write(to: kept.appendingPathComponent("kept.txt"))
+        guest.timeline.add(TimelineEntry(id: "out-kept", direction: .sent, kind: .file, pcName: pc.name, title: "kept.txt", state: .paused,
+                                         pcId: pc.id, localFile: "out-kept/kept.txt", sendId: newSendId(), clip: true))
+        guest.resumeSend("out-kept")
+        await guest.waitForSends()
+
+        let arrived = await fixture.until { model.timeline.entries.filter { $0.kind == .file && $0.direction == .received }.count == 2 }
+        XCTAssertTrue(arrived)
+        XCTAssertEqual(model.timeline.entries.first { $0.title == "fresh.txt" }?.clip, true)
+        XCTAssertNil(model.timeline.entries.first { $0.title == "kept.txt" }?.clip)
+    }
+
     func testAFileLandsInTheDocumentsFolderOfThePhoneThatSentIt() async throws {
         await fixture.startReceiving()
         let guest = try await fixture.pair("Pixel")
