@@ -4,7 +4,6 @@ import android.app.Application
 import android.content.ClipboardManager
 import android.graphics.Bitmap
 import android.net.Uri
-import android.provider.OpenableColumns
 import android.os.Build
 import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
@@ -24,7 +23,6 @@ import com.lazysend.lazysend.transfer.Pasted
 import com.lazysend.lazysend.transfer.PhotoFormat
 import com.lazysend.lazysend.transfer.convertPhoto
 import com.lazysend.lazysend.transfer.convertedName
-import com.lazysend.lazysend.transfer.converts
 import com.lazysend.lazysend.transfer.SendService
 import com.lazysend.lazysend.transfer.clipboardName
 import com.lazysend.lazysend.transfer.pasted
@@ -104,24 +102,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun photoFormat(format: PhotoFormat) = graph.settings.photoFormat(format)
 
-    /** Sends what was picked in the Files tab at once to the selected device; pictures are converted to the chosen format first. */
-    fun sendPicked(uris: List<Uri>) {
+    /**
+     * Sends what was picked in the Files tab at once to the selected device. Photos are converted to the chosen format as each one is
+     * sent, by the sending service, so leaving the screen does not lose the pick; files are sent exactly as they are.
+     */
+    fun sendPicked(uris: List<Uri>, photos: Boolean) {
         val context = getApplication<Application>()
-        val format = graph.settings.photoFormat.value
-        viewModelScope.launch(Dispatchers.IO) {
-            val ready = uris.map { uri ->
-                val mime = runCatching { context.contentResolver.getType(uri) }.getOrNull()
-                if (!converts(format, mime)) return@map uri
-                val name = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { if (it.moveToFirst()) it.getString(0) else null }
-                convertPhoto(context, uri, name ?: uri.lastPathSegment ?: "photo", format, cacheFolder("converted"))
-                    ?.let { FileProvider.getUriForFile(context, "${context.packageName}.files", it) } ?: uri
-            }
-            val guest = selectedGuest()
-            val pc = selectedPc()
-            when {
-                guest != null -> SendService.queueFiles(context, guest.id, ready)
-                pc != null -> SendService.sendFiles(context, pc.id, ready)
-            }
+        val format = graph.settings.photoFormat.value.takeIf { photos }
+        val guest = selectedGuest()
+        val pc = selectedPc()
+        when {
+            guest != null -> SendService.queueFiles(context, guest.id, uris, format = format)
+            pc != null -> SendService.sendFiles(context, pc.id, uris, format = format)
         }
     }
 
@@ -141,7 +133,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             // The camera's JPEG is already upright and tagged; only a PNG is made from it, with the turn applied to the pixels.
             val ready = if (format == PhotoFormat.Png) {
-                convertPhoto(getApplication(), Uri.fromFile(file), file.name, format, file.parentFile!!)?.also { file.delete() } ?: file
+                convertPhoto(getApplication(), Uri.fromFile(file), file.name, "image/jpeg", format, file.parentFile!!)?.also { file.delete() } ?: file
             } else {
                 file
             }

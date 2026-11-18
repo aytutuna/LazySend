@@ -94,7 +94,7 @@
     <string name="add_description">Add</string>
     <string name="add_photos">Photos</string>
     <string name="add_files">Files</string>
-    <string name="format_menu">Format: %1$s</string>
+    <string name="format_menu">Photo format: %1$s</string>
     <string name="format_jpeg">JPEG</string>
     <string name="format_original">Original</string>
     <string name="format_png">PNG</string>

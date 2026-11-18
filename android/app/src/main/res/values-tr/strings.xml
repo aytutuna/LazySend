@@ -94,7 +94,7 @@
     <string name="add_description">Ekle</string>
     <string name="add_photos">Fotoğraflar</string>
     <string name="add_files">Dosyalar</string>
-    <string name="format_menu">Biçim: %1$s</string>
+    <string name="format_menu">Fotoğraf biçimi: %1$s</string>
     <string name="format_jpeg">JPEG</string>
     <string name="format_original">Orijinal</string>
     <string name="format_png">PNG</string>

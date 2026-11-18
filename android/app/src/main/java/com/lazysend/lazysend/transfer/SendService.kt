@@ -58,15 +58,23 @@ class SendService : Service() {
         ServiceCompat.startForeground(this, NOTIFICATION_ID, first, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         val pc = intent?.getStringExtra(EXTRA_PC)?.let(graph.pcs::get)
         when (intent?.action) {
-            ACTION_FILES -> if (pc != null) gate.launch { graph.sender.sendFiles(pc, uris(intent), intent.getBooleanExtra(EXTRA_CLIP, false), intent.getLongExtra(EXTRA_AT, System.currentTimeMillis())) }
+            ACTION_FILES -> if (pc != null) {
+                val clip = intent.getBooleanExtra(EXTRA_CLIP, false)
+                val at = intent.getLongExtra(EXTRA_AT, System.currentTimeMillis())
+                val format = format(intent)
+                // Each picture is converted and sent before the next is begun, so the first is on its way at once.
+                gate.launch { for (uri in uris(intent)) graph.sender.sendFiles(pc, listOf(prepared(uri, format)), clip, at) }
+            }
             ACTION_GALLERY -> if (pc != null) gate.launch { graph.sender.syncGallery(pc) }
             ACTION_TEXT -> if (pc != null) intent.getStringExtra(EXTRA_TEXT)?.let { text -> gate.launch { graph.sender.sendText(pc, text, intent.getBooleanExtra(EXTRA_CLIP, false), intent.getLongExtra(EXTRA_AT, System.currentTimeMillis())) } }
             ACTION_QUEUE -> intent.getStringExtra(EXTRA_GUEST)?.let(graph.host.core.guests::get)?.let { guest ->
                 val text = intent.getStringExtra(EXTRA_TEXT)
                 val clip = intent.getBooleanExtra(EXTRA_CLIP, false)
+                val format = format(intent)
                 gate.launch {
                     withContext(Dispatchers.IO) {
-                        if (text != null) graph.host.queueText(guest, text, clip) else graph.host.queueUris(guest, contentResolver, uris(intent), clip)
+                        if (text != null) graph.host.queueText(guest, text, clip)
+                        else for (uri in uris(intent)) graph.host.queueUris(guest, contentResolver, listOf(preparedNow(uri, format)), clip)
                     }
                 }
             }
@@ -100,6 +108,12 @@ class SendService : Service() {
         stopSelf()
     }
 
+    private fun format(intent: Intent) = intent.getStringExtra(EXTRA_FORMAT)?.let(PhotoFormat::valueOf)
+
+    private fun preparedNow(uri: Uri, format: PhotoFormat?) = if (format == null) uri else preparedForSend(this, uri, format)
+
+    private suspend fun prepared(uri: Uri, format: PhotoFormat?) = withContext(Dispatchers.IO) { preparedNow(uri, format) }
+
     private fun uris(intent: Intent): List<Uri> {
         val clip = intent.clipData ?: return emptyList()
         return (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }
@@ -126,11 +140,12 @@ class SendService : Service() {
         private const val EXTRA_TEXT = "text"
         private const val EXTRA_CLIP = "clip"
         private const val EXTRA_AT = "at"
+        private const val EXTRA_FORMAT = "format"
         private const val NOTIFICATION_ID = 1
 
-        fun sendFiles(context: Context, pcId: String, uris: List<Uri>, clip: Boolean = false, at: Long = System.currentTimeMillis()) {
+        fun sendFiles(context: Context, pcId: String, uris: List<Uri>, clip: Boolean = false, at: Long = System.currentTimeMillis(), format: PhotoFormat? = null) {
             if (uris.isEmpty()) return
-            val intent = Intent(context, SendService::class.java).setAction(ACTION_FILES).putExtra(EXTRA_PC, pcId).putExtra(EXTRA_CLIP, clip).putExtra(EXTRA_AT, at)
+            val intent = Intent(context, SendService::class.java).setAction(ACTION_FILES).putExtra(EXTRA_PC, pcId).putExtra(EXTRA_CLIP, clip).putExtra(EXTRA_AT, at).putExtra(EXTRA_FORMAT, format?.name)
             intent.clipData = clip(uris)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             ContextCompat.startForegroundService(context, intent)
@@ -143,9 +158,9 @@ class SendService : Service() {
         }
 
         /** Queues what was picked or shared for a guest of this phone; it is copied here, so the source can go away. */
-        fun queueFiles(context: Context, guestId: String, uris: List<Uri>, clip: Boolean = false) {
+        fun queueFiles(context: Context, guestId: String, uris: List<Uri>, clip: Boolean = false, format: PhotoFormat? = null) {
             if (uris.isEmpty()) return
-            val intent = Intent(context, SendService::class.java).setAction(ACTION_QUEUE).putExtra(EXTRA_GUEST, guestId).putExtra(EXTRA_CLIP, clip)
+            val intent = Intent(context, SendService::class.java).setAction(ACTION_QUEUE).putExtra(EXTRA_GUEST, guestId).putExtra(EXTRA_CLIP, clip).putExtra(EXTRA_FORMAT, format?.name)
             intent.clipData = clip(uris)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             ContextCompat.startForegroundService(context, intent)

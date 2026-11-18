@@ -119,8 +119,8 @@ class MainActivity : ComponentActivity() {
         }
         fun requestPhotos() = photoPermissions.launch(photoPermissionList())
 
-        val files = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris -> model.sendPicked(uris) }
-        val photos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris -> model.sendPicked(uris) }
+        val files = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris -> model.sendPicked(uris, photos = false) }
+        val photos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris -> model.sendPicked(uris, photos = true) }
 
         // Receiving runs while this screen is in front. Leaving the app only declines what waits; the code is closed when the person goes back.
         LaunchedEffect(screen) {
