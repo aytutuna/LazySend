@@ -23,7 +23,6 @@
 
     <string name="empty_title">Henüz eşleşen cihaz yok</string>
     <string name="empty_body">Bilgisayarınızda Lazy Send\'i açın, Telefon eşleştir\'i seçin ve gösterdiği kodu tarayın.</string>
-    <string name="timeline_empty">Gönderdikleriniz ve aldıklarınız burada görünür.</string>
     <string name="connected_over">%1$s üzerinden bağlı</string>
     <string name="not_reachable">%1$s cihazına ulaşılamıyor</string>
     <string name="sent_to">Alıcı: %1$s</string>
@@ -45,13 +44,6 @@
     <string name="allow_all_photos">Tümüne izin ver</string>
     <string name="photo_permission_needed">Lazy Send\'in fotoğraf ve videoları gönderebilmesi için bunlara erişmesi gerekir.</string>
 
-    <string name="send_title">%1$s cihazına gönder</string>
-    <string name="send_text_hint">Metin veya bağlantı yazın ya da yapıştırın</string>
-    <string name="send_text_button">Metni gönder</string>
-    <string name="pick_files">Dosya seç</string>
-    <string name="pick_photos">Fotoğraf seç</string>
-    <string name="note_sent">Gönderildi</string>
-    <string name="note_queued">Sıraya alındı. Diğer cihaz bağlandığında teslim edilir.</string>
 
     <string name="pair_title">Bilgisayarınızla eşleştirin</string>
     <string name="pair_scan_hint">Kamerayı bilgisayarınızdaki koda doğrultun.</string>
@@ -97,6 +89,15 @@
     <string name="remove_guest_body">%1$s burada unutulur ve onu bekleyenler silinir.</string>
     <string name="gallery_received">%1$d alındı</string>
 
+    <string name="files_empty_title">Henüz paylaşılan bir şey yok</string>
+    <string name="files_empty_body">Gönderdiğiniz ya da aldığınız fotoğraflar ve dosyalar burada görünür.</string>
+    <string name="add_description">Ekle</string>
+    <string name="add_photos">Fotoğraflar</string>
+    <string name="add_files">Dosyalar</string>
+    <string name="format_menu">Biçim: %1$s</string>
+    <string name="format_jpeg">JPEG</string>
+    <string name="format_original">Orijinal</string>
+    <string name="format_png">PNG</string>
     <string name="copied_from">%1$s cihazından kopyalandı</string>
 
     <string name="tab_camera">Kamera</string>

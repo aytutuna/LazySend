@@ -1,22 +1,22 @@
 package com.lazysend.lazysend.ui
 
 import android.text.format.DateUtils
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -28,7 +28,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lazysend.lazysend.R
@@ -38,6 +40,7 @@ import com.lazysend.lazysend.data.Direction
 import com.lazysend.lazysend.data.EntryKind
 import com.lazysend.lazysend.data.EntryState
 import com.lazysend.lazysend.data.TimelineEntry
+import com.lazysend.lazysend.transfer.PhotoFormat
 import com.lazysend.lazysend.transfer.formatBytes
 
 /** A PC this phone is a guest of, or a guest of this phone ([guest], with an id of its own so one device can be both). */
@@ -52,13 +55,16 @@ data class MainState(
     val photoAccess: PhotoAccess = PhotoAccess.Full,
     /** How far the library feed for the selected guest of this phone has got. */
     val feed: FeedProgress? = null,
+    val format: PhotoFormat = PhotoFormat.Jpeg,
 )
 
 class MainActions(
     val onPair: () -> Unit = {},
     val onPcs: () -> Unit = {},
     val onReceive: () -> Unit = {},
-    val onSend: () -> Unit = {},
+    val onPhotos: () -> Unit = {},
+    val onFiles: () -> Unit = {},
+    val onFormat: (PhotoFormat) -> Unit = {},
     val onSelect: (String) -> Unit = {},
     val onGallery: () -> Unit = {},
     val onFeed: () -> Unit = {},
@@ -87,19 +93,47 @@ fun MainScreen(state: MainState, actions: MainActions) {
             Empty(Modifier.padding(padding), actions.onPair, actions.onReceive)
             return@Scaffold
         }
-        LazyColumn(
-            Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            item { Connection(state, actions) }
-            if (state.entries.isEmpty()) {
-                item { Text(stringResource(R.string.timeline_empty), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        val files = fileEntries(state.entries)
+        val current = state.pcs.firstOrNull { it.id == state.selected } ?: state.pcs.first()
+        val galleryEnabled = state.feed?.done != false || !current.guest
+        val listed = files.isNotEmpty() || state.feed != null
+        Box(Modifier.fillMaxSize().padding(padding)) {
+            Column(Modifier.fillMaxSize()) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    TargetChip(current, state.pcs, actions.onSelect, MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer)
+                }
+                if (!listed) {
+                    Column(Modifier.weight(1f).fillMaxWidth().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(painterResource(R.drawable.ic_tab_files), null, Modifier.size(72.dp), tint = MaterialTheme.colorScheme.secondary)
+                        Text(stringResource(R.string.files_empty_title), Modifier.padding(top = 16.dp), style = MaterialTheme.typography.headlineSmall)
+                        Text(
+                            stringResource(R.string.files_empty_body),
+                            Modifier.padding(vertical = 8.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                        AddButton(state.format, galleryEnabled, if (current.guest) actions.onFeed else actions.onGallery, actions, Modifier.padding(top = 12.dp))
+                    }
+                } else {
+                    LazyColumn(
+                        Modifier.weight(1f).fillMaxWidth(),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        item { Connection(state, current, actions) }
+                        items(files, key = { it.id }) { Entry(it, actions) }
+                    }
+                }
             }
-            items(state.entries, key = { it.id }) { Entry(it, actions) }
+            if (listed) AddButton(state.format, galleryEnabled, if (current.guest) actions.onFeed else actions.onGallery, actions, Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp))
         }
     }
 }
+
+/** The Files tab lists files, photos and gallery syncs; texts and links belong to the Clipboard tab. */
+fun fileEntries(entries: List<TimelineEntry>) = entries.filter { it.kind == EntryKind.File || it.kind == EntryKind.Gallery }
+
+fun textEntries(entries: List<TimelineEntry>) = entries.filter { it.kind == EntryKind.Text || it.kind == EntryKind.Link }
 
 @Composable
 private fun Empty(modifier: Modifier, onPair: () -> Unit, onReceive: () -> Unit) {
@@ -116,15 +150,9 @@ private fun Empty(modifier: Modifier, onPair: () -> Unit, onReceive: () -> Unit)
 }
 
 @Composable
-private fun Connection(state: MainState, actions: MainActions) {
-    val pc = state.pcs.firstOrNull { it.id == state.selected } ?: state.pcs.first()
+private fun Connection(state: MainState, pc: PcRow, actions: MainActions) {
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (state.pcs.size > 1) {
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    state.pcs.forEach { FilterChip(selected = it.id == pc.id, onClick = { actions.onSelect(it.id) }, label = { Text(it.name) }) }
-                }
-            }
             Text(pc.name, style = MaterialTheme.typography.titleMedium)
             Text(
                 when {
@@ -134,12 +162,6 @@ private fun Connection(state: MainState, actions: MainActions) {
                 },
                 style = MaterialTheme.typography.bodyMedium,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = actions.onSend) { Text(stringResource(R.string.send)) }
-                OutlinedButton(onClick = if (pc.guest) actions.onFeed else actions.onGallery, enabled = state.feed?.done != false || !pc.guest) {
-                    Text(stringResource(R.string.send_all_photos))
-                }
-            }
             val feed = state.feed.takeIf { pc.guest }
             if (feed != null) {
                 if (feed.done) {

@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.lazysend.lazysend.R
 import com.lazysend.lazysend.data.TimelineEntry
 
-/** The clipboard tab: paste to put it on the chosen device's clipboard, and what went both ways lately. */
+/** The clipboard tab: paste or type to put it on the chosen device's clipboard, and every text and link that went either way. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ClipboardScreen(
@@ -41,7 +41,7 @@ fun ClipboardScreen(
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
     val keyboard = LocalSoftwareKeyboardController.current
-    val recent = entries.filter { it.clip }.take(10)
+    val recent = textEntries(entries)
     Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.tab_clipboard)) }) }) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
