@@ -50,6 +50,10 @@ struct PcsView: View {
                     get: { model.savesToPhotos },
                     set: { model.setSavesToPhotos($0) }))
                     .accessibilityIdentifier("pcs.savePhotos")
+                Toggle("Save camera photos to Photos", isOn: Binding(
+                    get: { model.savesCameraToPhotos },
+                    set: { model.setSavesCameraToPhotos($0) }))
+                    .accessibilityIdentifier("pcs.saveCameraPhotos")
             }
         }
         .navigationTitle("Paired devices")

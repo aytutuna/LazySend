@@ -8,6 +8,7 @@ import UserNotifications
 
 enum Keys {
     static let photos = "savePhotos"
+    static let cameraPhotos = "saveCameraPhotos"
     static let selected = "selectedPc"
     static let check = "com.lazysend.lazysend.check"
     static let galleryPending = "gallerySyncPending"

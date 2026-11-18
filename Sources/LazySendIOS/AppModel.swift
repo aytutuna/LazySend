@@ -71,6 +71,7 @@ final class AppModel: ObservableObject {
     @Published var notice: String?
     @Published private(set) var links: [String: LinkKind] = [:]
     @Published private(set) var savesToPhotos: Bool
+    @Published private(set) var savesCameraToPhotos: Bool
     @Published private(set) var photoNotice: PhotoNotice?
     @Published private(set) var galleryRunning = false
     @Published private(set) var feeds: [String: GalleryFeedProgress] = [:]
@@ -106,6 +107,7 @@ final class AppModel: ObservableObject {
         queue = ShareQueue(root: env.folder)
         host = HostModel(env: env, phoneId: { store.phoneId }, timeline: timeline, saved: saved)
         savesToPhotos = env.defaults.bool(forKey: Keys.photos)
+        savesCameraToPhotos = env.defaults.bool(forKey: Keys.cameraPhotos)
         host.onDevicesChanged = { [weak self] in self?.refreshPcs() }
         host.$feeds.assign(to: &$feeds)
         host.onPhotosDenied = { [weak self] in self?.photoNotice = .denied }
@@ -312,6 +314,41 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func setSavesCameraToPhotos(_ on: Bool) {
+        guard on else {
+            savesCameraToPhotos = false
+            env.defaults.set(false, forKey: Keys.cameraPhotos)
+            return
+        }
+        Task {
+            let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+            let allowed = status == .authorized || status == .limited
+            self.savesCameraToPhotos = allowed
+            self.env.defaults.set(allowed, forKey: Keys.cameraPhotos)
+        }
+    }
+
+    /// A photo from the camera goes as a JPEG named by its time, to be put on the clipboard there. Returns the file's name.
+    func sendCameraPhoto(_ jpeg: Data, to target: Target) throws -> String {
+        let name = ClipName.photo()
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("lazysend-photo-" + UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let file = folder.appendingPathComponent(name)
+        try jpeg.write(to: file)
+        sendFiles([file], to: target, clip: true)
+        if savesCameraToPhotos { addToPhotos(jpeg) }
+        return name
+    }
+
+    // The library's id is kept so the gallery sync does not send the photo again.
+    private func addToPhotos(_ jpeg: Data) {
+        let saved = self.saved
+        PHPhotoLibrary.shared().performChanges({
+            let request = PHAssetCreationRequest.forAsset()
+            request.addResource(with: .photo, data: jpeg, options: nil)
+            if let id = request.placeholderForCreatedAsset?.localIdentifier { saved.insert(id) }
+        }, completionHandler: nil)
+    }
 
     func sendNote(_ text: String, to pc: PairedPc, clip: Bool? = nil) throws {
         var request = try ItemRequest.note(text, clip: clip)

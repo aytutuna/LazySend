@@ -41,11 +41,11 @@
 		<string>_lazysend._tcp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>Lazy Send reads the pairing code on your computer's screen.</string>
+	<string>Lazy Send uses the camera to take photos you send to your computer and to read the pairing code on its screen.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Lazy Send looks for your computer on your local network, so you can send things to it and receive things from it, and lets other phones on the network connect to this one while the app is open.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Lazy Send saves the photos and videos your computer sends to your photo library.</string>
+	<string>Lazy Send saves the photos and videos your computer sends, and the photos you take with it, to your photo library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Lazy Send sends the photos and videos you choose to your computer. Choosing All photos and videos sends the whole library.</string>
 	<key>UIApplicationSceneManifest</key>
