@@ -23,8 +23,9 @@ enum PhotoFormat: String, CaseIterable, Identifiable {
 enum PhotoFormatting {
     static let jpegQuality = 0.92
 
-    /// The most pixels a picture may have to be made a PNG, which has to be decoded whole (4 bytes a pixel in memory).
-    static let maxPngPixels = 50_000_000
+    /// The most pixels a picture may have to be converted: a PNG has to be decoded whole (4 bytes a pixel in memory) and a JPEG made from
+    /// a still decodes in tiles but still costs time and memory on a phone, so a bigger one is sent as it is.
+    static let maxPixels = 50_000_000
 
     /// A still picture that can be converted: not a RAW or DNG, AVIF, GIF or other picture that moves, a video, or anything that is not an
     /// image. A picture of more than one frame (an animated HEICS, WebP or APNG) is not still.
@@ -36,48 +37,63 @@ enum PhotoFormatting {
     }
 
     /// The picked photo in `format`, written next to the original, which goes. The photo itself when it is to stay as it is: Original,
-    /// something that is not a still picture, a picture that already is in that format, or one that cannot be converted.
+    /// something that is not a still picture, or one that cannot be converted. JPEG converts only a HEIC, HEIF or WebP photo without
+    /// transparency, so a PNG screenshot stays lossless and transparency stays; PNG converts any still picture that is not one already.
     static func prepare(_ url: URL, as format: PhotoFormat) -> URL {
-        guard format != .original, isConvertible(url) else { return url }
+        guard format != .original, isConvertible(url), let type = UTType(filenameExtension: url.pathExtension),
+              let source = CGImageSourceCreateWithURL(url as CFURL, nil), wants(format, of: type, source: source),
+              pixels(of: source) <= maxPixels else { return url }
         let target: UTType = format == .png ? .png : .jpeg
-        if let type = UTType(filenameExtension: url.pathExtension), type.conforms(to: target) { return url }
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let data = convert(source, to: target) else { return url }
         let renamed = url.deletingPathExtension().appendingPathExtension(format == .png ? "png" : "jpg")
-        do {
-            try data.write(to: renamed)
-            try? FileManager.default.removeItem(at: url)
-            return renamed
-        } catch {
+        guard let destination = CGImageDestinationCreateWithURL(renamed as CFURL, target.identifier as CFString, 1, nil),
+              fill(destination, from: source, as: target) else {
+            try? FileManager.default.removeItem(at: renamed)
             return url
         }
+        try? FileManager.default.removeItem(at: url)
+        return renamed
     }
 
     /// A camera shot as PNG, which carries no orientation, so the turn is put into the pixels.
     static func png(fromPhoto data: Data) -> Data? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
-        return convert(source, to: .png)
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil), pixels(of: source) <= maxPixels else { return nil }
+        let out = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(out, UTType.png.identifier as CFString, 1, nil),
+              fill(destination, from: source, as: .png) else { return nil }
+        return out as Data
     }
 
-    /// JPEG is streamed from the source with the picture's metadata (EXIF, GPS, orientation tag) and never decoded whole; PNG gets the
-    /// picture turned upright, which decodes it, so a picture of more than `maxPngPixels` stays as it is (nil).
-    private static func convert(_ source: CGImageSource, to type: UTType) -> Data? {
-        let out = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(out, type.identifier as CFString, 1, nil) else { return nil }
+    private static func wants(_ format: PhotoFormat, of type: UTType, source: CGImageSource) -> Bool {
+        if format == .png { return !type.conforms(to: .png) }
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        if properties?[kCGImagePropertyHasAlpha] as? Bool == true { return false }
+        return type.conforms(to: .heic) || type.conforms(to: .heif) || type.conforms(to: .webP)
+    }
+
+    private static func size(of source: CGImageSource) -> (width: Int, height: Int) {
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        return (properties?[kCGImagePropertyPixelWidth] as? Int ?? 0, properties?[kCGImagePropertyPixelHeight] as? Int ?? 0)
+    }
+
+    private static func pixels(of source: CGImageSource) -> Int {
+        let side = size(of: source)
+        return side.width * side.height
+    }
+
+    /// JPEG is copied from the source with the picture's metadata (EXIF, GPS, the orientation tag); PNG gets the picture turned upright,
+    /// which decodes it whole.
+    private static func fill(_ destination: CGImageDestination, from source: CGImageSource, as type: UTType) -> Bool {
         if type == .png {
-            let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
-            let width = properties?[kCGImagePropertyPixelWidth] as? Int ?? 0
-            let height = properties?[kCGImagePropertyPixelHeight] as? Int ?? 0
-            guard width * height <= maxPngPixels else { return nil }
+            let side = size(of: source)
             let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
-                                            kCGImageSourceThumbnailMaxPixelSize: max(width, height, 1)]
-            guard let upright = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+                                            kCGImageSourceThumbnailMaxPixelSize: max(side.width, side.height, 1)]
+            guard let upright = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return false }
             CGImageDestinationAddImage(destination, upright, nil)
         } else {
             let options: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: jpegQuality]
             CGImageDestinationAddImageFromSource(destination, source, 0, options as CFDictionary)
         }
-        return CGImageDestinationFinalize(destination) ? out as Data : nil
+        return CGImageDestinationFinalize(destination)
     }
 }
 #endif
