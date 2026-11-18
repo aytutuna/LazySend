@@ -29,9 +29,13 @@ import org.junit.Test
 class HostServerTest {
     private val host = HostFixture()
     private val texts = CopyOnWriteArrayList<Triple<String, String, String>>()
+    private val clips = CopyOnWriteArrayList<String>()
 
     init {
-        host.core.router.onText = { guest, kind, text -> texts.add(Triple(guest.name, kind, text)) }
+        host.core.router.onText = { guest, kind, text, clip ->
+            texts.add(Triple(guest.name, kind, text))
+            if (clip) clips.add(text)
+        }
     }
 
     @After
@@ -262,6 +266,19 @@ class HostServerTest {
         }
         assertEquals("Test phone/Gallery/2026-01", host.files.folders.values.single())
         refused("badRequest") { host.client(host.pair("phone-test-0002")).galleryMissing(listOf("bad\u0001id")) }
+    }
+
+    @Test
+    fun theClipFlagReachesTheTextEventAndTheOutboxEntry() = runBlocking<Unit> {
+        val credentials = host.pair()
+        val client = host.client(credentials)
+        client.postItem(ItemRequest("text", text = "plain"))
+        client.postItem(ItemRequest("text", text = "copy me", clip = true))
+        client.postItem(ItemRequest("link", url = "https://alazy.app/", clip = true))
+        assertEquals(listOf("copy me", "https://alazy.app/"), clips)
+        host.core.outbox.queueText(credentials.deviceId, "plain")
+        host.core.outbox.queueText(credentials.deviceId, "copy me", clip = true)
+        assertEquals(listOf(null, true), client.outbox(0).items.map { it.clip })
     }
 
     @Test

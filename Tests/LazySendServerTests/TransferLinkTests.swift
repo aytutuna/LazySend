@@ -34,6 +34,33 @@ final class TransferLinkTests: XCTestCase {
         XCTAssertEqual(items[0].deviceName, "Test iPhone")
     }
 
+    func testClipIsCarriedIntoTheTextAndFileEvents() async throws {
+        var texts: [ReceivedItem] = []
+        var files: [ReceivedFile] = []
+        let lock = NSLock()
+        harness.service.router.onTextReceived = { item in
+            lock.lock()
+            texts.append(item)
+            lock.unlock()
+        }
+        harness.service.inbox.onFileReceived = { file in
+            lock.lock()
+            files.append(file)
+            lock.unlock()
+        }
+        _ = try await phone.client.postItem(ItemRequest(kind: "text", text: "plain"))
+        _ = try await phone.client.postItem(ItemRequest(kind: "text", text: "copy me", clip: true))
+        _ = try await phone.client.postItem(ItemRequest(kind: "link", url: "https://example.com/", clip: true))
+        let content = bytes(1000)
+        let begun = try await phone.client.postItem(ItemRequest(kind: "file", name: "a.bin", size: 1000, clip: true))
+        _ = try await phone.put(begun.id, offset: 0, content)
+        try await phone.upload("b.bin", content)
+        lock.lock()
+        XCTAssertEqual(texts.map(\.clip), [nil, true, true])
+        XCTAssertEqual(files.map(\.clip), [true, false])
+        lock.unlock()
+    }
+
     func testBadTextAndLinksAreRefused() async throws {
         await expectRefused(400, "badRequest") { _ = try await phone.client.postItem(ItemRequest(kind: "text", text: "")) }
         await expectRefused(400, "badRequest") { _ = try await phone.client.postItem(ItemRequest(kind: "text")) }

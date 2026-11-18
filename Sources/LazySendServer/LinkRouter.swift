@@ -394,11 +394,11 @@ public final class LinkRouter: @unchecked Sendable {
             guard let text = item.text, !text.isEmpty else { return .error(400, .badRequest) }
             guard text.utf8.count <= LinkProtocol.maxTextBytes else { return .error(413, .tooLarge) }
             if let repeated = repeatedSend(device, item, kind: ItemKind.text, now: now) { return repeated }
-            return stored(history.add(device, kind: ItemKind.text, text: text, url: nil, now: now, sendId: item.sendId))
+            return stored(history.add(device, kind: ItemKind.text, text: text, url: nil, now: now, sendId: item.sendId, clip: item.clip))
         case ItemKind.link:
             guard isAcceptableLink(item.url) else { return .error(400, .badRequest) }
             if let repeated = repeatedSend(device, item, kind: ItemKind.link, now: now) { return repeated }
-            return stored(history.add(device, kind: ItemKind.link, text: nil, url: item.url, now: now, sendId: item.sendId))
+            return stored(history.add(device, kind: ItemKind.link, text: nil, url: item.url, now: now, sendId: item.sendId, clip: item.clip))
         case ItemKind.file:
             if let send = item.sendId, history.findSend(device.id, send, now: now) != nil { return .error(400, .badRequest) }
             let begun = try inbox.begin(device, item)

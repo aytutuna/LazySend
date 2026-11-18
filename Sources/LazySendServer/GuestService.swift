@@ -220,17 +220,18 @@ public final class GuestService: @unchecked Sendable {
 
     /// A file, in chunks that carry on after a drop. `onProgress` gets the bytes the host is known to have.
     /// `bookmark` opens the file again after a restart, where the sandbox has forgotten its path.
-    public func sendFile(at url: URL, to id: String, bookmark: Data? = nil, onProgress: @escaping @Sendable (Int64) -> Void = { _ in }) async throws {
+    public func sendFile(at url: URL, to id: String, bookmark: Data? = nil, clip: Bool? = nil,
+                         onProgress: @escaping @Sendable (Int64) -> Void = { _ in }) async throws {
         let sendId = newSendId()
         let (request, modified) = try await Task.detached { () throws -> (ItemRequest, Date?) in
             let values = try? url.resourceValues(forKeys: [.contentTypeKey, .contentModificationDateKey])
             let request = try ItemRequest.file(at: url, name: url.lastPathComponent, mime: values?.contentType?.preferredMIMEType,
-                                               modified: values?.contentModificationDate, sendId: sendId)
+                                               modified: values?.contentModificationDate, sendId: sendId, clip: clip)
             return (request, values?.contentModificationDate)
         }.value
         let send = PendingSend(hostId: id, sendId: sendId, path: url.standardizedFileURL.path, size: request.size ?? 0,
                                modified: PendingSend.seconds(modified ?? Date(timeIntervalSince1970: 0)), sha256: request.sha256 ?? "",
-                               bookmark: bookmark)
+                               bookmark: bookmark, clip: clip)
         try await sendPending(send, url: url, request: request, onProgress: onProgress)
     }
 
@@ -261,7 +262,7 @@ public final class GuestService: @unchecked Sendable {
             throw ResumeError.changed(url.lastPathComponent)
         }
         let request = ItemRequest(kind: "file", name: url.lastPathComponent, size: send.size, mime: values?.contentType?.preferredMIMEType,
-                                  modified: ISO8601DateFormatter().string(from: modified), sha256: send.sha256, sendId: send.sendId)
+                                  modified: ISO8601DateFormatter().string(from: modified), sha256: send.sha256, sendId: send.sendId, clip: send.clip)
         try await sendPending(send, url: url, request: request, onProgress: onProgress)
     }
 

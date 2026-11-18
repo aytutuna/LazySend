@@ -153,6 +153,21 @@ final class GuestServiceTests: XCTestCase {
         XCTAssertTrue(reachable)
     }
 
+    func testClipOfWhatTheHostQueuesIsCarriedIntoTheGuestsEvents() async throws {
+        _ = try await pairGuest()
+        try outbox.queueText(guestId, "plain")
+        try outbox.queueText(guestId, "copy me", clip: true)
+        let url = harness.root.appendingPathComponent("clip.bin")
+        try bytes(2000).write(to: url)
+        outbox.queueFiles(guestId, [(url: url, bookmark: nil, mime: nil)], clip: true)
+        fixture.guest.start()
+        let arrived = await waitUntil { fixture.texts.all.count == 2 && fixture.files.all.count == 1 }
+        XCTAssertTrue(arrived)
+        XCTAssertEqual(fixture.texts.all.first { $0.text == "plain" }?.clip, nil)
+        XCTAssertEqual(fixture.texts.all.first { $0.text == "copy me" }?.clip, true)
+        XCTAssertEqual(fixture.files.all.first?.clip, true)
+    }
+
     func testAFileFromTheHostIsMarkedAsDownloadedAndNamedAfterTheHost() async throws {
         _ = try await pairGuest()
         let content = bytes(700_000)

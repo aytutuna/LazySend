@@ -52,6 +52,7 @@ data class ItemRequest(
     val sourceId: String? = null,
     val sha256: String? = null,
     val sendId: String? = null,
+    val clip: Boolean? = null,
 )
 
 /** The id a sender picks once per thing it sends, so a repeated post of it is recognised: 16 random bytes, 22 characters. */
@@ -77,6 +78,7 @@ data class OutboxEntry(
     val mime: String? = null,
     val sourceId: String? = null,
     val taken: String? = null,
+    val clip: Boolean? = null,
 )
 
 @Serializable

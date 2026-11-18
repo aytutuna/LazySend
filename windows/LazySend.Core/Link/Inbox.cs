@@ -11,7 +11,7 @@ public sealed class InboxException(int status, LinkError error) : Exception(erro
     public LinkError Error { get; } = error;
 }
 
-public sealed record ReceivedFile(string DeviceId, string DeviceName, string Path, long Size, string? SourceId);
+public sealed record ReceivedFile(string DeviceId, string DeviceName, string Path, long Size, string? SourceId, bool Clip = false);
 
 /// <summary>A file being received (or finished a while ago), kept in a small JSON file next to its data so a restart can go on.</summary>
 public sealed class IncomingFile
@@ -26,6 +26,7 @@ public sealed class IncomingFile
     public string? SourceId { get; set; }
     public string? Sha256 { get; set; }
     public string? SendId { get; set; }
+    public bool Clip { get; set; }
     /// <summary>The folder the file ends up in; fixed when the transfer starts, so changing the receive folder later strands nothing.</summary>
     public string Directory { get; set; } = "";
     public DateTimeOffset Started { get; set; }
@@ -130,6 +131,7 @@ public sealed class Inbox
             SourceId = request.SourceId,
             Sha256 = sha256,
             SendId = request.SendId,
+            Clip = request.Clip == true,
             Directory = folder,
             Started = now,
         };
@@ -392,7 +394,7 @@ public sealed class Inbox
         if (file.Modified is { } modified) BestEffort(() => File.SetLastWriteTimeUtc(path, modified.UtcDateTime));
         writer?.Hash?.Dispose();
         _writers.TryRemove(file.Id, out _);
-        FileReceived?.Invoke(this, new ReceivedFile(file.DeviceId, file.DeviceName, path, file.Size, file.SourceId));
+        FileReceived?.Invoke(this, new ReceivedFile(file.DeviceId, file.DeviceName, path, file.Size, file.SourceId, file.Clip));
     }
 
     /// <summary>Tags the file as coming from the internet zone, so SmartScreen and Office checks apply to what a phone sends (.exe, .lnk, .url…).</summary>

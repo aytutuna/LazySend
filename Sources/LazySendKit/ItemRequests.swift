@@ -23,19 +23,19 @@ public func newSendId() -> String {
 
 extension ItemRequest {
     /// A note: a lone http or https address goes as a link, anything else as text.
-    public static func note(_ text: String) throws -> ItemRequest {
+    public static func note(_ text: String, clip: Bool? = nil) throws -> ItemRequest {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { throw NoteError.empty }
         if text.utf8.count > LinkProtocol.maxTextBytes { throw NoteError.tooLarge }
         if trimmed.count <= 8192, trimmed.range(of: "^https?://\\S+$", options: .regularExpression) != nil {
-            return ItemRequest(kind: "link", url: trimmed)
+            return ItemRequest(kind: "link", url: trimmed, clip: clip)
         }
-        return ItemRequest(kind: "text", text: text)
+        return ItemRequest(kind: "text", text: text, clip: clip)
     }
 
-    public static func file(at url: URL, name: String, mime: String?, modified: Date?, sendId: String? = nil) throws -> ItemRequest {
+    public static func file(at url: URL, name: String, mime: String?, modified: Date?, sendId: String? = nil, clip: Bool? = nil) throws -> ItemRequest {
         let size = (try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.int64Value ?? 0
         return ItemRequest(kind: "file", name: name, size: size, mime: mime,
-                           modified: modified.map { ISO8601DateFormatter().string(from: $0) }, sha256: try sha256Hex(of: url), sendId: sendId)
+                           modified: modified.map { ISO8601DateFormatter().string(from: $0) }, sha256: try sha256Hex(of: url), sendId: sendId, clip: clip)
     }
 }

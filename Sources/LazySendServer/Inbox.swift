@@ -8,6 +8,7 @@ public struct ReceivedFile: Equatable, Sendable {
     public var url: URL
     public var size: Int64
     public var sourceId: String?
+    public var clip = false
 }
 
 /// A file being received, as the window shows it.
@@ -33,6 +34,7 @@ final class IncomingFile: Codable, @unchecked Sendable {
     var sourceId: String?
     var sha256: String?
     var sendId: String?
+    var clip: Bool?
     /// The folder the file ends up in, fixed when the transfer starts so changing the receive folder later strands nothing.
     var directory = ""
     var started = Date()
@@ -177,6 +179,7 @@ public final class Inbox: @unchecked Sendable {
         file.sourceId = request.sourceId
         file.sha256 = sha256
         file.sendId = request.sendId
+        file.clip = request.clip
         file.directory = folder.path
         file.started = now
         // Looked up and added in one step, so two requests for the same asset cannot start two transfers. The index is
@@ -412,7 +415,8 @@ public final class Inbox: @unchecked Sendable {
         lock.lock()
         writers[file.id] = nil
         lock.unlock()
-        onFileReceived?(ReceivedFile(deviceId: file.deviceId, deviceName: file.deviceName, url: placed, size: file.size, sourceId: file.sourceId))
+        onFileReceived?(ReceivedFile(deviceId: file.deviceId, deviceName: file.deviceName, url: placed, size: file.size, sourceId: file.sourceId,
+                                 clip: file.clip == true))
     }
 
     /// Tags the file as downloaded, so Gatekeeper's checks apply to what a phone sends (an app, a script). There is

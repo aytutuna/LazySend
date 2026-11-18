@@ -139,7 +139,7 @@ class Receiver(
             "text", "link" -> {
                 val body = item.text ?: item.url ?: return
                 val kind = if (item.kind == "link") EntryKind.Link else EntryKind.Text
-                timeline.add(TimelineEntry(id, clock(), Direction.Received, kind, pc.name, body, state = EntryState.Done))
+                timeline.add(TimelineEntry(id, clock(), Direction.Received, kind, pc.name, body, state = EntryState.Done, clip = item.clip == true))
                 notify(id.hashCode(), pc.name, body)
             }
             "file" -> if (isValidSourceId(item.sourceId)) downloadGalleryFile(pc, client, item) else downloadFile(pc, client, item, id)
@@ -195,7 +195,7 @@ class Receiver(
         timeline.add(
             TimelineEntry(
                 id, previous?.time ?: clock(), Direction.Received, EntryKind.File, pc.name, name,
-                state = EntryState.Active, bytes = part.size, totalBytes = size, uri = part.uri, mime = item.mime,
+                state = EntryState.Active, bytes = part.size, totalBytes = size, uri = part.uri, mime = item.mime, clip = item.clip == true,
             ),
         )
         try {

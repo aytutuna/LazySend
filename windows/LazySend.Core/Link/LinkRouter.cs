@@ -267,11 +267,11 @@ public sealed class LinkRouter
                 if (string.IsNullOrEmpty(item.Text)) return LinkResponse.Error(400, LinkError.BadRequest);
                 if (Encoding.UTF8.GetByteCount(item.Text) > Protocol.MaxTextBytes) return LinkResponse.Error(413, LinkError.TooLarge);
                 if (RepeatedSend(ItemKind.Text) is { } repeatedText) return repeatedText;
-                return Stored(_history.Add(device, ItemKind.Text, item.Text, null, now, sendId: item.SendId));
+                return Stored(_history.Add(device, ItemKind.Text, item.Text, null, now, sendId: item.SendId, clip: item.Clip == true));
             case ItemKind.Link:
                 if (!ReceivedLinks.IsAcceptable(item.Url)) return LinkResponse.Error(400, LinkError.BadRequest);
                 if (RepeatedSend(ItemKind.Link) is { } repeatedLink) return repeatedLink;
-                return Stored(_history.Add(device, ItemKind.Link, null, item.Url, now, sendId: item.SendId));
+                return Stored(_history.Add(device, ItemKind.Link, null, item.Url, now, sendId: item.SendId, clip: item.Clip == true));
             case ItemKind.File:
                 try
                 {

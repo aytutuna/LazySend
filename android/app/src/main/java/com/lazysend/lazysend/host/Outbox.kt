@@ -24,6 +24,7 @@ data class OutboxItem(
     /** When the asset was taken, epoch milliseconds. */
     val taken: Long? = null,
     val queued: Long,
+    val clip: Boolean = false,
 )
 
 /** The guest already has as many items waiting as the outbox holds. */
@@ -71,14 +72,14 @@ class Outbox(
     @Synchronized
     fun find(deviceId: String, id: String): OutboxItem? = items.firstOrNull { it.deviceId == deviceId && it.id == id }
 
-    fun queueText(deviceId: String, text: String): OutboxItem {
+    fun queueText(deviceId: String, text: String, clip: Boolean = false): OutboxItem {
         require(text.isNotEmpty() && text.toByteArray().size <= MAX_TEXT_BYTES) { "The text is empty or too long." }
-        return add(OutboxItem(newId(), deviceId, "text", text = text, queued = clock()))
+        return add(OutboxItem(newId(), deviceId, "text", text = text, queued = clock(), clip = clip))
     }
 
-    fun queueLink(deviceId: String, url: String): OutboxItem {
+    fun queueLink(deviceId: String, url: String, clip: Boolean = false): OutboxItem {
         require(isAcceptableUrl(url)) { "Only http and https addresses can be sent." }
-        return add(OutboxItem(newId(), deviceId, "link", url = url, queued = clock()))
+        return add(OutboxItem(newId(), deviceId, "link", url = url, queued = clock(), clip = clip))
     }
 
     /**
@@ -92,6 +93,7 @@ class Outbox(
         size: Long? = null,
         sourceId: String? = null,
         taken: Long? = null,
+        clip: Boolean = false,
         open: () -> InputStream,
     ): OutboxItem {
         if (pending(deviceId).size >= MAX_QUEUED) throw OutboxFullException()
@@ -102,7 +104,7 @@ class Outbox(
         copies.mkdirs()
         try {
             open().use { input -> copy.outputStream().use { input.copyTo(it) } }
-            return add(OutboxItem(id, deviceId, "file", path = copy.path, name = cleanFileName(name), size = copy.length(), mime = mime, sourceId = sourceId, taken = taken, queued = clock()))
+            return add(OutboxItem(id, deviceId, "file", path = copy.path, name = cleanFileName(name), size = copy.length(), mime = mime, sourceId = sourceId, taken = taken, queued = clock(), clip = clip))
         } catch (e: Exception) {
             copy.delete()
             throw e

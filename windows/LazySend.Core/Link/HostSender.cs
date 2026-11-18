@@ -18,15 +18,15 @@ public sealed class HostSender(Func<CancellationToken, Task<LinkClient>> connect
     private LinkClient? _client;
 
     // The request is built once, so a retry after a lost answer carries the same send id and the host adds nothing twice.
-    public Task SendTextAsync(string text, CancellationToken cancellation)
+    public Task SendTextAsync(string text, CancellationToken cancellation, bool clip = false)
     {
-        var request = new ItemRequest(ItemKind.Text, Text: text, SendId: Protocol.NewSendId());
+        var request = new ItemRequest(ItemKind.Text, Text: text, SendId: Protocol.NewSendId(), Clip: clip ? true : null);
         return RetryAsync(c => c.PostItemAsync(request, cancellation), cancellation);
     }
 
-    public Task SendLinkAsync(string url, CancellationToken cancellation)
+    public Task SendLinkAsync(string url, CancellationToken cancellation, bool clip = false)
     {
-        var request = new ItemRequest(ItemKind.Link, Url: url, SendId: Protocol.NewSendId());
+        var request = new ItemRequest(ItemKind.Link, Url: url, SendId: Protocol.NewSendId(), Clip: clip ? true : null);
         return RetryAsync(c => c.PostItemAsync(request, cancellation), cancellation);
     }
 

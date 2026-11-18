@@ -45,6 +45,16 @@ final class OutboxLinkTests: XCTestCase {
         XCTAssertEqual(item.entry.sourceId, "asset-1")
     }
 
+    func testClipIsListedOnlyForItemsQueuedWithIt() async throws {
+        try outbox.queueText(phone.id, "plain")
+        try outbox.queueText(phone.id, "copy me", clip: true)
+        try outbox.queueLink(phone.id, "https://example.com/", clip: true)
+        let url = try makeFile("c.bin", Data(count: 10))
+        outbox.queueFiles(phone.id, [(url: url, bookmark: nil, mime: nil)], clip: true)
+        let reply = try await phone.client.outbox(wait: 0)
+        XCTAssertEqual(reply.items.map(\.clip), [nil, true, true, true])
+    }
+
     func testPollReturnsPendingItemsAtOnce() async throws {
         try outbox.queueText(phone.id, "first")
         try outbox.queueLink(phone.id, "https://example.com/")

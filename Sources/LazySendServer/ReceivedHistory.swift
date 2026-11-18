@@ -9,6 +9,7 @@ public struct ReceivedItem: Codable, Equatable, Identifiable, Sendable {
     public var url: String?
     public var received: Date
     public var sendId: String?
+    public var clip: Bool?
 }
 
 struct HistoryFile: Codable {
@@ -39,16 +40,17 @@ public final class ReceivedHistory: @unchecked Sendable {
     }
 
     @discardableResult
-    func add(_ device: PairedDevice, kind: String, text: String?, url link: String?, now: Date, sendId: String? = nil) -> ReceivedItem {
-        add(deviceId: device.id, deviceName: device.name, kind: kind, text: text, url: link, id: newId(), now: now, sendId: sendId)
+    func add(_ device: PairedDevice, kind: String, text: String?, url link: String?, now: Date, sendId: String? = nil,
+             clip: Bool? = nil) -> ReceivedItem {
+        add(deviceId: device.id, deviceName: device.name, kind: kind, text: text, url: link, id: newId(), now: now, sendId: sendId, clip: clip)
     }
 
     /// An item of a computer this one is a guest of keeps the id the computer gave it, so a repeat is noticed.
     @discardableResult
     func add(deviceId: String, deviceName: String, kind: String, text: String?, url link: String?, id: String, now: Date,
-             sendId: String? = nil) -> ReceivedItem {
+             sendId: String? = nil, clip: Bool? = nil) -> ReceivedItem {
         let item = ReceivedItem(id: id, deviceId: deviceId, deviceName: deviceName, kind: kind, text: text, url: link, received: now,
-                                sendId: sendId)
+                                sendId: sendId, clip: clip)
         lock.lock()
         file.items.insert(item, at: 0)
         var bytes = 0

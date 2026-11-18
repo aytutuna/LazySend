@@ -63,7 +63,7 @@ class HostRouter(
 
     var onGuestPaired: (Guest) -> Unit = {}
     var onGuestRemoved: (Guest) -> Unit = {}
-    var onText: (Guest, String, String) -> Unit = { _, _, _ -> }
+    var onText: (Guest, String, String, Boolean) -> Unit = { _, _, _, _ -> }
     var onAcknowledged: (OutboxItem) -> Unit = {}
 
     suspend fun handle(request: HostRequest): HostResponse {
@@ -199,13 +199,13 @@ class HostRouter(
                 if (text.isNullOrEmpty()) throw HostError.badRequest
                 if (text.toByteArray().size > MAX_TEXT_BYTES) throw HostError.tooLarge
                 repeatedText(guest, sendId, "text")?.let { return it }
-                onText(guest, "text", text)
+                onText(guest, "text", text, item.clip == true)
                 return textStored(guest, sendId, "text")
             }
             "link" -> {
                 if (!isAcceptableUrl(item.url)) throw HostError.badRequest
                 repeatedText(guest, sendId, "link")?.let { return it }
-                onText(guest, "link", item.url!!)
+                onText(guest, "link", item.url!!, item.clip == true)
                 return textStored(guest, sendId, "link")
             }
             "file" -> {
@@ -276,7 +276,7 @@ class HostRouter(
             val bytes = (item.text?.toByteArray()?.size ?: 0) + (item.url?.toByteArray()?.size ?: 0)
             if (entries.isNotEmpty() && (entries.size >= MAX_REPLY_ITEMS || inline + bytes > MAX_REPLY_INLINE)) break
             entries.add(
-                OutboxEntry(item.id, item.kind, item.text, item.url, item.name, item.size, item.mime, item.sourceId, item.taken?.let { Instant.ofEpochMilli(it) }?.takeIf { it.atZone(ZoneOffset.UTC).year in 1980..2100 }?.toString()),
+                OutboxEntry(item.id, item.kind, item.text, item.url, item.name, item.size, item.mime, item.sourceId, item.taken?.let { Instant.ofEpochMilli(it) }?.takeIf { it.atZone(ZoneOffset.UTC).year in 1980..2100 }?.toString(), item.clip.takeIf { it }),
             )
             inline += bytes
         }

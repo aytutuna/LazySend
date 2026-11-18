@@ -62,7 +62,7 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
             return
         }
         let stored = guest.history.add(deviceId: host.id, deviceName: host.name, kind: item.kind, text: link ? nil : text,
-                                       url: link ? item.url : nil, id: item.id, now: Date())
+                                       url: link ? item.url : nil, id: item.id, now: Date(), clip: item.clip)
         guest.onTextReceived?(stored)
     }
 
@@ -154,7 +154,8 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
             try? FileManager.default.setAttributes([.modificationDate: taken], ofItemAtPath: target.path)
         }
         guard let host = host else { return }
-        guest?.onFileReceived?(ReceivedFile(deviceId: host.id, deviceName: host.name, url: target, size: item.size ?? 0, sourceId: item.gallerySource))
+        guest?.onFileReceived?(ReceivedFile(deviceId: host.id, deviceName: host.name, url: target, size: item.size ?? 0, sourceId: item.gallerySource,
+                                           clip: item.clip == true))
     }
 
     var isReceivingGallery: Bool {

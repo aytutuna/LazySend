@@ -97,10 +97,10 @@ class HostController(
         core.inbox.onBegun = { file -> if (file.sourceId == null) begun(file) }
         core.inbox.onProgress = { file, bytes -> if (file.sourceId == null) timeline.update("in-${file.id}") { it.copy(bytes = bytes) } }
         core.inbox.onFinished = ::finished
-        core.router.onText = { guest, kind, text ->
+        core.router.onText = { guest, kind, text, clip ->
             val id = newId()
             timeline.add(
-                TimelineEntry(id, clock(), Direction.Received, if (kind == "link") EntryKind.Link else EntryKind.Text, guest.name, text, state = EntryState.Done),
+                TimelineEntry(id, clock(), Direction.Received, if (kind == "link") EntryKind.Link else EntryKind.Text, guest.name, text, state = EntryState.Done, clip = clip),
             )
             notifyReceived(id.hashCode(), guest.name, text)
         }
@@ -339,7 +339,7 @@ class HostController(
         timeline.add(
             TimelineEntry(
                 "in-${file.id}", clock(), Direction.Received, EntryKind.File, file.deviceName, file.name,
-                state = EntryState.Active, totalBytes = file.size, mime = file.mime,
+                state = EntryState.Active, totalBytes = file.size, mime = file.mime, clip = file.clip,
             ),
         )
     }

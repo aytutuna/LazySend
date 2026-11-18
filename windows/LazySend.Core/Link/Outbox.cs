@@ -16,9 +16,10 @@ public sealed class OutboxItem
     public string? Mime { get; set; }
     public string? SourceId { get; set; }
     public DateTimeOffset? Taken { get; set; }
+    public bool Clip { get; set; }
     public DateTimeOffset Queued { get; set; }
 
-    public OutboxEntry ToEntry() => new(Id, Kind, Text, Url, Name, Size, Mime, SourceId, Taken is { Year: >= 1980 and <= 2100 } taken ? taken.ToString("o", CultureInfo.InvariantCulture) : null);
+    public OutboxEntry ToEntry() => new(Id, Kind, Text, Url, Name, Size, Mime, SourceId, Taken is { Year: >= 1980 and <= 2100 } taken ? taken.ToString("o", CultureInfo.InvariantCulture) : null, Clip ? true : null);
 }
 
 public sealed class OutboxFile
@@ -50,24 +51,24 @@ public sealed class Outbox
 
     public event EventHandler? Changed;
 
-    public OutboxItem QueueText(string deviceId, string text)
+    public OutboxItem QueueText(string deviceId, string text, bool clip = false)
     {
         if (text.Length == 0 || System.Text.Encoding.UTF8.GetByteCount(text) > Protocol.MaxTextBytes) throw new ArgumentException("The text is empty or too long.", nameof(text));
-        return Add(new OutboxItem { Kind = ItemKind.Text, Text = text }, deviceId);
+        return Add(new OutboxItem { Kind = ItemKind.Text, Text = text, Clip = clip }, deviceId);
     }
 
-    public OutboxItem QueueLink(string deviceId, string url)
+    public OutboxItem QueueLink(string deviceId, string url, bool clip = false)
     {
         if (!ReceivedLinks.IsAcceptable(url)) throw new ArgumentException("Only http and https addresses can be sent.", nameof(url));
-        return Add(new OutboxItem { Kind = ItemKind.Link, Url = url }, deviceId);
+        return Add(new OutboxItem { Kind = ItemKind.Link, Url = url, Clip = clip }, deviceId);
     }
 
     /// <summary>Queues the file at <paramref name="path"/>; throws <see cref="FileNotFoundException"/> when there is none.</summary>
-    public OutboxItem QueueFile(string deviceId, string path, string? mime = null, string? sourceId = null, DateTimeOffset? taken = null)
+    public OutboxItem QueueFile(string deviceId, string path, string? mime = null, string? sourceId = null, DateTimeOffset? taken = null, bool clip = false)
     {
         var info = new FileInfo(path);
         if (!info.Exists) throw new FileNotFoundException("The file does not exist.", path);
-        return Add(new OutboxItem { Kind = ItemKind.File, Path = info.FullName, Name = info.Name, Size = info.Length, Mime = mime, SourceId = sourceId, Taken = taken }, deviceId);
+        return Add(new OutboxItem { Kind = ItemKind.File, Path = info.FullName, Name = info.Name, Size = info.Length, Mime = mime, SourceId = sourceId, Taken = taken, Clip = clip }, deviceId);
     }
 
     /// <summary>

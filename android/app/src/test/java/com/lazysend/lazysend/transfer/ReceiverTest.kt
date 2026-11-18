@@ -22,6 +22,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -64,6 +65,17 @@ class ReceiverTest {
         assertEquals(EntryState.Done, timeline.get("in-out1")!!.state)
         assertArrayEquals(pc.outboxFile, files.data["mem://1"]!!.toByteArray())
         assertEquals(listOf("out1"), pc.acknowledged)
+    }
+
+    @Test
+    fun theClipFlagOfAnOutboxItemIsKeptOnTheTimelineEntry() = runBlocking {
+        pc.outbox += OutboxEntry("t1", "text", text = "copy me", clip = true)
+        pc.outbox += OutboxEntry("t2", "text", text = "leave me")
+
+        receiver.collect(paired, pc.client(), 0)
+
+        assertTrue(timeline.get("in-t1")!!.clip)
+        assertFalse(timeline.get("in-t2")!!.clip)
     }
 
     @Test

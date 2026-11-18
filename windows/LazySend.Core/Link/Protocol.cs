@@ -217,7 +217,8 @@ public static class ItemKind
 
 /// <summary>The body of <c>POST /v1/items</c>.</summary>
 public sealed record ItemRequest(string Kind = "", string? Text = null, string? Url = null, string? Name = null, long? Size = null,
-                                 string? Mime = null, DateTimeOffset? Modified = null, string? SourceId = null, string? Sha256 = null, string? SendId = null);
+                                 string? Mime = null, DateTimeOffset? Modified = null, string? SourceId = null, string? Sha256 = null, string? SendId = null,
+                                 bool? Clip = null);
 
 /// <summary>The answer to a file's <c>POST /v1/items</c> and to <c>GET /v1/items/{id}</c>.</summary>
 public sealed record ItemState(string Id, long Offset, bool Done, bool? Duplicate = null);
@@ -228,7 +229,7 @@ public sealed record GalleryCheckResponse(List<string> Missing);
 
 /// <summary>An entry of <c>GET /v1/outbox</c>.</summary>
 public sealed record OutboxEntry(string Id, string Kind, string? Text = null, string? Url = null, string? Name = null,
-                                 long? Size = null, string? Mime = null, string? SourceId = null, string? Taken = null);
+                                 long? Size = null, string? Mime = null, string? SourceId = null, string? Taken = null, bool? Clip = null);
 
 /// <param name="More">True when more is pending than this answer holds; the phone acknowledges these and asks again.</param>
 public sealed record OutboxResponse(List<OutboxEntry> Items, bool? More = null);

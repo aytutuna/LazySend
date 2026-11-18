@@ -310,6 +310,29 @@ public class GuestConnectionTests
     }
 
     [Fact]
+    public async Task ClipOfWhatTheHostQueuesIsCarriedIntoTheGuestsEvents()
+    {
+        await using var h = new Harness();
+        using var guest = new GuestRig(h);
+        var host = await guest.PairAsync();
+        string source = Path.Combine(h.Root, "clip.bin");
+        await File.WriteAllBytesAsync(source, RandomNumberGenerator.GetBytes(2000));
+        h.Service.Outbox.QueueText(guest.GuestId, "plain");
+        h.Service.Outbox.QueueText(guest.GuestId, "copy me", clip: true);
+        h.Service.Outbox.QueueFile(guest.GuestId, source, clip: true);
+        var texts = new List<ReceivedItem>();
+        var files = new List<ReceivedFile>();
+        guest.Service.Receiver.TextReceived += (_, item) => texts.Add(item);
+        guest.Service.Receiver.FileReceived += (_, file) => files.Add(file);
+        using var client = await guest.Service.Connector.ConnectAsync(host.Id, CancellationToken.None);
+
+        await guest.Service.Receiver.CollectAsync(client, host.Id, 0, CancellationToken.None);
+
+        Assert.Equal([null, true], texts.Select(t => t.Clip));
+        Assert.True(Assert.Single(files).Clip);
+    }
+
+    [Fact]
     public async Task PairingAgainKeepsWatchingWithTheNewSecret()
     {
         await using var h = new Harness();

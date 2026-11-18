@@ -49,6 +49,21 @@ final class ClientTests: XCTestCase {
         XCTAssertEqual(pc.notes.map(\.value), ["hello there", "https://example.com/a?b=1"])
     }
 
+    func testClipIsLeftOutWhenNotSetAndOldPeersAreStillRead() throws {
+        let plain = String(decoding: try JSONEncoder().encode(ItemRequest(kind: "text", text: "x")), as: UTF8.self)
+        XCTAssertFalse(plain.contains("clip"))
+        let clipped = String(decoding: try JSONEncoder().encode(try ItemRequest.note("x", clip: true)), as: UTF8.self)
+        XCTAssertTrue(clipped.contains(#""clip":true"#))
+        let entry = String(decoding: try JSONEncoder().encode(OutboxEntry(id: "a", kind: "text", text: "x")), as: UTF8.self)
+        XCTAssertFalse(entry.contains("clip"))
+        let request = try JSONDecoder().decode(ItemRequest.self, from: Data(#"{"kind":"text","text":"x","clip":true}"#.utf8))
+        XCTAssertEqual(request.clip, true)
+        let later = try JSONDecoder().decode(ItemRequest.self, from: Data(#"{"kind":"text","text":"x","later":1}"#.utf8))
+        XCTAssertNil(later.clip)
+        let listed = try JSONDecoder().decode(OutboxEntry.self, from: Data(#"{"id":"a","kind":"link","url":"https://example.com/","clip":true}"#.utf8))
+        XCTAssertEqual(listed.clip, true)
+    }
+
     func testUploadsAFileInChunks() async throws {
         let pc = try FakePc()
         let folder = try temporaryFolder()

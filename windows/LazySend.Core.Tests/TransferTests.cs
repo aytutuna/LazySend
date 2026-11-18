@@ -53,6 +53,30 @@ public class TransferTests
     }
 
     [Fact]
+    public async Task ClipIsCarriedIntoTheTextAndFileEvents()
+    {
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+        var seen = new List<ReceivedItem>();
+        var files = new List<ReceivedFile>();
+        h.Service.Router.TextReceived += (_, item) => seen.Add(item);
+        h.Service.Inbox.FileReceived += (_, file) => files.Add(file);
+
+        (await phone.PostAsync(Protocol.ItemsPath, new ItemRequest(ItemKind.Text, Text: "plain"))).Dispose();
+        (await phone.PostAsync(Protocol.ItemsPath, new ItemRequest(ItemKind.Text, Text: "copy me", Clip: true))).Dispose();
+        (await phone.PostAsync(Protocol.ItemsPath, new ItemRequest(ItemKind.Link, Url: "https://alazy.app/", Clip: true))).Dispose();
+        var content = Bytes(1000);
+        var request = new ItemRequest(ItemKind.File, Name: "a.bin", Size: content.Length, Clip: true);
+        using var begun = await phone.PostAsync(Protocol.ItemsPath, request);
+        using var chunk = await phone.PutChunkAsync((await Harness.ReadAsync<ItemState>(begun)).Id, 0, content);
+        var second = await phone.BeginFileAsync("b.bin", content);
+        (await phone.PutChunkAsync(second.Id, 0, content)).Dispose();
+
+        Assert.Equal([null, true, true], seen.Select(i => i.Clip));
+        Assert.Equal([true, false], files.Select(f => f.Clip));
+    }
+
+    [Fact]
     public async Task BadTextAndLinksAreRefused()
     {
         await using var h = new Harness();

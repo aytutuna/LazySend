@@ -16,6 +16,7 @@ public struct OutboxItem: Codable, Equatable, Identifiable, Sendable {
     public var mime: String?
     public var sourceId: String?
     public var taken: Date?
+    public var clip: Bool?
     public var queued = Date()
 
     // A date outside 1980 to 2100 is left out, as a guest would not use it.
@@ -26,7 +27,7 @@ public struct OutboxItem: Codable, Equatable, Identifiable, Sendable {
 
     var entry: OutboxEntry {
         OutboxEntry(id: id, kind: kind, text: text, url: url, name: name, size: size, mime: mime, sourceId: sourceId,
-                    taken: plausibleTaken.map { ISO8601DateFormatter().string(from: $0) })
+                    taken: plausibleTaken.map { ISO8601DateFormatter().string(from: $0) }, clip: clip)
     }
 
     var inlineBytes: Int {
@@ -88,21 +89,21 @@ public final class Outbox: @unchecked Sendable {
     }
 
     @discardableResult
-    public func queueText(_ deviceId: String, _ text: String) throws -> OutboxItem {
+    public func queueText(_ deviceId: String, _ text: String, clip: Bool? = nil) throws -> OutboxItem {
         guard !text.isEmpty, text.utf8.count <= LinkProtocol.maxTextBytes else { throw OutboxError.badText }
-        return try add([OutboxItem(kind: ItemKind.text, text: text)], deviceId, atMost: false)[0]
+        return try add([OutboxItem(kind: ItemKind.text, text: text, clip: clip)], deviceId, atMost: false)[0]
     }
 
     @discardableResult
-    public func queueLink(_ deviceId: String, _ link: String) throws -> OutboxItem {
+    public func queueLink(_ deviceId: String, _ link: String, clip: Bool? = nil) throws -> OutboxItem {
         guard isAcceptableLink(link) else { throw OutboxError.badLink }
-        return try add([OutboxItem(kind: ItemKind.link, url: link)], deviceId, atMost: false)[0]
+        return try add([OutboxItem(kind: ItemKind.link, url: link, clip: clip)], deviceId, atMost: false)[0]
     }
 
     /// Queues the existing files among `files` with one save, as many as fit under the limit; returns the items queued.
     @discardableResult
-    public func queueFiles(_ deviceId: String, _ files: [(url: URL, bookmark: Data?, mime: String?)]) -> [OutboxItem] {
-        let items = files.compactMap { fileItem($0.url, bookmark: $0.bookmark, mime: $0.mime) }
+    public func queueFiles(_ deviceId: String, _ files: [(url: URL, bookmark: Data?, mime: String?)], clip: Bool? = nil) -> [OutboxItem] {
+        let items = files.compactMap { fileItem($0.url, bookmark: $0.bookmark, mime: $0.mime, clip: clip) }
         return (try? add(items, deviceId, atMost: true)) ?? []
     }
 
@@ -116,13 +117,14 @@ public final class Outbox: @unchecked Sendable {
         return try add([item], deviceId, atMost: false).first
     }
 
-    private func fileItem(_ url: URL, bookmark: Data?, mime: String?) -> OutboxItem? {
+    private func fileItem(_ url: URL, bookmark: Data?, mime: String?, clip: Bool? = nil) -> OutboxItem? {
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), !isDirectory.boolValue,
               let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.int64Value
         else { return nil }
         var item = OutboxItem(kind: ItemKind.file, path: url.path, bookmark: bookmark, name: url.lastPathComponent, size: size)
         item.mime = mime
+        item.clip = clip
         return item
     }
 

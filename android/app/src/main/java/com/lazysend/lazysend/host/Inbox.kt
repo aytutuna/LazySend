@@ -31,6 +31,7 @@ class IncomingFile(
     var done: Boolean = false,
     var finished: Long? = null,
     val sendId: String? = null,
+    val clip: Boolean = false,
 )
 
 /**
@@ -100,7 +101,7 @@ class Inbox(
         if (freeSpace() - size < MIN_FREE_BYTES) throw HostError.diskFull
         val file = IncomingFile(
             newId(), guest.id, guest.name, cleanFileName(request.name), size, request.mime, modified, sourceId, sha256, folder,
-            started = now, updated = now, sendId = sendId,
+            started = now, updated = now, sendId = sendId, clip = request.clip == true,
         )
         // Looked up and added in one step, so two requests for the same asset cannot start two transfers. A finished
         // transfer is in the index before it leaves bySource, so one of the two always shows it.

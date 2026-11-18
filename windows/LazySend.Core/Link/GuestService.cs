@@ -183,22 +183,22 @@ public sealed class GuestService : IDisposable
         }
     }
 
-    public async Task SendTextAsync(string hostId, string text, CancellationToken cancellation)
+    public async Task SendTextAsync(string hostId, string text, CancellationToken cancellation, bool clip = false)
     {
         using var sender = SenderFor(hostId);
-        await sender.SendTextAsync(text, cancellation).ConfigureAwait(false);
+        await sender.SendTextAsync(text, cancellation, clip).ConfigureAwait(false);
     }
 
-    public async Task SendLinkAsync(string hostId, string url, CancellationToken cancellation)
+    public async Task SendLinkAsync(string hostId, string url, CancellationToken cancellation, bool clip = false)
     {
         using var sender = SenderFor(hostId);
-        await sender.SendLinkAsync(url, cancellation).ConfigureAwait(false);
+        await sender.SendLinkAsync(url, cancellation, clip).ConfigureAwait(false);
     }
 
-    public async Task SendFileAsync(string hostId, string path, IProgress<long>? progress, CancellationToken cancellation)
+    public async Task SendFileAsync(string hostId, string path, IProgress<long>? progress, CancellationToken cancellation, bool clip = false)
     {
-        var request = HostSender.FileRequest(path) with { SendId = Protocol.NewSendId() };
-        var send = new PendingSend(hostId, request.SendId!, System.IO.Path.GetFullPath(path), request.Size!.Value, request.Modified!.Value, request.Sha256!);
+        var request = HostSender.FileRequest(path) with { SendId = Protocol.NewSendId(), Clip = clip ? true : null };
+        var send = new PendingSend(hostId, request.SendId!, System.IO.Path.GetFullPath(path), request.Size!.Value, request.Modified!.Value, request.Sha256!, clip);
         await SendPendingAsync(send, request, progress, cancellation).ConfigureAwait(false);
     }
 
@@ -220,7 +220,7 @@ public sealed class GuestService : IDisposable
             _pending.Remove(send.SendId);
             throw new IOException($"{info.Name} is gone or has changed since it was left unfinished.");
         }
-        var request = new ItemRequest(ItemKind.File, Name: info.Name, Size: send.Size, Modified: send.Modified, Sha256: send.Sha256, SendId: send.SendId);
+        var request = new ItemRequest(ItemKind.File, Name: info.Name, Size: send.Size, Modified: send.Modified, Sha256: send.Sha256, SendId: send.SendId, Clip: send.Clip ? true : null);
         await SendPendingAsync(send, request, progress, cancellation).ConfigureAwait(false);
     }
 

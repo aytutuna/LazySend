@@ -32,6 +32,8 @@ data class TimelineEntry(
     /** Where a received file was saved, or the half-saved file of a download in progress. */
     val uri: String? = null,
     val mime: String? = null,
+    /** The sender asked for this to go on the clipboard as well. */
+    val clip: Boolean = false,
 )
 
 /** Sent and received things, newest first, kept in a JSON file. */

@@ -8,6 +8,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.fail
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -43,6 +44,16 @@ class LinkClientTest {
         val hello = pc.client().hello()
         assertEquals("Test PC", hello.desktopName)
         assertEquals(listOf("192.168.42.10"), hello.addresses)
+    }
+
+    @Test
+    fun theClipFlagIsLeftOutWhenFalseAndOldPeersAreStillRead() {
+        assertFalse("clip" in LinkJson.encodeToString(ItemRequest("text", text = "x")))
+        assertTrue(""""clip":true""" in LinkJson.encodeToString(ItemRequest("text", text = "x", clip = true)))
+        assertEquals(ItemRequest("text", text = "x", clip = true), LinkJson.decodeFromString<ItemRequest>("""{"kind":"text","text":"x","clip":true}"""))
+        assertNull(LinkJson.decodeFromString<ItemRequest>("""{"kind":"text","text":"x","later":1}""").clip)
+        assertFalse("clip" in LinkJson.encodeToString(OutboxEntry("a", "text", text = "x")))
+        assertEquals(true, LinkJson.decodeFromString<OutboxEntry>("""{"id":"a","kind":"link","url":"https://alazy.app/","clip":true}""").clip)
     }
 
     @Test

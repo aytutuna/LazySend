@@ -102,6 +102,18 @@ public class ProtocolTests
     }
 
     [Fact]
+    public void ClipIsLeftOutWhenNotSetAndOldPeersAreStillRead()
+    {
+        Assert.DoesNotContain("clip", Protocol.ToJson(new ItemRequest(ItemKind.Text, Text: "x")));
+        Assert.Contains("\"clip\":true", Protocol.ToJson(new ItemRequest(ItemKind.Text, Text: "x", Clip: true)));
+        Assert.DoesNotContain("clip", Protocol.ToJson(new OutboxEntry("a", ItemKind.Text, Text: "x")));
+        Assert.Contains("\"clip\":true", Protocol.ToJson(new OutboxEntry("a", ItemKind.Text, Text: "x", Clip: true)));
+        Assert.True(Protocol.FromJson<ItemRequest>("""{"kind":"text","text":"x","clip":true}"""u8)!.Clip);
+        Assert.Null(Protocol.FromJson<ItemRequest>("""{"kind":"text","text":"x","later":1}"""u8)!.Clip);
+        Assert.True(Protocol.FromJson<OutboxEntry>("""{"id":"a","kind":"link","url":"https://alazy.app/","clip":true}"""u8)!.Clip);
+    }
+
+    [Fact]
     public void IdsAreFileNameSafe()
     {
         Assert.True(Protocol.IsValidId(Protocol.NewId()));

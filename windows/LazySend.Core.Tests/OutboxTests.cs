@@ -39,6 +39,21 @@ public class OutboxTests
     }
 
     [Fact]
+    public async Task ClipIsListedOnlyForItemsQueuedWithIt()
+    {
+        await using var h = new Harness();
+        using var phone = await h.PairAsync();
+        h.Service.Outbox.QueueText(phone.Id, "plain");
+        h.Service.Outbox.QueueText(phone.Id, "copy me", clip: true);
+        h.Service.Outbox.QueueLink(phone.Id, "https://alazy.app/", clip: true);
+        h.Service.Outbox.QueueFile(phone.Id, WriteFile(h, "c.bin", 10), clip: true);
+
+        var items = (await PollAsync(phone, 0)).Items;
+
+        Assert.Equal([null, true, true, true], items.Select(i => i.Clip));
+    }
+
+    [Fact]
     public void OutboxFileWrittenBeforeGalleryFieldsStillLoads()
     {
         string path = Path.Combine(Path.GetTempPath(), "lazysend-outbox-" + Guid.NewGuid().ToString("N") + ".json");

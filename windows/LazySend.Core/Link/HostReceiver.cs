@@ -158,7 +158,7 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
             throw new LocalFailure("it is not text or a web address Lazy Send takes.");
         }
         var sender = new PairedDevice { Id = host.Id, Name = host.Name };
-        var stored = history.Add(sender, item.Kind, link ? null : item.Text, link ? item.Url : null, DateTimeOffset.UtcNow, item.Id);
+        var stored = history.Add(sender, item.Kind, link ? null : item.Text, link ? item.Url : null, DateTimeOffset.UtcNow, item.Id, clip: item.Clip == true);
         TextReceived?.Invoke(this, stored);
     }
 
@@ -237,7 +237,7 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
             }
         }
         _fullReported = false;
-        FileReceived?.Invoke(this, new ReceivedFile(host.Id, host.Name, path, size, GalleryIndex.IsValidSourceId(item.SourceId) ? item.SourceId : null));
+        FileReceived?.Invoke(this, new ReceivedFile(host.Id, host.Name, path, size, GalleryIndex.IsValidSourceId(item.SourceId) ? item.SourceId : null, item.Clip == true));
     }
 
     private static async Task<int> ReadWithinAsync(Stream body, byte[] buffer, CancellationToken cancellation)

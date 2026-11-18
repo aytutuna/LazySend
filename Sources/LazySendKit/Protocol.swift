@@ -97,9 +97,11 @@ public struct ItemRequest: Codable, Equatable {
     public var sourceId: String?
     public var sha256: String?
     public var sendId: String?
+    public var clip: Bool?
 
     public init(kind: String, text: String? = nil, url: String? = nil, name: String? = nil, size: Int64? = nil,
-                mime: String? = nil, modified: String? = nil, sourceId: String? = nil, sha256: String? = nil, sendId: String? = nil) {
+                mime: String? = nil, modified: String? = nil, sourceId: String? = nil, sha256: String? = nil, sendId: String? = nil,
+                clip: Bool? = nil) {
         self.kind = kind
         self.text = text
         self.url = url
@@ -110,6 +112,7 @@ public struct ItemRequest: Codable, Equatable {
         self.sourceId = sourceId
         self.sha256 = sha256
         self.sendId = sendId
+        self.clip = clip
     }
 }
 
@@ -154,9 +157,10 @@ public struct OutboxEntry: Codable, Equatable {
     /// For a file from the host's photo library: the asset's stable id, and when it was taken (ISO 8601).
     public var sourceId: String?
     public var taken: String?
+    public var clip: Bool?
 
     public init(id: String, kind: String, text: String? = nil, url: String? = nil, name: String? = nil, size: Int64? = nil, mime: String? = nil,
-                sourceId: String? = nil, taken: String? = nil) {
+                sourceId: String? = nil, taken: String? = nil, clip: Bool? = nil) {
         self.id = id
         self.kind = kind
         self.text = text
@@ -166,6 +170,7 @@ public struct OutboxEntry: Codable, Equatable {
         self.mime = mime
         self.sourceId = sourceId
         self.taken = taken
+        self.clip = clip
     }
 }
 
