@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Lazy Send</string>
+    <string name="channel_transfers">Aktarımlar</string>
+    <string name="channel_received">Bilgisayarınızdan gelenler</string>
+    <string name="stop">Durdur</string>
+    <string name="sending">Gönderiliyor</string>
+
+    <string name="back">Geri</string>
+    <string name="pair_a_pc">Bilgisayar eşleştir</string>
+    <string name="paired_pcs">Eşleşen bilgisayarlar</string>
+    <string name="send">Gönder</string>
+    <string name="send_all_photos">Tüm fotoğraflar ve videolar</string>
+    <string name="resume">Sürdür</string>
+    <string name="copy">Kopyala</string>
+    <string name="open">Aç</string>
+    <string name="remove">Kaldır</string>
+    <string name="clear">Temizle</string>
+    <string name="cancel">Vazgeç</string>
+    <string name="done">Bitti</string>
+    <string name="try_again">Tekrar dene</string>
+    <string name="paste">Yapıştır</string>
+
+    <string name="empty_title">Henüz eşleşen cihaz yok</string>
+    <string name="empty_body">Bilgisayarınızda Lazy Send\'i açın, Telefon eşleştir\'i seçin ve gösterdiği kodu tarayın.</string>
+    <string name="timeline_empty">Gönderdikleriniz ve aldıklarınız burada görünür.</string>
+    <string name="connected_over">%1$s üzerinden bağlı</string>
+    <string name="not_reachable">%1$s cihazına ulaşılamıyor</string>
+    <string name="sent_to">Alıcı: %1$s</string>
+    <string name="received_from">Gönderen: %1$s</string>
+    <string name="state_paused">Duraklatıldı</string>
+    <string name="state_failed">Gönderilmedi</string>
+    <string name="gallery_title">Fotoğraflar ve videolar</string>
+    <string name="gallery_progress">%1$d / %2$d · %3$s / %4$s</string>
+    <string name="gallery_done">%1$d gönderildi</string>
+    <string name="feed_progress">%3$s cihazına %1$d / %2$d gönderildi</string>
+    <string name="feed_low_storage">Boş depolama alanı bekleniyor.</string>
+    <string name="feed_outbox_full">%1$s cihazının sıradakileri almasını bekliyor.</string>
+    <string name="feed_no_photos">Duraklatıldı.</string>
+    <string name="feed_not_hosting">Alma açık değilken duraklatıldı.</string>
+    <string name="feed_done">%2$s cihazına tüm %1$d fotoğraf ve video gönderildi</string>
+    <string name="feed_done_some">%2$s cihazına %1$d gönderildi, %3$d okunamadı</string>
+    <string name="feed_nothing_new">%1$s cihazına gönderilecek yeni bir şey yok</string>
+    <string name="photo_access_partial">Yalnızca izin verdiğiniz fotoğraflar gönderilir.</string>
+    <string name="allow_all_photos">Tümüne izin ver</string>
+    <string name="photo_permission_needed">Lazy Send\'in fotoğraf ve videoları gönderebilmesi için bunlara erişmesi gerekir.</string>
+
+    <string name="send_title">%1$s cihazına gönder</string>
+    <string name="send_text_hint">Metin veya bağlantı yazın ya da yapıştırın</string>
+    <string name="send_text_button">Metni gönder</string>
+    <string name="pick_files">Dosya seç</string>
+    <string name="pick_photos">Fotoğraf seç</string>
+    <string name="note_sent">Gönderildi</string>
+    <string name="note_queued">Sıraya alındı. Diğer cihaz bağlandığında teslim edilir.</string>
+
+    <string name="pair_title">Bilgisayarınızla eşleştirin</string>
+    <string name="pair_scan_hint">Kamerayı bilgisayarınızdaki koda doğrultun.</string>
+    <string name="pair_camera_denied">Kamera erişimi kapalı. Bunun yerine bilgisayarınızdaki eşleştirme metnini yapıştırın.</string>
+    <string name="pair_paste">Eşleştirme metnini yapıştırın</string>
+    <string name="pair_paste_hint">lazysend://pair?…</string>
+    <string name="pair_connect">Bağlan</string>
+    <string name="pair_waiting_title">Bilgisayarınızda onaylayın</string>
+    <string name="pair_waiting_body">Bilgisayarınızdaki kodun aynı olduğunu kontrol edin, sonra bu telefonu orada onaylayın.</string>
+    <string name="pair_check_code">Doğrulama kodu</string>
+    <string name="pair_done">%1$s ile eşleşti</string>
+    <string name="pair_unreachable">Bilgisayarınıza ulaşılamadı. İkisi de aynı Wi-Fi ağında, telefonun kişisel erişim noktasında ya da USB bağlantısında olmalı.</string>
+    <string name="pair_debug_address">Ek adres (hata ayıklama)</string>
+
+    <string name="pcs_title">Eşleşen bilgisayarlar</string>
+    <string name="pcs_empty">Eşleşen bilgisayar yok.</string>
+    <string name="remove_pc_title">%1$s kaldırılsın mı?</string>
+    <string name="remove_pc_body">Bilgisayara ulaşılabildiğinde bu telefon orada da unutulur.</string>
+
+    <string name="receive">Al</string>
+    <string name="receive_title">Bu telefonda al</string>
+    <string name="receive_starting">Başlatılıyor…</string>
+    <string name="receive_hint">Diğer cihazda Lazy Send\'i açın ve bu kodu tarayın ya da kısa kodu yazın. Eşleşene kadar bu ekranı açık tutun.</string>
+    <string name="receive_code_label">Kısa kod</string>
+    <string name="receive_digits">İki ekran da %1$s gösteriyor</string>
+    <string name="receive_copy_link">Bağlantıyı kopyala</string>
+    <string name="receive_share_link">Bağlantıyı paylaş</string>
+    <string name="receive_stop">Almayı durdur</string>
+    <string name="receive_closed">Çok fazla yanlış kod denendiği için bu kod kapatıldı.</string>
+    <string name="receive_new_code">Yeni kod al</string>
+    <string name="receive_local_network">Ağınızdaki cihazlara erişim kapalı, bu yüzden diğer cihazlar bu telefona ulaşamıyor. İzin verip tekrar deneyin.</string>
+    <string name="receive_no_network">Diğer cihazların bu telefona ulaşabilmesi için Wi-Fi\'ye bağlanın ya da USB bağlantısı takın.</string>
+    <string name="receive_paired_title">Bu telefonla eşleşti</string>
+    <string name="approve_title">%1$s ile eşleştirilsin mi?</string>
+    <string name="approve_body">Bu telefona gönderebilecek ve bu telefondan alabilecek. Yalnızca aynı rakamları gösteriyorsa izin verin.</string>
+    <string name="allow">İzin ver</string>
+    <string name="dont_allow">İzin verme</string>
+    <string name="receiving_on">%1$s üzerinde alınıyor</string>
+    <string name="receiving">Alınıyor</string>
+    <string name="hosting_paused">Alma duraklatıldı — devam etmek için Lazy Send\'i açın</string>
+    <string name="guest_row">Bu telefonla eşleşti</string>
+    <string name="guest_delivery">Gönderdikleriniz bir sonraki bağlanışında teslim edilir.</string>
+    <string name="remove_guest_body">%1$s burada unutulur ve onu bekleyenler silinir.</string>
+    <string name="gallery_received">%1$d alındı</string>
+
+    <string name="copied_from">%1$s cihazından kopyalandı</string>
+
+    <string name="tab_camera">Kamera</string>
+    <string name="tab_files">Dosyalar</string>
+    <string name="tab_clipboard">Pano</string>
+    <string name="pair_device">Cihaz eşleştir</string>
+    <string name="open_settings">Ayarlar\'ı aç</string>
+    <string name="camera_none">Bu cihazda kamera yok</string>
+    <string name="camera_denied">Kamera erişimi kapalı. Fotoğraf çekmek için ayarlardan izin verin.</string>
+    <string name="camera_pair_title">Fotoğraf göndermek için bir cihaz eşleştirin</string>
+    <string name="camera_photo_failed">Fotoğraf çekilemedi.</string>
+    <string name="camera_switch_failed">Kamera değiştirilemedi.</string>
+    <string name="camera_save_failed">Fotoğraf galeriye kaydedilemedi.</string>
+    <string name="camera_sent_to">%1$s cihazına gönderildi</string>
+    <string name="camera_waiting">%1$s bekleniyor</string>
+    <string name="camera_history">Fotoğraf geçmişi</string>
+    <string name="camera_flip">Kamerayı değiştir</string>
+    <string name="flash_off">Flaş kapalı</string>
+    <string name="flash_auto">Flaş otomatik</string>
+    <string name="flash_on">Flaş açık</string>
+    <string name="save_camera_photos">Kamera fotoğraflarını galeriye kaydet</string>
+    <string name="target_gone">Bu cihazın eşleşmesi artık yok.</string>
+    <string name="clip_hint">%1$s cihazının panosuna koymak için buraya yapıştırın.</string>
+    <string name="clip_pair_title">Kopyaladıklarınızı göndermek için bir cihaz eşleştirin.</string>
+    <string name="clip_empty">Bir panoya koyduklarınız ve bu panoya konulanlar burada görünür.</string>
+    <string name="nothing_to_send">Panoda gönderilecek bir şey yok</string>
+
+    <string name="share_no_pc">Önce Lazy Send\'de bir bilgisayar eşleştirin.</string>
+    <string name="share_choose_pc">Gönderilecek cihaz</string>
+    <string name="share_sending">%1$s cihazına gönderiliyor</string>
+</resources>
