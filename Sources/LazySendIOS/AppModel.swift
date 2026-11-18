@@ -80,6 +80,9 @@ final class AppModel: ObservableObject {
     /// The banner for what was just put on the pasteboard, "Copied from <device>".
     @Published private(set) var copied: String?
 
+    /// The pairing of a computer that is under way, kept here so it survives the Pair screen being built again.
+    lazy var pairing = PairModel(app: self)
+
     private var galleryTask: Task<Void, Never>?
     private var galleryRun = 0
     private var gallerySaved = 0
