@@ -4,7 +4,11 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M30,40 L78,40 L78,46 L30,46 Z M30,52 L78,52 L78,58 L30,58 Z M54,64 L78,64 L66,78 Z" />
+    <group android:translateX="22" android:translateY="22" android:scaleX="0.64" android:scaleY="0.64">
+        <path android:pathData="M44 58L86 16L62 84Z" android:fillColor="#D6CCFF" android:strokeColor="#D6CCFF" android:strokeWidth="4" android:strokeLineJoin="round" />
+        <path android:pathData="M14 47L86 16L44 58Z" android:fillColor="#FFFFFF" android:strokeColor="#FFFFFF" android:strokeWidth="4" android:strokeLineJoin="round" />
+        <group android:rotation="-20" android:pivotX="42" android:pivotY="44">
+            <path android:pathData="M31 44Q35.5 49 40 44M44 44Q48.5 49 53 44" android:strokeColor="#7C5CFF" android:strokeWidth="4" android:strokeLineCap="round" android:strokeLineJoin="round" />
+        </group>
+    </group>
 </vector>
