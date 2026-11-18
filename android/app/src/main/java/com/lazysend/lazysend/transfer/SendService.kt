@@ -58,9 +58,9 @@ class SendService : Service() {
         ServiceCompat.startForeground(this, NOTIFICATION_ID, first, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         val pc = intent?.getStringExtra(EXTRA_PC)?.let(graph.pcs::get)
         when (intent?.action) {
-            ACTION_FILES -> if (pc != null) gate.launch { graph.sender.sendFiles(pc, uris(intent), intent.getBooleanExtra(EXTRA_CLIP, false)) }
+            ACTION_FILES -> if (pc != null) gate.launch { graph.sender.sendFiles(pc, uris(intent), intent.getBooleanExtra(EXTRA_CLIP, false), intent.getLongExtra(EXTRA_AT, System.currentTimeMillis())) }
             ACTION_GALLERY -> if (pc != null) gate.launch { graph.sender.syncGallery(pc) }
-            ACTION_TEXT -> if (pc != null) intent.getStringExtra(EXTRA_TEXT)?.let { text -> gate.launch { graph.sender.sendText(pc, text, intent.getBooleanExtra(EXTRA_CLIP, false)) } }
+            ACTION_TEXT -> if (pc != null) intent.getStringExtra(EXTRA_TEXT)?.let { text -> gate.launch { graph.sender.sendText(pc, text, intent.getBooleanExtra(EXTRA_CLIP, false), intent.getLongExtra(EXTRA_AT, System.currentTimeMillis())) } }
             ACTION_QUEUE -> intent.getStringExtra(EXTRA_GUEST)?.let(graph.host.core.guests::get)?.let { guest ->
                 val text = intent.getStringExtra(EXTRA_TEXT)
                 val clip = intent.getBooleanExtra(EXTRA_CLIP, false)
@@ -125,19 +125,20 @@ class SendService : Service() {
         private const val EXTRA_GUEST = "guest"
         private const val EXTRA_TEXT = "text"
         private const val EXTRA_CLIP = "clip"
+        private const val EXTRA_AT = "at"
         private const val NOTIFICATION_ID = 1
 
-        fun sendFiles(context: Context, pcId: String, uris: List<Uri>, clip: Boolean = false) {
+        fun sendFiles(context: Context, pcId: String, uris: List<Uri>, clip: Boolean = false, at: Long = System.currentTimeMillis()) {
             if (uris.isEmpty()) return
-            val intent = Intent(context, SendService::class.java).setAction(ACTION_FILES).putExtra(EXTRA_PC, pcId).putExtra(EXTRA_CLIP, clip)
+            val intent = Intent(context, SendService::class.java).setAction(ACTION_FILES).putExtra(EXTRA_PC, pcId).putExtra(EXTRA_CLIP, clip).putExtra(EXTRA_AT, at)
             intent.clipData = clip(uris)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             ContextCompat.startForegroundService(context, intent)
         }
 
-        fun sendText(context: Context, pcId: String, text: String, clip: Boolean = false) {
+        fun sendText(context: Context, pcId: String, text: String, clip: Boolean = false, at: Long = System.currentTimeMillis()) {
             ContextCompat.startForegroundService(
-                context, Intent(context, SendService::class.java).setAction(ACTION_TEXT).putExtra(EXTRA_PC, pcId).putExtra(EXTRA_TEXT, text).putExtra(EXTRA_CLIP, clip),
+                context, Intent(context, SendService::class.java).setAction(ACTION_TEXT).putExtra(EXTRA_PC, pcId).putExtra(EXTRA_TEXT, text).putExtra(EXTRA_CLIP, clip).putExtra(EXTRA_AT, at),
             )
         }
 

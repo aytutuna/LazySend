@@ -7,6 +7,7 @@ import com.lazysend.lazysend.data.EntryState
 import com.lazysend.lazysend.data.Pc
 import com.lazysend.lazysend.data.PcStore
 import com.lazysend.lazysend.data.Timeline
+import com.lazysend.lazysend.host.CLIP_MAX_AGE_MS
 import com.lazysend.lazysend.link.FakePc
 import com.lazysend.lazysend.link.TEST_SECRET
 import com.lazysend.lazysend.link.encodeBase64Url
@@ -35,13 +36,15 @@ class SenderTest {
         dir.deleteRecursively()
     }
 
+    private var now = 1_800_000_000_000L
+
     private fun sender(vararg assets: Asset): Sender {
         val context = ApplicationProvider.getApplicationContext<Application>()
         store.put(paired)
         val list = object : MediaAssets(context) {
             override fun list() = assets.toList()
         }
-        return Sender(context, PcConnector(store, null), timeline, list)
+        return Sender(context, PcConnector(store, null), timeline, list, { now })
     }
 
     @Test
@@ -63,6 +66,20 @@ class SenderTest {
 
         assertEquals(listOf(null, true, null, true), pc.items.map { it.clip })
         assertEquals(listOf(false, true, false, true), timeline.entries.value.reversed().map { it.clip })
+    }
+
+    @Test
+    fun aShotOrPasteOlderThanFiveMinutesWhenItsPostStartsIsNotClipped() = runBlocking<Unit> {
+        val sender = sender()
+        val file = File(dir, "shot.jpg").also { it.writeBytes(ByteArray(300) { b -> b.toByte() }) }
+
+        sender.sendText(paired, "fresh", clip = true, at = now - CLIP_MAX_AGE_MS)
+        sender.sendText(paired, "stale", clip = true, at = now - CLIP_MAX_AGE_MS - 1)
+        sender.sendFiles(paired, listOf(Uri.fromFile(file)), clip = true, at = now - CLIP_MAX_AGE_MS)
+        sender.sendFiles(paired, listOf(Uri.fromFile(file)), clip = true, at = now - CLIP_MAX_AGE_MS - 1)
+
+        assertEquals(listOf(true, null, true, null), pc.items.map { it.clip })
+        assertEquals(listOf(true, false, true, false), timeline.entries.value.reversed().map { it.clip })
     }
 
     @Test

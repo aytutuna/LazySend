@@ -11,6 +11,7 @@ import com.lazysend.lazysend.data.Pc
 import com.lazysend.lazysend.data.Timeline
 import com.lazysend.lazysend.data.TimelineEntry
 import com.lazysend.lazysend.link.DataSource
+import com.lazysend.lazysend.host.CLIP_MAX_AGE_MS
 import com.lazysend.lazysend.link.ItemRequest
 import com.lazysend.lazysend.link.LinkClient
 import com.lazysend.lazysend.link.LinkException
@@ -50,8 +51,11 @@ class Sender(
     val busy: StateFlow<Int> get() = running
     val progress: StateFlow<SendProgress?> get() = shown
 
+    // A shot or paste is only worth putting on the clipboard while it is fresh; [at] is when it was made.
+    private fun stillFresh(at: Long) = clock() - at <= CLIP_MAX_AGE_MS
+
     /** Sends a note; a lone http(s) address goes as a link. Returns the reason when it did not arrive. */
-    suspend fun sendText(pc: Pc, text: String, clip: Boolean = false): String? {
+    suspend fun sendText(pc: Pc, text: String, clip: Boolean = false, at: Long = clock()): String? {
         val trimmed = text.trim()
         val isLink = trimmed.length <= 8192 && Regex("https?://\\S+").matches(trimmed)
         val sendId = newSendId()
@@ -64,8 +68,9 @@ class Sender(
         timeline.add(entry)
         return try {
             val reached = connector.connect(pc, userAction = true).reachedOrNull() ?: throw IOException("${pc.name} is not reachable.")
-            reached.postItem(item)
-            timeline.update(entry.id) { it.copy(state = EntryState.Done) }
+            val fresh = clip && stillFresh(at)
+            reached.postItem(item.copy(clip = fresh.takeIf { it }))
+            timeline.update(entry.id) { it.copy(state = EntryState.Done, clip = fresh) }
             null
         } catch (e: IOException) {
             timeline.update(entry.id) { it.copy(state = EntryState.Failed, detail = e.message.orEmpty()) }
@@ -83,20 +88,21 @@ class Sender(
         }
     }
 
-    suspend fun sendFiles(pc: Pc, uris: List<Uri>, clip: Boolean = false) = exclusive {
-        for (uri in uris) sendOne(pc, uri, clip)
-        shown.value = null
+    /** A clipped send (a camera shot or a paste) does not wait behind a gallery sync or a big file: it runs alongside them. */
+    suspend fun sendFiles(pc: Pc, uris: List<Uri>, clip: Boolean = false, at: Long = clock()) = exclusive(alongside = clip) {
+        for (uri in uris) sendOne(pc, uri, clip, at)
+        if (!clip) shown.value = null
     }
 
     suspend fun syncGallery(pc: Pc) = exclusive { gallery(pc) }
 
-    private suspend fun exclusive(block: suspend () -> Unit) {
+    private suspend fun exclusive(alongside: Boolean = false, block: suspend () -> Unit) {
         running.update { it + 1 }
         try {
-            queue.withLock { block() }
+            if (alongside) block() else queue.withLock { block() }
         } finally {
             running.update { it - 1 }
-            shown.value = null
+            if (!alongside) shown.value = null
         }
     }
 
@@ -111,7 +117,7 @@ class Sender(
         }
     }
 
-    private suspend fun sendOne(pc: Pc, uri: Uri, clip: Boolean) {
+    private suspend fun sendOne(pc: Pc, uri: Uri, clip: Boolean, at: Long) {
         val id = UUID.randomUUID().toString()
         val sendId = newSendId()
         timeline.add(
@@ -122,16 +128,18 @@ class Sender(
             timeline.update(id) { it.copy(title = meta.name, totalBytes = meta.size, mime = meta.mime) }
             val first = connector.connect(pc, userAction = true).reachedOrNull() ?: throw IOException("${pc.name} is not reachable.")
             val source = DataSource { offset -> open(uri, offset) }
-            shown.value = SendProgress(meta.name, pc.name, 0, meta.size)
+            if (!clip) shown.value = SendProgress(meta.name, pc.name, 0, meta.size)
             val hash = withContext(Dispatchers.IO) { sha256Hex(source) }
-            val request = ItemRequest("file", name = meta.name, size = meta.size, mime = meta.mime, modified = meta.modified, sha256 = hash, sendId = sendId, clip = clip.takeIf { it })
+            val fresh = clip && stillFresh(at)
+            timeline.update(id) { it.copy(clip = fresh) }
+            val request = ItemRequest("file", name = meta.name, size = meta.size, mime = meta.mime, modified = meta.modified, sha256 = hash, sendId = sendId, clip = fresh.takeIf { it })
             var lastReport = 0L
             Uploader(refresher(pc, first)).sendFile(request, source) { sent ->
                 val now = System.nanoTime()
                 if (now - lastReport > 250_000_000L || sent == meta.size) {
                     lastReport = now
                     timeline.update(id) { it.copy(bytes = sent) }
-                    shown.value = SendProgress(meta.name, pc.name, sent, meta.size)
+                    if (!clip) shown.value = SendProgress(meta.name, pc.name, sent, meta.size)
                 }
             }
             timeline.update(id) { it.copy(state = EntryState.Done, bytes = meta.size) }
