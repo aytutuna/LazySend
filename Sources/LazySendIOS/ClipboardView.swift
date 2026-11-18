@@ -53,7 +53,7 @@ enum Pasted: Equatable {
     }
 }
 
-/// The clipboard tab: paste to put it on the chosen device's clipboard, and what went both ways lately.
+/// The clipboard tab: paste or type to put it on the chosen device's clipboard, and the texts and links that went both ways.
 struct ClipboardView: View {
     @EnvironmentObject private var model: AppModel
     @ObservedObject var timeline: Timeline
@@ -102,7 +102,7 @@ struct ClipboardView: View {
                 }
                 Section {
                     if recent.isEmpty {
-                        Text("What you put on a clipboard, and what is put on this one, shows up here.").foregroundStyle(.secondary)
+                        Text("Texts and links you send or receive show up here.").foregroundStyle(.secondary)
                     }
                     ForEach(recent) { entry in
                         EntryRow(entry: entry) { name in
@@ -118,7 +118,7 @@ struct ClipboardView: View {
     }
 
     private var recent: [TimelineEntry] {
-        Array(timeline.entries.filter { $0.clip == true }.prefix(10))
+        Array(EntryFilter.texts(timeline.entries).prefix(30))
     }
 
     private func paste(_ providers: [NSItemProvider], to target: AppModel.Target) {
