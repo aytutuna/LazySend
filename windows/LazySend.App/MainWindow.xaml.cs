@@ -157,16 +157,26 @@ public partial class MainWindow : Window
         if (e.Data.GetData(DataFormats.FileDrop) is string[] files) _model.SendFiles(files);
     }
 
-    /// <summary>Ctrl+V outside the text box sends what is on the clipboard: files, an image (as a PNG) or text.</summary>
+    private void SendClipboard_Click(object sender, RoutedEventArgs e) => SendClipboard(clip: true);
+
+    /// <summary>Ctrl+V outside the text box sends what is on the clipboard; Ctrl+Shift+V does too, anywhere, and asks the device to put it on its clipboard.</summary>
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key != Key.V || (Keyboard.Modifiers & ModifierKeys.Control) == 0 || Keyboard.FocusedElement is TextBoxBase) return;
+        if (e.Key != Key.V || (Keyboard.Modifiers & ModifierKeys.Control) == 0) return;
+        bool clip = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
+        if (!clip && Keyboard.FocusedElement is TextBoxBase) return;
         e.Handled = true;
+        SendClipboard(clip);
+    }
+
+    /// <summary>Sends what is on the clipboard: files, an image (as a PNG) or text.</summary>
+    private void SendClipboard(bool clip)
+    {
         try
         {
             if (Clipboard.ContainsFileDropList())
             {
-                _model.SendFiles(Clipboard.GetFileDropList().Cast<string>().ToList());
+                _model.SendFiles(Clipboard.GetFileDropList().Cast<string>().ToList(), clip);
             }
             else if (Clipboard.ContainsImage() && Clipboard.GetImage() is { } image)
             {
@@ -180,11 +190,11 @@ public partial class MainWindow : Window
                     ShowNotice($"Could not save the pasted image: {error.Message}");
                     return;
                 }
-                _model.SendFiles([saved]);
+                _model.SendFiles([saved], clip);
             }
             else if (Clipboard.ContainsText())
             {
-                _model.SendText(Clipboard.GetText());
+                _model.SendText(Clipboard.GetText(), clip);
             }
         }
         catch (System.Runtime.InteropServices.COMException)

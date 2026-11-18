@@ -91,6 +91,8 @@
                 </Grid>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom" Margin="8,0,0,0">
                     <Button Content="Send files" ui:Icon.Glyph="&#xE8E5;" Style="{StaticResource IconTextButtonStyle}" Click="SendFiles_Click" />
+                    <Button Content="Send clipboard" ui:Icon.Glyph="&#xE77F;" Margin="8,0,0,0" Style="{StaticResource IconTextButtonStyle}"
+                            ToolTip="Send the clipboard and have the device copy it (Ctrl+Shift+V)" Click="SendClipboard_Click" />
                     <Button x:Name="SendButton" Content="Send" Margin="8,0,0,0" MinWidth="80" Style="{StaticResource AccentButtonStyle}" Click="Send_Click" />
                 </StackPanel>
             </Grid>

@@ -75,13 +75,13 @@ public sealed class Outbox
     /// Queues the existing files among <paramref name="paths"/> with one save and one change event, as many as
     /// fit under <see cref="MaxItemsPerDevice"/>; returns the items queued.
     /// </summary>
-    public IReadOnlyList<OutboxItem> QueueFiles(string deviceId, IEnumerable<string> paths)
+    public IReadOnlyList<OutboxItem> QueueFiles(string deviceId, IEnumerable<string> paths, bool clip = false)
     {
         var items = new List<OutboxItem>();
         foreach (string path in paths)
         {
             var info = new FileInfo(path);
-            if (info.Exists) items.Add(new OutboxItem { Kind = ItemKind.File, Path = info.FullName, Name = info.Name, Size = info.Length });
+            if (info.Exists) items.Add(new OutboxItem { Kind = ItemKind.File, Path = info.FullName, Name = info.Name, Size = info.Length, Clip = clip });
         }
         return AddRange(items, deviceId, atMost: true);
     }

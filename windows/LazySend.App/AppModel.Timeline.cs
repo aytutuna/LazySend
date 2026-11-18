@@ -222,7 +222,7 @@ public sealed partial class AppModel
         }
     }
 
-    public bool SendText(string text)
+    public bool SendText(string text, bool clip = false)
     {
         if (!HasTarget(out var phone)) return false;
         string trimmed = text.Trim();
@@ -237,13 +237,13 @@ public sealed partial class AppModel
                 return false;
             }
             SendToComputer(phone.Id, phone.Name, link ? TimelineKind.Link : TimelineKind.Text, sent, null,
-                           (stop, _) => link ? Guest.SendLinkAsync(phone.Id, sent, stop) : Guest.SendTextAsync(phone.Id, sent, stop));
+                           (stop, _) => link ? Guest.SendLinkAsync(phone.Id, sent, stop, clip) : Guest.SendTextAsync(phone.Id, sent, stop, clip));
             return true;
         }
         try
         {
-            if (LinkDetector.IsLink(trimmed)) AddSent(Service.Outbox.QueueLink(phone.Id, trimmed), phone);
-            else AddSent(Service.Outbox.QueueText(phone.Id, text.TrimEnd()), phone);
+            if (LinkDetector.IsLink(trimmed)) AddSent(Service.Outbox.QueueLink(phone.Id, trimmed, clip), phone);
+            else AddSent(Service.Outbox.QueueText(phone.Id, text.TrimEnd(), clip), phone);
             return true;
         }
         catch (ArgumentException)
@@ -257,10 +257,10 @@ public sealed partial class AppModel
         return false;
     }
 
-    public int SendFiles(IEnumerable<string> paths)
+    public int SendFiles(IEnumerable<string> paths, bool clip = false)
     {
         if (!HasTarget(out var phone)) return 0;
-        if (phone.IsComputer) return SendFilesToComputer(phone, paths);
+        if (phone.IsComputer) return SendFilesToComputer(phone, paths, clip);
         var files = new List<string>();
         string? problem = null;
         foreach (string path in paths)
@@ -270,7 +270,7 @@ public sealed partial class AppModel
             else files.Add(path);
         }
         // One save for the whole drop, however many files it holds.
-        var queued = files.Count == 0 ? [] : Service.Outbox.QueueFiles(phone.Id, files);
+        var queued = files.Count == 0 ? [] : Service.Outbox.QueueFiles(phone.Id, files, clip);
         foreach (var item in queued) AddSent(item, phone);
         if (queued.Count < files.Count) problem = $"Too many items are waiting for {phone.Name}. Wait until it picks some up.";
         if (problem is not null) Notice?.Invoke(this, problem);

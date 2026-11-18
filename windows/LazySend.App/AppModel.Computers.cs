@@ -47,7 +47,7 @@ public sealed partial class AppModel
         SendToComputer(send.HostId, name, TimelineKind.File, null, send.Path, (stop, progress) => resumed.Run(progress, stop), send.Size, resumed.Wait, resumed.Drop);
     }
 
-    private int SendFilesToComputer(PhoneRow computer, IEnumerable<string> paths)
+    private int SendFilesToComputer(PhoneRow computer, IEnumerable<string> paths, bool clip)
     {
         int started = 0;
         string? problem = null;
@@ -64,7 +64,7 @@ public sealed partial class AppModel
                 continue;
             }
             var info = new FileInfo(path);
-            SendToComputer(computer.Id, computer.Name, TimelineKind.File, null, path, (stop, progress) => Guest.SendFileAsync(computer.Id, path, progress, stop), info.Length);
+            SendToComputer(computer.Id, computer.Name, TimelineKind.File, null, path, (stop, progress) => Guest.SendFileAsync(computer.Id, path, progress, stop, clip), info.Length);
             started++;
         }
         if (problem is not null) Notice?.Invoke(this, problem);
