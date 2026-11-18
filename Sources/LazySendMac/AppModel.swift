@@ -3,6 +3,7 @@ import AppKit
 import Foundation
 import LazySendKit
 import LazySendServer
+import UniformTypeIdentifiers
 
 public struct PhoneRow: Identifiable, Equatable {
     public var id: String
@@ -382,8 +383,14 @@ public final class AppModel: ObservableObject {
         row.detail = AppModel.stamp(item.received)
         push(row)
         guard arrived else { return }
+        let body = link ? (item.url ?? "") : String((item.text ?? "").prefix(120))
+        if item.clip == true, let text = link ? item.url : item.text, !text.isEmpty {
+            copy(text)
+            notify("Copied from \(item.deviceName)", body)
+            return
+        }
         if !link, copyReceivedText, let text = item.text { copy(text) }
-        notify(row.heading, link ? (item.url ?? "") : String((item.text ?? "").prefix(120)))
+        notify(row.heading, body)
     }
 
     func addFile(_ file: ReceivedFile) {
@@ -397,6 +404,10 @@ public final class AppModel: ObservableObject {
         row.heading = file.url.lastPathComponent
         row.detail = "\(AppModel.size(file.size)), from \(file.deviceName), \(AppModel.stamp(now))"
         push(row)
+        if file.clip, copyFile(file.url) {
+            notify("Copied from \(file.deviceName)", file.url.lastPathComponent)
+            return
+        }
         notify("File from \(file.deviceName)", file.url.lastPathComponent)
     }
 
@@ -766,6 +777,17 @@ public final class AppModel: ObservableObject {
     func copy(_ text: String) {
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
+    }
+
+    /// The file's URL goes on the pasteboard, and a picture also as image data, so Finder and Preview each get what they ask for.
+    private func copyFile(_ url: URL) -> Bool {
+        let item = NSPasteboardItem()
+        item.setString(url.absoluteString, forType: .fileURL)
+        if UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true, let tiff = NSImage(contentsOf: url)?.tiffRepresentation {
+            item.setData(tiff, forType: .tiff)
+        }
+        pasteboard.clearContents()
+        return pasteboard.writeObjects([item])
     }
 
     static func trimmingEnd(_ text: String) -> String {

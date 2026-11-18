@@ -183,6 +183,52 @@ final class ModelTests: XCTestCase {
         XCTAssertTrue(fixture.service.settings.copyTextToClipboard)
     }
 
+    func testAClippedTextIsCopiedWhateverTheSettingSays() async throws {
+        let phone = try await fixture.pair()
+        var titles: [String] = []
+        let watching = AppModel(service: fixture.service, pasteboard: fixture.pasteboard, scratch: fixture.root.appendingPathComponent("scratch"),
+                                notify: { title, _ in titles.append(title) })
+        XCTAssertFalse(watching.copyReceivedText)
+        let plain = fixture.service.history.add(phone, kind: "text", text: "plain", url: nil, now: Date())
+        watching.addText(plain, arrived: true)
+        XCTAssertNil(fixture.pasteboard.string(forType: .string))
+        let clipped = fixture.service.history.add(phone, kind: "text", text: "copy me", url: nil, now: Date(), clip: true)
+        watching.addText(clipped, arrived: true)
+        XCTAssertEqual(fixture.pasteboard.string(forType: .string), "copy me")
+        let link = fixture.service.history.add(phone, kind: "link", text: nil, url: "https://example.com/", now: Date(), clip: true)
+        watching.addText(link, arrived: true)
+        XCTAssertEqual(fixture.pasteboard.string(forType: .string), "https://example.com/")
+        XCTAssertEqual(titles, ["Text from Aytu's iPhone", "Copied from Aytu's iPhone", "Copied from Aytu's iPhone"])
+        let again = fixture.service.history.add(phone, kind: "text", text: "from the history", url: nil, now: Date(), clip: true)
+        watching.addText(again, arrived: false)
+        XCTAssertEqual(fixture.pasteboard.string(forType: .string), "https://example.com/")
+    }
+
+    func testAClippedFileGoesOnThePasteboardAndAPictureAlsoAsAnImage() async throws {
+        let phone = try await fixture.pair()
+        let text = try fixture.file("note.txt")
+        model.addFile(ReceivedFile(deviceId: phone.id, deviceName: phone.name, url: text, size: 1000, sourceId: nil, clip: true))
+        let urls = fixture.pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
+        XCTAssertEqual(urls?.map(\.lastPathComponent), ["note.txt"])
+        XCTAssertNil(fixture.pasteboard.data(forType: .tiff))
+
+        let image = NSImage(size: NSSize(width: 20, height: 20), flipped: false) { rect in
+            NSColor.red.setFill()
+            rect.fill()
+            return true
+        }
+        let picture = fixture.root.appendingPathComponent("files/red.png")
+        try XCTUnwrap(AppModel.png(image)).write(to: picture)
+        model.addFile(ReceivedFile(deviceId: phone.id, deviceName: phone.name, url: picture, size: 100, sourceId: nil, clip: true))
+        let both = fixture.pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
+        XCTAssertEqual(both?.map(\.lastPathComponent), ["red.png"])
+        XCTAssertNotNil(fixture.pasteboard.data(forType: .tiff))
+
+        fixture.pasteboard.clearContents()
+        model.addFile(ReceivedFile(deviceId: phone.id, deviceName: phone.name, url: text, size: 1000, sourceId: nil))
+        XCTAssertNil(fixture.pasteboard.pasteboardItems?.first)
+    }
+
     func testReceivedTextIsNotCopiedUnlessAsked() async throws {
         let phone = try await fixture.pair()
         let item = fixture.service.history.add(phone, kind: "text", text: "private", url: nil, now: Date())
