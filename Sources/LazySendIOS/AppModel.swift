@@ -396,7 +396,7 @@ final class AppModel: ObservableObject {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let file = folder.appendingPathComponent(name)
         do {
-            try data.write(to: file)
+            try await Task.detached { try data.write(to: file) }.value
             if let phone = HostedPhones.id(ofTarget: target.id) {
                 try await host.sendFiles([file], to: phone, clip: clip)
             } else if let pc = pcs.first(where: { $0.id == target.id }) {
