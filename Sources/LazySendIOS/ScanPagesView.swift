@@ -122,6 +122,7 @@ struct ScanPagesView: View {
                     .font(.title3)
                     .frame(width: 44, height: 44)
             }
+            .buttonStyle(.borderless)
             .accessibilityLabel("Page \(index + 1) options")
             .accessibilityIdentifier("page.\(index).menu")
         }

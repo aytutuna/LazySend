@@ -1,5 +1,6 @@
 #if os(iOS)
 import AVFoundation
+import CoreVideo
 
 private final class PhotoDelegate: NSObject, AVCapturePhotoCaptureDelegate, @unchecked Sendable {
     private let completion: @Sendable (Data?) -> Void

@@ -52,7 +52,7 @@ final class ScanTests: XCTestCase {
 
     @MainActor
     func testTheScanPageSaysWhenAPageIsFoundAndAutoCanBeTurnedOff() {
-        let app = XCUIApplication.launched(demo: true, scan: true, tab: nil)
+        let app = XCUIApplication.launched(demo: true, tab: nil, scan: true)
         app.item("mode.scan").tap()
         let found = app.item("scan.found")
         XCTAssertTrue(found.waitForExistence(timeout: 30))
@@ -67,7 +67,7 @@ final class ScanTests: XCTestCase {
 
     @MainActor
     func testTheControlsDrawerPicksTheFilterNewPagesGet() {
-        let app = XCUIApplication.launched(demo: true, scan: true, tab: nil)
+        let app = XCUIApplication.launched(demo: true, tab: nil, scan: true)
         app.item("mode.scan").tap()
         XCTAssertFalse(app.item("scan.filter.enhanced").exists)
         app.item("drawer.toggle").tap()
@@ -87,7 +87,7 @@ final class ScanTests: XCTestCase {
 
     @MainActor
     func testPagesCanBeViewedMovedCutAgainDeletedAndSentAsOnePdf() {
-        let app = XCUIApplication.launched(demo: true, scan: true, tab: nil)
+        let app = XCUIApplication.launched(demo: true, tab: nil, scan: true)
         app.item("mode.scan").tap()
         app.item("drawer.toggle").tap()
         // A different filter for each page tells them apart in the stack.
@@ -144,7 +144,7 @@ final class ScanTests: XCTestCase {
 
     @MainActor
     func testOnePageGoesAsAnImageNotAPdf() {
-        let app = XCUIApplication.launched(demo: true, scan: true, tab: nil)
+        let app = XCUIApplication.launched(demo: true, tab: nil, scan: true)
         app.item("mode.scan").tap()
         takePage(app, expecting: "1 page")
         app.item("scan.pages").tap()
@@ -159,7 +159,7 @@ final class ScanTests: XCTestCase {
 
     @MainActor
     func testAShotThePageIsNotFoundInOpensTheCornerEditor() {
-        let app = XCUIApplication.launched(demo: true, scan: true, unsure: true, tab: nil)
+        let app = XCUIApplication.launched(demo: true, tab: nil, scan: true, unsure: true)
         app.item("mode.scan").tap()
         let shutter = app.item("scan.shutter")
         XCTAssertTrue(shutter.waitForExistence(timeout: 30))
