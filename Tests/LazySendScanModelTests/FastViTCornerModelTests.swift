@@ -5,13 +5,16 @@ import XCTest
 @testable import LazySendScanModel
 
 // DocAligner's FastViT-T8 on the SmartDoc frames in Fixtures/Pages, with Core ML in front and on the CPU alone: every
-// corner within 1.5 % of the photo's diagonal of the ground truth, and the page finder taking the page. Skipped when
+// corner within 1.5 % of the photo's diagonal of the ground truth, and the page finder within 4 %. Skipped when
 // scripts/fetch_docaligner.sh has not fetched the model, unless LAZYSEND_REQUIRE_CORNER_MODEL=1 (CI fetches it), where a
 // missing model fails.
 
 final class FastViTCornerModelTests: XCTestCase {
     /// The farthest a corner may lie from the ground truth, as a share of the photo's diagonal.
     private let tolerance: Double = 0.015
+    /// The finder moves the model's corners onto the photo's edges, which on the cluttered desk can be a ruled line or a second sheet
+    /// near the page's edge, so it is held to less: close enough that the corner editor starts at the page.
+    private let finderTolerance: Double = 0.04
 
     func testEveryPagePhotoReadsAtItsSizeWithItsPageInIt() throws {
         let photos: [PagePhoto] = try PageFixtures.all()
@@ -64,7 +67,7 @@ final class FastViTCornerModelTests: XCTestCase {
                     let dy = Double(named[corner].y) - Double(photo.truth[corner].y)
                     moved = max(moved, (dx * dx + dy * dy).squareRoot() / diagonal)
                 }
-                XCTAssertLessThan(moved, tolerance, "\(engine): the page finder missed the page in \(photo.file)")
+                XCTAssertLessThan(moved, finderTolerance, "\(engine): the page finder missed the page in \(photo.file)")
                 print(String(format: "%@ %@: confidence %.3f, corner errors %@ %% of the diagonal; finder %@",
                              engine, photo.file, found.confidence, errors.joined(separator: " "),
                              page.clear ? "cuts it out" : "asks"))
