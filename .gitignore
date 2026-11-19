@@ -16,3 +16,5 @@ android/.idea/
 # Swift
 .build/
 ios/*.xcodeproj/
+Sources/LazySendScanModel/Models/*.onnx
+Sources/LazySendScanModel/Models/*.part

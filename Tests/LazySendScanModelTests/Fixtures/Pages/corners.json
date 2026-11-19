@@ -1,0 +1,14 @@
+[
+  {"file": "background01-magazine004-0157.jpg", "width": 1280, "height": 720,
+   "topLeft": [269.15, 117.79], "topRight": [603.76, 113.47], "bottomRight": [634.63, 561.51], "bottomLeft": [226.71, 585.36]},
+  {"file": "background02-letter001-0141.jpg", "width": 1280, "height": 720,
+   "topLeft": [483.91, 139.43], "topRight": [784.13, 114.83], "bottomRight": [874.25, 527.86], "bottomLeft": [523.04, 569.21]},
+  {"file": "background03-paper004-0111.jpg", "width": 1280, "height": 720,
+   "topLeft": [442.87, 110.85], "topRight": [764.6, 86.83], "bottomRight": [893.97, 514.71], "bottomLeft": [509.1, 574.06]},
+  {"file": "background04-tax004-0125.jpg", "width": 1280, "height": 720,
+   "topLeft": [489.92, 448.37], "topRight": [581.92, 137.93], "bottomRight": [1057.56, 214.84], "bottomLeft": [970.77, 581.73]},
+  {"file": "background05-paper002-0055.jpg", "width": 1280, "height": 720,
+   "topLeft": [429.61, 157.84], "topRight": [752.29, 105.75], "bottomRight": [902.53, 548.95], "bottomLeft": [551.42, 648.48]},
+  {"file": "background05-patent002-0045.jpg", "width": 1280, "height": 720,
+   "topLeft": [463.07, 192.5], "topRight": [761.13, 127.65], "bottomRight": [911.8, 516.59], "bottomLeft": [548.91, 606.55]}
+]
