@@ -38,7 +38,9 @@ final class ScanPageTests: XCTestCase {
         let original = try XCTUnwrap(PagePipeline.page(photo: photo, source: Data(), corners: truth, filter: .original))
         XCTAssertFalse(original.gray)
         XCTAssertEqual(try jpegSize(original.jpeg).components, 3)
-        let cut = try XCTUnwrap(PerspectiveCorrector.correct(photo, quad: Quad.fromCorners(truth.corners)))
+        var options = PerspectiveOptions()
+        options.maxLongSide = PagePipeline.maxLongSide
+        let cut = try XCTUnwrap(PerspectiveCorrector.correct(photo, quad: Quad.fromCorners(truth.corners), options: options))
         XCTAssertEqual(original.width, cut.image.width)
         XCTAssertEqual(original.height, cut.image.height)
     }

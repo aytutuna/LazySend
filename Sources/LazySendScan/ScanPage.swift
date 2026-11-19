@@ -40,12 +40,16 @@ public enum PagePipeline {
     public static let maxDPI = 1200
     /// The long side of a sheet taken as a whole photo's page, in inches (A4).
     static let wholePhotoInches = 11.69
+    /// A cut page is at most this many pixels long (A4 at 300 dpi), however close the camera was.
+    public static let maxLongSide = 3508
 
     /// The page of `photo` (upright) cut along `corners`. Nil when the corners outline no page or the page cannot be
     /// encoded.
     public static func page(photo: RgbaImage, source: Data, corners: Quad, filter: CaptureFilter, id: UUID = UUID()) -> ScanPage? {
         let named = Quad.fromCorners(corners.corners)
-        guard let cut = PerspectiveCorrector.correct(photo, quad: named) else { return nil }
+        var options = PerspectiveOptions()
+        options.maxLongSide = maxLongSide
+        guard let cut = PerspectiveCorrector.correct(photo, quad: named, options: options) else { return nil }
         guard let made = cleaned(cut.image, filter: filter) else { return nil }
         return ScanPage(id: id, source: source, corners: corners, filter: filter, jpeg: made.jpeg, width: made.width,
                         height: made.height, dpi: pageDPI(cut.plan.dpi), gray: made.gray)
