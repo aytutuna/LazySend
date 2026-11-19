@@ -1,5 +1,6 @@
 #if os(iOS)
 import AVFoundation
+import CoreMedia
 import CoreVideo
 
 private final class PhotoDelegate: NSObject, AVCapturePhotoCaptureDelegate, @unchecked Sendable {
@@ -70,6 +71,13 @@ final class CameraSession: @unchecked Sendable {
         session.commitConfiguration()
         input = next
         device = camera
+        if scanning {
+            // The new camera starts on the photo preset: the outline format is chosen again for it.
+            scanning = false
+            session.beginConfiguration()
+            useOutlineFormat()
+            session.commitConfiguration()
+        }
         let base = CameraLens.startZoom(camera)
         let switchOvers = camera.virtualDeviceSwitchOverVideoZoomFactors.map { $0.doubleValue }
         let kind = CameraLens.kind(camera.deviceType)
@@ -84,23 +92,76 @@ final class CameraSession: @unchecked Sendable {
                            flash: output.supportedFlashModes.contains(.on), torch: camera.hasTorch)
     }
 
-    /// Hands the camera's frames to `delegate` (BGRA, scaled down by the camera itself: the photo preset's frames are
-    /// 12 megapixels, which only the page outline would read), or stops them with nil and takes the output out of the
-    /// session.
+    /// Hands the camera's frames to `delegate` (BGRA), or takes the output out of the session with nil. Once added the output
+    /// stays while scan mode is in front; the owner stops delivering instead of removing it. While it is there the camera
+    /// runs a smaller video format that still takes 12 megapixel photos (`outlineFormat`), as Lazy Scan does, since the
+    /// photo preset's frames are 12 megapixels and heat the phone for an outline that is read at 480 pixels.
     func setFrames(_ delegate: AVCaptureVideoDataOutputSampleBufferDelegate?) {
         session.beginConfiguration()
         if let delegate {
-            frameOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: NSNumber(value: kCVPixelFormatType_32BGRA),
-                                         kCVPixelBufferWidthKey as String: NSNumber(value: 960),
-                                         kCVPixelBufferHeightKey as String: NSNumber(value: 720)]
+            frameOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: NSNumber(value: kCVPixelFormatType_32BGRA)]
             frameOutput.alwaysDiscardsLateVideoFrames = true
             frameOutput.setSampleBufferDelegate(delegate, queue: frameQueue)
             if !session.outputs.contains(frameOutput), session.canAddOutput(frameOutput) { session.addOutput(frameOutput) }
+            // The frames are as the sensor gives them: the outline is drawn in the sensor's frame.
+            if let connection = frameOutput.connection(with: .video) {
+                if connection.isVideoRotationAngleSupported(0) { connection.videoRotationAngle = 0 }
+                if connection.isVideoMirroringSupported { connection.isVideoMirrored = false }
+            }
+            useOutlineFormat()
         } else {
             frameOutput.setSampleBufferDelegate(nil, queue: nil)
             if session.outputs.contains(frameOutput) { session.removeOutput(frameOutput) }
+            usePhotoFormat()
         }
         session.commitConfiguration()
+        if let camera = device { setZoom(CameraLens.startZoom(camera)) }
+    }
+
+    /// The photo size scan mode takes: 12 megapixels, which a page needs no more than.
+    private static let scanPhoto = CMVideoDimensions(width: 4032, height: 3024)
+    private var scanning = false
+    private var photoDimensions: CMVideoDimensions?
+
+    /// The smallest standard 4:3 video format (full-range 4:2:0, not binned, 30 fps, at least 1920 x 1440 so the preview is not
+    /// enlarged) that takes the 12 megapixel photos at the best quality; the session keeps the photo preset's format when the
+    /// camera has none, and the frames are then full size.
+    private func useOutlineFormat() {
+        guard let camera = device, !scanning else { return }
+        let photo = CameraSession.scanPhoto
+        var best: AVCaptureDevice.Format?
+        var bestWidth: Int32 = 0
+        for format in camera.formats {
+            let size = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            guard size.width * 3 == size.height * 4, size.width >= 1920, size.width < photo.width,
+                  CMFormatDescriptionGetMediaSubType(format.formatDescription) == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
+                  !format.isVideoBinned, format.isHighPhotoQualitySupported,
+                  format.videoSupportedFrameRateRanges.contains(where: { $0.minFrameRate <= 30 && $0.maxFrameRate >= 30 }),
+                  format.supportedMaxPhotoDimensions.contains(where: { $0.width == photo.width && $0.height == photo.height })
+            else { continue }
+            if best == nil || size.width < bestWidth {
+                best = format
+                bestWidth = size.width
+            }
+        }
+        guard let chosen = best, chosen != camera.activeFormat, session.canSetSessionPreset(.inputPriority),
+              (try? camera.lockForConfiguration()) != nil else { return }
+        session.sessionPreset = .inputPriority
+        camera.activeFormat = chosen
+        camera.unlockForConfiguration()
+        if photoDimensions == nil { photoDimensions = output.maxPhotoDimensions }
+        output.maxPhotoDimensions = photo
+        output.maxPhotoQualityPrioritization = .quality
+        scanning = true
+    }
+
+    /// Back to the photo preset, which brings its own format and photo size.
+    private func usePhotoFormat() {
+        guard scanning else { return }
+        scanning = false
+        if session.canSetSessionPreset(.photo) { session.sessionPreset = .photo }
+        if let before = photoDimensions { output.maxPhotoDimensions = before }
+        photoDimensions = nil
     }
 
     func setTorch(_ on: Bool) {
@@ -150,6 +211,7 @@ final class CameraSession: @unchecked Sendable {
             }
             if connection.isVideoRotationAngleSupported(angle) { connection.videoRotationAngle = angle }
             let settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: heic ? AVVideoCodecType.hevc : AVVideoCodecType.jpeg])
+            if self.scanning { settings.maxPhotoDimensions = self.output.maxPhotoDimensions }
             if flash, self.output.supportedFlashModes.contains(.on) { settings.flashMode = .on }
             let id = settings.uniqueID
             // The output holds its delegate weakly, so it is kept here until the photo is in.
