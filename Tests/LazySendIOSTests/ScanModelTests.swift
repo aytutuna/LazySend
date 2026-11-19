@@ -104,16 +104,35 @@ final class ScanModelTests: XCTestCase {
         XCTAssertNil(scan.lastName)
     }
 
-    func testFramesFollowOnlyInScanModeOnTheActiveCameraTabWithNothingOverIt() {
-        XCTAssertTrue(ScanModel.follows(active: true, scanning: true, covered: false, cameraReady: true))
+    func testTheCameraTakesFramesOnlyInScanModeOnTheActiveCameraTab() {
+        XCTAssertTrue(ScanModel.attaches(active: true, scanning: true, cameraReady: true))
         // Another tab or an app that is not active: the camera is stopped, so the frames are too.
-        XCTAssertFalse(ScanModel.follows(active: false, scanning: true, covered: false, cameraReady: true))
+        XCTAssertFalse(ScanModel.attaches(active: false, scanning: true, cameraReady: true))
         // Photo mode takes no frames.
-        XCTAssertFalse(ScanModel.follows(active: true, scanning: false, covered: false, cameraReady: true))
-        // The pages sheet or the corner editor over it.
-        XCTAssertFalse(ScanModel.follows(active: true, scanning: true, covered: true, cameraReady: true))
+        XCTAssertFalse(ScanModel.attaches(active: true, scanning: false, cameraReady: true))
         // No camera, no permission, an interruption.
-        XCTAssertFalse(ScanModel.follows(active: true, scanning: true, covered: false, cameraReady: false))
+        XCTAssertFalse(ScanModel.attaches(active: true, scanning: true, cameraReady: false))
+    }
+
+    func testASheetOrTheEditorOnlyStopsTheFrames() {
+        XCTAssertTrue(ScanModel.flows(attached: true, covered: false))
+        XCTAssertFalse(ScanModel.flows(attached: true, covered: true))
+        XCTAssertFalse(ScanModel.flows(attached: false, covered: false))
+    }
+
+    private func update(shouldCapture: Bool) -> LiveQuadUpdate {
+        LiveQuadUpdate(outline: nil, state: .captured, progress: 1, timestampMs: 0, shouldCapture: shouldCapture)
+    }
+
+    func testADecisionThatCannotBeActedOnIsForgottenSoThePageCanBeDecidedOnAgain() {
+        // Taken when Auto is on and a photo can be taken.
+        XCTAssertEqual(ScanModel.autoShot(update(shouldCapture: true), auto: true, canShoot: true, inGrace: false), .take)
+        // A shot being made, no device, or the wait after the camera started: forgotten, not left as taken.
+        XCTAssertEqual(ScanModel.autoShot(update(shouldCapture: true), auto: true, canShoot: false, inGrace: false), .forget)
+        XCTAssertEqual(ScanModel.autoShot(update(shouldCapture: true), auto: true, canShoot: true, inGrace: true), .forget)
+        // Auto off: the decision stands for when it is turned on. No decision: nothing.
+        XCTAssertEqual(ScanModel.autoShot(update(shouldCapture: true), auto: false, canShoot: true, inGrace: false), .none)
+        XCTAssertEqual(ScanModel.autoShot(update(shouldCapture: false), auto: true, canShoot: false, inGrace: false), .none)
     }
 
     func testThePagesFilterIsKeptForALaterCut() throws {

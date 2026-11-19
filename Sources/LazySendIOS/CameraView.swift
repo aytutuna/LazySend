@@ -47,9 +47,14 @@ struct CameraView: View {
         .onChange(of: model.scanFilter, initial: true) { _, filter in scan.filter = filter }
         .onChange(of: model.scanAuto, initial: true) { _, auto in scan.auto = auto }
         .onChange(of: model.selectedTarget?.id, initial: true) { _, id in scan.hasTarget = id != nil }
-        .onChange(of: scanLive, initial: true) { _, live in scan.setLive(live) }
+        .onChange(of: scanAttached, initial: true) { _, _ in scan.setLive(attached: scanAttached, covered: scanCovered) }
+        .onChange(of: scanCovered) { _, _ in scan.setLive(attached: scanAttached, covered: scanCovered) }
         .sheet(isPresented: $showsPages) {
             ScanPagesView(scan: scan)
+        }
+        .onChange(of: showsPages) { _, open in
+            // A cut that finished as the sheet closed has nowhere to open: the page stays as it was.
+            if !open, let request = scan.pageEditing { scan.answer(request, .cancel) }
         }
         .fullScreenCover(item: $scan.shotEditing) { request in
             CornerEditorView(request: request) { scan.answer(request, $0) }
@@ -65,11 +70,13 @@ struct CameraView: View {
         }
     }
 
-    /// The page outline is followed while scan mode is in front of a running camera and nothing covers it.
-    private var scanLive: Bool {
-        ScanModel.follows(active: active, scanning: mode == .scan,
-                          covered: showsPages || scan.shotEditing != nil || scan.pageEditing != nil,
-                          cameraReady: ScanDemo.isOn || (camera.availability == .available && !camera.interrupted))
+    private var scanAttached: Bool {
+        ScanModel.attaches(active: active, scanning: mode == .scan,
+                           cameraReady: ScanDemo.isOn || (camera.availability == .available && !camera.interrupted))
+    }
+
+    private var scanCovered: Bool {
+        showsPages || scan.shotEditing != nil || scan.pageEditing != nil
     }
 
     private var shownMessage: String? {

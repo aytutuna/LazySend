@@ -43,59 +43,101 @@ final class ScanModel: ObservableObject {
     private weak var camera: CameraModel?
     private let tracker = LiveQuadTracker()
     private var feed: ScanFrameFeed?
-    private var isLive = false
+    /// The video output is in the session (scan mode in front of a running camera), and frames are handed to the tracker.
+    private var attached = false
+    private var flowing = false
+    /// Auto waits this long after the camera starts, so opening the app over a page does not take it at once.
+    private var graceEnds = Date.distantPast
     private var thumbnails: [UUID: UIImage] = [:]
     private let finder: CornerModel? = FastViTCornerModel.isAvailable ? FastViTCornerModel.shared : nil
     /// Set by the owner of the settings: the filter new pages get, whether the shutter is automatic, and whether there is a
     /// device for the scan to go to, which a page is not taken without.
     var filter = CaptureFilter.enhanced
-    var hasTarget = false
+    var hasTarget = false {
+        didSet { if hasTarget && !oldValue { tracker.reset() } }
+    }
     var auto = true {
         didSet { if auto && !oldValue { tracker.rearm() } }
     }
 
-    /// The frames flow only while the camera tab is in front with the app active (`active`, which is also when the camera
-    /// runs), scan mode is shown, a sheet or the corner editor is not covering it, and the camera can be used.
-    nonisolated static func follows(active: Bool, scanning: Bool, covered: Bool, cameraReady: Bool) -> Bool {
-        active && scanning && !covered && cameraReady
+    /// Scan mode is in front of a running camera on the camera tab with the app active (`active`, which is also when the camera
+    /// runs) and the camera can be used: the video output is in the session.
+    nonisolated static func attaches(active: Bool, scanning: Bool, cameraReady: Bool) -> Bool {
+        active && scanning && cameraReady
+    }
+
+    /// Frames are handed to the tracker while the output is in the session and a sheet or the corner editor is not covering it.
+    /// A cover only stops them, since taking the output out and back would restart the camera's format each time.
+    nonisolated static func flows(attached: Bool, covered: Bool) -> Bool {
+        attached && !covered
+    }
+
+    /// What the shutter's decision comes to: the photo is taken; or, when a photo cannot be taken now (one is being made, no
+    /// device, Auto's wait after the camera started) the tracker forgets the decision, since it would otherwise keep the page as
+    /// taken and never decide again; or nothing, with Auto off, where the decision stands for when it is turned on.
+    enum AutoShot: Equatable {
+        case take
+        case forget
+        case none
+    }
+
+    nonisolated static func autoShot(_ update: LiveQuadUpdate, auto: Bool, canShoot: Bool, inGrace: Bool) -> AutoShot {
+        guard update.shouldCapture, auto else { return .none }
+        return canShoot && !inGrace ? .take : .forget
     }
 
     func configure(camera: CameraModel) {
         self.camera = camera
     }
 
-    /// The frames flow while scan mode is in front of a running camera and nothing covers it. A pause keeps what is known of
-    /// the page, so the page still in view when a sheet closes is not taken again.
-    func setLive(_ on: Bool) {
-        guard on != isLive, let camera else { return }
-        isLive = on
-        if ScanDemo.isOn {
-            live = on ? ScanDemo.update : nil
-            return
+    func setLive(attached on: Bool, covered: Bool) {
+        guard let camera else { return }
+        if on != attached {
+            attached = on
+            if ScanDemo.isOn {
+                // The Simulator has no camera: the frames are the demo's.
+            } else if on {
+                let feed = ScanFrameFeed(model: finder)
+                self.feed = feed
+                graceEnds = Date().addingTimeInterval(CaptureStability.autoGraceMs / 1000)
+                camera.setFrames(feed)
+            } else {
+                feed?.stop()
+                feed = nil
+                camera.setFrames(nil)
+                camera.setTorch(false)
+                tracker.pause()
+                flowing = false
+                live = nil
+                return
+            }
         }
-        if on {
-            let feed = ScanFrameFeed(model: finder)
-            self.feed = feed
+        let flow = ScanModel.flows(attached: attached, covered: covered)
+        guard flow != flowing else { return }
+        flowing = flow
+        if ScanDemo.isOn {
+            live = flow ? ScanDemo.update : nil
+        } else if flow {
             let tracker = tracker
-            feed.start { [weak self] frame in
+            feed?.start { [weak self] frame in
                 guard let update = tracker.process(frame) else { return }
                 Task { @MainActor in self?.apply(update) }
             }
-            camera.setFrames(feed)
         } else {
             feed?.stop()
-            feed = nil
-            camera.setFrames(nil)
-            camera.setTorch(false)
             tracker.pause()
             live = nil
         }
     }
 
     private func apply(_ update: LiveQuadUpdate) {
-        guard isLive else { return }
+        guard flowing else { return }
         live = update
-        if update.shouldCapture && auto && canShoot { shoot() }
+        switch ScanModel.autoShot(update, auto: auto, canShoot: canShoot, inGrace: Date() < graceEnds) {
+        case .take: shoot()
+        case .forget: tracker.reset()
+        case .none: break
+        }
     }
 
     /// A photo can be taken: a camera that runs, no shot being worked on and no editor open.
