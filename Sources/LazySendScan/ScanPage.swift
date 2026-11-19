@@ -5,6 +5,7 @@ import Foundation
 /// cut again), the filter it was cleaned up with, and the page as a JPEG.
 public struct ScanPage: Identifiable, Sendable {
     public let id: UUID
+    // TODO: spill the source photo to a temp file; a long scan holds every one in memory.
     public var source: Data
     /// The corners in the upright photo's pixels.
     public var corners: Quad
@@ -34,12 +35,11 @@ public struct ScanPage: Identifiable, Sendable {
 /// Makes the page of a photo: cut out along the corners with its perspective corrected, then cleaned up as the filter
 /// says.
 public enum PagePipeline {
-    /// The resolution of a page whose paper size is not known.
     public static let nominalDPI = 200
     public static let minDPI = 50
     public static let maxDPI = 1200
-    /// The long side of a sheet taken as a whole photo's page, in inches (A4).
-    static let wholePhotoInches = 11.69
+    /// Where Letter is the usual paper; A4 everywhere else.
+    static let letterRegions = ["US", "CA", "MX", "PH", "CL", "CO", "CR", "DO", "GT", "NI", "PA", "PR", "SV", "VE"]
     /// A cut page is at most this many pixels long (A4 at 300 dpi), however close the camera was.
     public static let maxLongSide = 3508
 
@@ -52,13 +52,13 @@ public enum PagePipeline {
         guard let cut = PerspectiveCorrector.correct(photo, quad: named, options: options) else { return nil }
         guard let made = cleaned(cut.image, filter: filter) else { return nil }
         return ScanPage(id: id, source: source, corners: corners, filter: filter, jpeg: made.jpeg, width: made.width,
-                        height: made.height, dpi: pageDPI(cut.plan.dpi), gray: made.gray)
+                        height: made.height, dpi: pageDPI(cut.plan.dpi, longSide: max(made.width, made.height)), gray: made.gray)
     }
 
     /// The whole photo as the page, as with Use whole photo in the corner editor: only the filter is applied.
     public static func wholePage(photo: RgbaImage, source: Data, filter: CaptureFilter, id: UUID = UUID()) -> ScanPage? {
         guard let made = cleaned(photo, filter: filter) else { return nil }
-        let dpi = pageDPI(Double(max(photo.width, photo.height)) / wholePhotoInches)
+        let dpi = pageDPI(nil, longSide: max(made.width, made.height))
         return ScanPage(id: id, source: source, corners: PageFinder.wholePhoto(width: photo.width, height: photo.height),
                         filter: filter, jpeg: made.jpeg, width: made.width, height: made.height, dpi: dpi, gray: made.gray)
     }
@@ -75,9 +75,14 @@ public enum PagePipeline {
         return (jpeg, result.width, result.height, gray)
     }
 
-    /// `dpi` rounded and kept within `minDPI` to `maxDPI`; `nominalDPI` when the size is not known.
-    static func pageDPI(_ dpi: Double?) -> Int {
-        guard let d = dpi, d.isFinite, d > 0 else { return nominalDPI }
+    /// `dpi` rounded and kept within `minDPI` to `maxDPI`. A page that matched no paper size gets the resolution that makes its
+    /// long side the long side of the usual paper where the user lives (Letter or A4), so it is not printed at a made-up size.
+    static func pageDPI(_ dpi: Double?, longSide: Int, region: String? = Locale.current.region?.identifier) -> Int {
+        var d = dpi ?? 0
+        if !(d.isFinite && d > 0) {
+            let inches = letterRegions.contains((region ?? "").uppercased()) ? 11.0 : 11.69
+            d = longSide > 0 ? Double(longSide) / inches : Double(nominalDPI)
+        }
         return min(max(Int((d + 0.5).rounded(.down)), minDPI), maxDPI)
     }
 }

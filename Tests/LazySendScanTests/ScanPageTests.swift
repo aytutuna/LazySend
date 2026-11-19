@@ -61,11 +61,18 @@ final class ScanPageTests: XCTestCase {
     }
 
     func testThePageDpiIsKeptWithinItsLimits() {
-        XCTAssertEqual(PagePipeline.pageDPI(nil), 200)
-        XCTAssertEqual(PagePipeline.pageDPI(Double.nan), 200)
-        XCTAssertEqual(PagePipeline.pageDPI(12), 50)
-        XCTAssertEqual(PagePipeline.pageDPI(5000), 1200)
-        XCTAssertEqual(PagePipeline.pageDPI(199.6), 200)
+        XCTAssertEqual(PagePipeline.pageDPI(12, longSide: 1000), 50)
+        XCTAssertEqual(PagePipeline.pageDPI(5000, longSide: 1000), 1200)
+        XCTAssertEqual(PagePipeline.pageDPI(199.6, longSide: 1000), 200)
+    }
+
+    func testAPageThatMatchedNoPaperTakesTheUsualSheetsLongSide() {
+        // 2339 px on A4's 11.69 in is 200 dpi, where Letter's 11 in makes it 213: never a made-up 15 in page.
+        XCTAssertEqual(PagePipeline.pageDPI(nil, longSide: 2339, region: "DE"), 200)
+        XCTAssertEqual(PagePipeline.pageDPI(Double.nan, longSide: 2339, region: "DE"), 200)
+        XCTAssertEqual(PagePipeline.pageDPI(nil, longSide: 2339, region: "us"), 213)
+        XCTAssertEqual(PagePipeline.pageDPI(nil, longSide: 3000, region: nil), 257)
+        XCTAssertEqual(PagePipeline.pageDPI(nil, longSide: 100, region: "CA"), 50)
     }
 
     func testAPhotoFromTheCameraIsReadUprightByItsOrientationTag() throws {
