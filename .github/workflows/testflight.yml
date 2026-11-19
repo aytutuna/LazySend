@@ -36,6 +36,9 @@ jobs:
       - uses: actions/checkout@v7
       - name: Select Xcode 26.6
         run: sudo xcode-select -s /Applications/Xcode_26.6.app
+      # The page corner model goes into the app, as in the ios job in ci.yml.
+      - name: Fetch the corner model
+        run: bash scripts/fetch_docaligner.sh
       # Same pinned XcodeGen as the ios job in ci.yml.
       - name: Install XcodeGen
         env:
@@ -74,6 +77,13 @@ jobs:
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CODE_SIGNING_ALLOWED=NO
+      # ONNX Runtime's package wraps a static library as a framework. It is already linked into the app, but Xcode
+      # still copies the wrapper into Frameworks/, and App Store Connect rejects it as unsigned code.
+      - name: Drop ONNX Runtime's framework copy
+        run: |
+          app="$RUNNER_TEMP/LazySend.xcarchive/Products/Applications/LazySend.app"
+          rm -rf "$app/Frameworks/onnxruntime.framework"
+          rmdir "$app/Frameworks" 2>/dev/null || true
       # An unsigned build drops the entitlements, so the share extension and the app are signed ad hoc with
       # theirs before the export, which then signs them for real and keeps the app group.
       - name: Keep the entitlements
