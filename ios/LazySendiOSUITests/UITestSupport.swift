@@ -2,15 +2,18 @@ import XCTest
 
 // The app is launched with `-uiTesting`: settings, secrets and the timeline are in a temp folder and nothing on the
 // network is searched. The app opens on the Camera tab, so a test lands on the Files tab unless it asks for another (`tab: nil`
-// stays on Camera). `-demoData` adds one paired PC that cannot be reached and a filled timeline. Elements are found by
+// stays on Camera). `-demoData` adds one paired PC that cannot be reached and a filled timeline. `-demoScan` gives scan mode a
+// drawn frame to take pages from, where the Simulator has no camera, and `-demoScanUnsure` makes every shot open the corner
+// editor. Elements are found by
 // identifier among every element: toolbar items and some rows are not buttons in the Simulator's tree.
 
 extension XCUIApplication {
     @MainActor
     static func launched(demo: Bool = false, approval: Bool = false, tab: String? = "Files", slowPairing: Bool = false,
-                         pairedOnly: Bool = false) -> XCUIApplication {
+                         pairedOnly: Bool = false, scan: Bool = false, unsure: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-uiTesting"] + (demo ? ["-demoData"] : []) + (approval ? ["-demoApproval"] : []) + (slowPairing ? ["-slowPairing"] : []) + (pairedOnly ? ["-demoPc"] : [])
+            + (scan ? ["-demoScan"] : []) + (unsure ? ["-demoScanUnsure"] : [])
         app.launch()
         if let tab {
             let button = app.tabBars.buttons[tab]
