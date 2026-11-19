@@ -55,10 +55,20 @@ jobs:
         run: |
           xcodebuild -version
           swift --version
+      # DocAligner's corner model goes into LazySendScanModel's bundle, which the scan tests read it from.
+      - name: Fetch the corner model
+        run: bash scripts/fetch_docaligner.sh
       - name: Test LazySendKit
         run: swift test --filter LazySendKitTests
       - name: Test LazySendServer
         run: swift test --filter LazySendServerTests
+      # The iPhone scan mode's page pipeline, and the corner model on the page photos in Tests/LazySendScanModelTests.
+      - name: Test LazySendScan
+        run: swift test --filter LazySendScanTests
+      - name: Test LazySendScanModel
+        run: swift test --filter LazySendScanModelTests
+        env:
+          LAZYSEND_REQUIRE_CORNER_MODEL: '1'
       # The Mac app's model tests, and its two screens written as PNGs.
       - name: Test LazySendMac
         run: swift test --filter LazySendMacTests
@@ -181,6 +191,8 @@ jobs:
           PY
       - name: Boot the simulator
         run: xcrun simctl bootstatus "${{ steps.simulator.outputs.udid }}" -b
+      - name: Fetch the corner model
+        run: bash scripts/fetch_docaligner.sh
       # The iPhone hosts with the server, so its tests run here too
       - name: Unit tests on the Simulator
         run: |
