@@ -5,7 +5,9 @@ import PackageDescription
 // Mac app can use it too. LazySendIOS holds the iPhone's views and services (every file is wrapped in
 // `#if os(iOS)`); ios/project.yml starts it from a thin app target. LazySendServer is the host side of
 // the link, which the Mac and the iPhone both run, and LazySendMac the Mac app's views and services (every file
-// is wrapped in `#if os(macOS)`); mac/project.yml starts it the same way. The code stays in the Swift 5 language mode.
+// is wrapped in `#if os(macOS)`); mac/project.yml starts it the same way. LazySendScan is the iPhone scan mode's page
+// pipeline (finding the page, perspective, filters, the PDF) in plain Foundation and CoreGraphics, so macOS CI can test it.
+// The code stays in the Swift 5 language mode.
 let package = Package(
     name: "LazySend",
     platforms: [.macOS(.v14), .iOS(.v18)],
@@ -17,6 +19,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "LazySendKit", path: "Sources/LazySendKit"),
+        .target(name: "LazySendScan", path: "Sources/LazySendScan"),
         .target(name: "LazySendIOS", dependencies: ["LazySendKit", "LazySendServer"], path: "Sources/LazySendIOS"),
         .target(name: "LazySendServer", dependencies: ["LazySendKit"], path: "Sources/LazySendServer"),
         .target(name: "LazySendMac", dependencies: ["LazySendKit", "LazySendServer"], path: "Sources/LazySendMac"),
@@ -25,6 +28,11 @@ let package = Package(
             dependencies: ["LazySendKit"],
             path: "Tests/LazySendKitTests",
             resources: [.copy("Fixtures")]
+        ),
+        .testTarget(
+            name: "LazySendScanTests",
+            dependencies: ["LazySendScan"],
+            path: "Tests/LazySendScanTests"
         ),
         .testTarget(
             name: "LazySendIOSTests",
