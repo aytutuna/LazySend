@@ -29,7 +29,7 @@ public enum ScanPdf {
             let size = "\(points(w)) \(points(h))"
             begin(first)
             add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 \(size)] /Resources << /XObject << /Im0 \(first + 2) 0 R >> >> /Contents \(first + 1) 0 R >>\nendobj\n")
-            let content = "q \(size) 0 0 cm /Im0 Do Q\n"
+            let content = "q \(points(w)) 0 0 \(points(h)) 0 0 cm /Im0 Do Q\n"
             begin(first + 1)
             add("<< /Length \(content.utf8.count) >>\nstream\n\(content)endstream\nendobj\n")
             begin(first + 2)
