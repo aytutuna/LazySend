@@ -282,15 +282,4 @@ final class PerspectiveWarpTests: XCTestCase {
             XCTAssertEqual(visits, [Int](repeating: 1, count: rows), "\(rows) rows")
         }
     }
-
-    /// Timings for the warp and the box average on a large photo are read on CI or a device.
-    func testWarpOfLargePhotoMeasure() throws {
-        let photo = WarpFixtures.photo(4000, 3000)
-        let quad = WarpFixtures.quad(300, 200, 3700, 260, 3650, 2800, 350, 2750)
-        let options = XCTMeasureOptions()
-        options.iterationCount = 3
-        measure(options: options) {
-            XCTAssertNotNil(PerspectiveWarp.warp(photo, quad: quad, width: 1654, height: 2339))
-        }
-    }
 }

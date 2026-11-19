@@ -69,7 +69,7 @@ public struct LiveQuadUpdate: Equatable, Sendable {
 public final class LiveQuadTracker: @unchecked Sendable {
     /// A frame this soon after the last one handled is passed over (a 30 fps camera's every third frame is used).
     public static let minFrameGapMs: Double = 90
-    /// The same while the phone is warm: about four a second.
+    /// The same while the phone is warm, which the frame feed uses to pass frames over: about four a second.
     public static let warmFrameGapMs: Double = 225
     /// The long side live frames are searched at.
     public static let analysisLongSide: Int = 480
@@ -96,7 +96,6 @@ public final class LiveQuadTracker: @unchecked Sendable {
     private var photographed: Bool = false
     private var latestImage: RgbaImage?
     private var photographedLook: PageThumbnail?
-    private var reduced: Bool = false
 
     /// `quality` nil: `FrameQuality.measure`.
     public init(stability: CaptureStabilityOptions = .default, quality: QualityMeasure? = nil) {
@@ -107,13 +106,6 @@ public final class LiveQuadTracker: @unchecked Sendable {
         self.stability = CaptureStability(options: stability)
     }
 
-    /// While the phone is warm frames are handled less often (`warmFrameGapMs`).
-    public func setReduced(_ on: Bool) {
-        lock.lock()
-        reduced = on
-        lock.unlock()
-    }
-
     /// Handles `frame` unless it comes too soon after the last one (nil then). A frame from an earlier time than the
     /// last one (the camera started again) or of another size starts over.
     public func process(_ frame: ScanFrame) -> LiveQuadUpdate? {
@@ -121,7 +113,7 @@ public final class LiveQuadTracker: @unchecked Sendable {
         let width: Int = frame.image.width
         let height: Int = frame.image.height
         lock.lock()
-        let gap: Double = reduced ? LiveQuadTracker.warmFrameGapMs : LiveQuadTracker.minFrameGapMs
+        let gap: Double = LiveQuadTracker.minFrameGapMs
         if let last = lastHandledMs {
             if t < last {
                 clearState()

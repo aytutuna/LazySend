@@ -124,7 +124,6 @@ final class HomographyTests: XCTestCase {
         let card = cameraView(85.6, 53.98, 35, 0, 5, 160, 1000, 1500, 2000)
         let cardEstimate = PerspectiveCorrector.estimateAspect(card, imageWidth: 1500, imageHeight: 2000)
         XCTAssertTrue((1.586 * 0.99...1.586 * 1.01).contains(cardEstimate.longOverShort), "\(cardEstimate.longOverShort)")
-        XCTAssertEqual(PerspectiveCorrector.matchPaper(cardEstimate.longOverShort)?.size, PaperSize.idCard)
     }
 
     func testASheetSeenStraightOnTakesItsEdgeLengths() {
@@ -139,7 +138,7 @@ final class HomographyTests: XCTestCase {
         XCTAssertEqual(PerspectiveCorrector.matchPaper(1.40)?.size, PaperSize.a4)
         XCTAssertEqual(PerspectiveCorrector.matchPaper(1.30)?.size, PaperSize.letter)
         XCTAssertEqual(PerspectiveCorrector.matchPaper(1.64)?.size, PaperSize.legal)
-        XCTAssertEqual(PerspectiveCorrector.matchPaper(1.59)?.size, PaperSize.idCard)
+        XCTAssertNil(PerspectiveCorrector.matchPaper(1.59))
         XCTAssertNil(PerspectiveCorrector.matchPaper(1.50))
         XCTAssertNil(PerspectiveCorrector.matchPaper(2.5))
         XCTAssertNil(PerspectiveCorrector.matchPaper(1.0))

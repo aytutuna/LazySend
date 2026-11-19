@@ -88,13 +88,6 @@ public struct Quad: Equatable, Codable, Sendable {
         return worst
     }
 
-    /// The mean distance between corresponding corners.
-    public func meanCornerDistance(_ other: Quad) -> Double {
-        var sum = 0.0
-        for i in 0..<4 { sum += Quad.distance(self[i], other[i]) }
-        return sum / 4
-    }
-
     /// Every corner lies within the image of `width` × `height`, at least `margin` pixels from its
     /// edges (a negative margin allows that much outside).
     public func isInside(width: Double, height: Double, margin: Double = 0) -> Bool {
@@ -119,47 +112,6 @@ public struct Quad: Equatable, Codable, Sendable {
             if outside > tolerance { return false }
         }
         return true
-    }
-
-    /// The area this outline and `other` share, in square pixels (both convex and clockwise): this quad
-    /// clipped by each edge of the other in turn (Sutherland–Hodgman).
-    public func intersectionArea(_ other: Quad) -> Double {
-        var polygon: [CGPoint] = corners
-        var edge = 0
-        while edge < 4 && !polygon.isEmpty {
-            let a = other[edge], b = other[edge + 1]
-            let ax = Double(a.x), ay = Double(a.y), bx = Double(b.x), by = Double(b.y)
-            let input = polygon
-            polygon = []
-            polygon.reserveCapacity(input.count + 1)
-            for k in 0..<input.count {
-                let current = input[k]
-                let previous = input[(k + input.count - 1) % input.count]
-                let sc: Double = (bx - ax) * (Double(current.y) - ay) - (by - ay) * (Double(current.x) - ax)
-                let sp: Double = (bx - ax) * (Double(previous.y) - ay) - (by - ay) * (Double(previous.x) - ax)
-                if sc >= 0 {
-                    if sp < 0 { polygon.append(Quad.crossing(previous, current, sp, sc)) }
-                    polygon.append(current)
-                } else if sp >= 0 {
-                    polygon.append(Quad.crossing(previous, current, sp, sc))
-                }
-            }
-            edge += 1
-        }
-        if polygon.count < 3 { return 0 }
-        var sum = 0.0
-        for i in 0..<polygon.count {
-            let p = polygon[i], q = polygon[(i + 1) % polygon.count]
-            sum += Double(p.x) * Double(q.y) - Double(q.x) * Double(p.y)
-        }
-        return abs(sum) / 2
-    }
-
-    /// Where segment p→q crosses the clipping line, from the two ends' signed distances to it.
-    private static func crossing(_ p: CGPoint, _ q: CGPoint, _ sp: Double, _ sq: Double) -> CGPoint {
-        let t = sp / (sp - sq)
-        let px = Double(p.x), py = Double(p.y)
-        return CGPoint(x: px + (Double(q.x) - px) * t, y: py + (Double(q.y) - py) * t)
     }
 
     /// Four corners in any order around the outline (either direction) as a quad: turned clockwise

@@ -76,15 +76,6 @@ public struct GrayImage: Equatable, Sendable {
         self = planes.luma
     }
 
-    /// `init(cgImage:sourceDPI:analysisDPI:)` together with the image's chroma plane
-    /// (`chroma(_:sourceDPI:analysisDPI:)`), read in the same pass.
-    public static func lumaAndChroma(cgImage: CGImage, sourceDPI: Int,
-                                     analysisDPI: Int = GrayImage.analysisDPI) -> (luma: GrayImage, chroma: GrayImage)? {
-        guard let planes = read(cgImage, sourceDPI: sourceDPI, analysisDPI: analysisDPI, withChroma: true),
-              let colors = planes.chroma else { return nil }
-        return (planes.luma, colors)
-    }
-
     private static func read(_ cgImage: CGImage, sourceDPI: Int, analysisDPI: Int,
                              withChroma: Bool) -> (luma: GrayImage, chroma: GrayImage?)? {
         let width = cgImage.width, height = cgImage.height

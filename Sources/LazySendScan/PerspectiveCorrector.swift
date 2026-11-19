@@ -113,11 +113,8 @@ public enum PerspectiveCorrector {
     /// has no plan.
     public static let maxOutputSide = 23170
 
-    /// The sizes a camera page is matched against, in this order (the nearest wins).
-    public static let matchedSizes: [PaperSize] = [.a4, .letter, .legal, .idCard]
-
-    /// The sizes a page of a document is made at: `matchedSizes` without the card, which a sheet such as
-    /// half letter (1.545) is nearer to than to Legal.
+    /// The sizes a page of a document is matched against, in this order (the nearest wins); a sheet such as half letter
+    /// (1.545) is nearer to Legal than to anything else here, but outside the tolerance of all of them.
     public static let documentSizes: [PaperSize] = [.a4, .letter, .legal]
 
     /// The shape of the flat rectangle seen as `quad` in a photo of `imageWidth` × `imageHeight`
@@ -181,7 +178,7 @@ public enum PerspectiveCorrector {
     /// when within `tolerance` of it (as a share of the size's ratio); nil otherwise.
     public static func matchPaper(_ longOverShort: Double,
                                   tolerance: Double = PerspectiveCorrector.paperAspectTolerance,
-                                  sizes: [PaperSize] = PerspectiveCorrector.matchedSizes) -> PaperMatch? {
+                                  sizes: [PaperSize] = PerspectiveCorrector.documentSizes) -> PaperMatch? {
         var best: PaperMatch?
         var bestDiff = Double.greatestFiniteMagnitude
         for size in sizes {

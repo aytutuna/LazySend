@@ -196,18 +196,6 @@ final class LiveQuadTrackerTests: XCTestCase {
         XCTAssertNotNil(tracker.process(plainFrame(200, width: 48, height: 64)))
     }
 
-    func testAWarmPhoneHandlesAboutFourFramesASecond() {
-        let tracker = LiveQuadTracker()
-        tracker.setReduced(true)
-        XCTAssertNotNil(tracker.process(plainFrame(1000)))
-        XCTAssertNil(tracker.process(plainFrame(1100)))
-        XCTAssertNil(tracker.process(plainFrame(1224.9)))
-        XCTAssertNotNil(tracker.process(plainFrame(1225)))
-        tracker.setReduced(false)
-        XCTAssertNil(tracker.process(plainFrame(1300)))
-        XCTAssertNotNil(tracker.process(plainFrame(1315)))
-    }
-
     func testTheModelsPageIsFollowedWhenSureAndKeptForAMomentWhenMissed() {
         let tracker = LiveQuadTracker(quality: goodReadings)
         let sure = QuadCandidate(quad: stubQuad, confidence: 0.9)
