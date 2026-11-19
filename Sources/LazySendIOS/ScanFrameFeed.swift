@@ -15,6 +15,8 @@ final class ScanFrameFeed: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
     private var deliver: (@Sendable (ScanFrame) -> Void)?
     private var lastMs: Double?
     private var working = false
+    /// Counts starts and stops, so a frame that was queued before a stop is not handed over after it.
+    private var generation = 0
     /// A phone held upright shows the back camera's frames turned a quarter clockwise.
     private var turn = 90
 
@@ -27,12 +29,14 @@ final class ScanFrameFeed: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
         lock.lock()
         self.deliver = deliver
         lastMs = nil
+        generation += 1
         lock.unlock()
     }
 
     func stop() {
         lock.lock()
         deliver = nil
+        generation += 1
         lock.unlock()
     }
 
@@ -55,18 +59,20 @@ final class ScanFrameFeed: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
         var due = handler != nil && !working
         if let last = lastMs, ms >= last, ms - last < gap { due = false }
         lock.unlock()
-        guard due, let send = handler, let image = ScanFrameFeed.image(pixels) else { return }
+        guard due, handler != nil, let image = ScanFrameFeed.image(pixels) else { return }
         lock.lock()
         lastMs = ms
         working = true
         let upright = turn
+        let started = generation
         lock.unlock()
         work.async {
             let page = self.model.flatMap { PageFinder.frameCandidate(image, turn: upright, model: $0) }
-            send(ScanFrame(image: image, timestampMs: ms, page: page))
             self.lock.lock()
+            let current = self.generation == started ? self.deliver : nil
             self.working = false
             self.lock.unlock()
+            current?(ScanFrame(image: image, timestampMs: ms, page: page))
         }
     }
 
