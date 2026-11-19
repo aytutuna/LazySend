@@ -49,21 +49,26 @@ enum ClipContent: Equatable {
     }
 }
 
-/// The names of what the camera and the clipboard send, with the time they were made.
+/// The names of what the camera, the scanner and the clipboard send, with the time they were made.
 enum ClipName {
     static func photo(_ date: Date = Date(), milliseconds: Bool = false, ext: String = "jpg") -> String {
         "Photo \(stamp(date, milliseconds: milliseconds)).\(ext)"
+    }
+
+    /// A scan is named to the minute, as "Scan 2026-11-18 14.05.pdf"; with `milliseconds` when another send has that name.
+    static func scan(_ date: Date = Date(), milliseconds: Bool = false, ext: String) -> String {
+        "Scan \(stamp(date, milliseconds: milliseconds, minutes: !milliseconds)).\(ext)"
     }
 
     static func clipboard(_ date: Date = Date(), ext: String = "png") -> String {
         "Clipboard \(stamp(date)).\(ext)"
     }
 
-    private static func stamp(_ date: Date, milliseconds: Bool = false) -> String {
+    private static func stamp(_ date: Date, milliseconds: Bool = false, minutes: Bool = false) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.dateFormat = milliseconds ? "yyyy-MM-dd HH.mm.ss.SSS" : "yyyy-MM-dd HH.mm.ss"
+        formatter.dateFormat = milliseconds ? "yyyy-MM-dd HH.mm.ss.SSS" : (minutes ? "yyyy-MM-dd HH.mm" : "yyyy-MM-dd HH.mm.ss")
         return formatter.string(from: date)
     }
 }

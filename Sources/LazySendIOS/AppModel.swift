@@ -2,6 +2,7 @@
 import BackgroundTasks
 import Foundation
 import LazySendKit
+import LazySendScan
 import LazySendServer
 import Photos
 import SwiftUI
@@ -75,6 +76,9 @@ final class AppModel: ObservableObject {
     /// Photos add access was refused when "Save camera photos to Photos" was turned on.
     @Published private(set) var cameraPhotosDenied = false
     @Published private(set) var photoFormat = PhotoFormat.jpeg
+    /// The filter new pages of a scan get, and whether the camera takes a page by itself once it holds still.
+    @Published private(set) var scanFilter = CaptureFilter.enhanced
+    @Published private(set) var scanAuto = true
     @Published private(set) var photoNotice: PhotoNotice?
     @Published private(set) var galleryRunning = false
     @Published private(set) var feeds: [String: GalleryFeedProgress] = [:]
@@ -116,6 +120,8 @@ final class AppModel: ObservableObject {
         savesToPhotos = env.defaults.bool(forKey: Keys.photos)
         savesCameraToPhotos = env.defaults.bool(forKey: Keys.cameraPhotos)
         photoFormat = env.defaults.string(forKey: Keys.photoFormat).flatMap(PhotoFormat.init(rawValue:)) ?? .jpeg
+        scanFilter = env.defaults.string(forKey: Keys.scanFilter).flatMap(CaptureFilter.init(rawValue:)) ?? .enhanced
+        scanAuto = env.defaults.object(forKey: Keys.scanAuto) as? Bool ?? true
         host.onDevicesChanged = { [weak self] in self?.refreshPcs() }
         host.$feeds.assign(to: &$feeds)
         host.onPhotosDenied = { [weak self] in self?.photoNotice = .denied }
@@ -329,6 +335,16 @@ final class AppModel: ObservableObject {
         env.defaults.set(format.rawValue, forKey: Keys.photoFormat)
     }
 
+    func setScanFilter(_ filter: CaptureFilter) {
+        scanFilter = filter
+        env.defaults.set(filter.rawValue, forKey: Keys.scanFilter)
+    }
+
+    func setScanAuto(_ on: Bool) {
+        scanAuto = on
+        env.defaults.set(on, forKey: Keys.scanAuto)
+    }
+
     /// A photo picked from the Photos item goes in the chosen format; videos, RAW, animated pictures and other files are left as they are.
     /// Each is sent as soon as it is ready.
     func sendPhoto(_ url: URL, to target: Target) async {
@@ -357,17 +373,34 @@ final class AppModel: ObservableObject {
     /// which carries the milliseconds when another send already has the plain one, so the row can be found by it.
     /// Throws when the file cannot be written or the device is gone, so the caller can say so.
     func sendCameraPhoto(_ photo: Data, ext: String = "jpg", to target: Target) async throws -> String {
-        let plain = ClipName.photo(ext: ext)
-        let name = timeline.entries.contains { $0.direction == .sent && $0.title == plain } ? ClipName.photo(milliseconds: true, ext: ext) : plain
+        let name = try await sendMade(photo, named: { ClipName.photo(milliseconds: $0, ext: ext) }, clip: true, to: target)
+        if savesCameraToPhotos { addToPhotos(photo) }
+        return name
+    }
+
+    /// A scan goes to `target` as one file named by its time: a page as the image it is, to be put on the clipboard there like a
+    /// camera photo, two or more as one PDF. Returns the file name, as `sendCameraPhoto` does. Scans are not saved to Photos.
+    func sendScan(_ pages: [ScanPage], to target: Target) async throws -> String {
+        guard let first = pages.first else { throw CancellationError() }
+        if pages.count == 1 {
+            return try await sendMade(first.jpeg, named: { ClipName.scan(milliseconds: $0, ext: "jpg") }, clip: true, to: target)
+        }
+        let pdf = await Task.detached { ScanPdf.make(pages) }.value
+        return try await sendMade(pdf, named: { ClipName.scan(milliseconds: $0, ext: "pdf") }, clip: nil, to: target)
+    }
+
+    private func sendMade(_ data: Data, named: (Bool) -> String, clip: Bool?, to target: Target) async throws -> String {
+        let plain = named(false)
+        let name = timeline.entries.contains { $0.direction == .sent && $0.title == plain } ? named(true) : plain
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("lazysend-photo-" + UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let file = folder.appendingPathComponent(name)
         do {
-            try photo.write(to: file)
+            try data.write(to: file)
             if let phone = HostedPhones.id(ofTarget: target.id) {
-                try await host.sendFiles([file], to: phone, clip: true)
+                try await host.sendFiles([file], to: phone, clip: clip)
             } else if let pc = pcs.first(where: { $0.id == target.id }) {
-                sendFiles([file], to: pc, clip: true)
+                sendFiles([file], to: pc, clip: clip)
             } else {
                 throw HostSendError.notPaired
             }
@@ -375,7 +408,6 @@ final class AppModel: ObservableObject {
             try? FileManager.default.removeItem(at: folder)
             throw error
         }
-        if savesCameraToPhotos { addToPhotos(photo) }
         return name
     }
 
