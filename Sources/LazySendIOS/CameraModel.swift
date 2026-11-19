@@ -23,6 +23,9 @@ final class CameraModel: ObservableObject {
     @Published private(set) var position = AVCaptureDevice.Position.back
     @Published var flash = false
     @Published private(set) var hasFlash = false
+    /// Scan mode's light, which stays on while pages are taken.
+    @Published private(set) var torch = false
+    @Published private(set) var hasTorch = false
     @Published private(set) var interrupted = false
     @Published private(set) var busy = false
     @Published private(set) var thumbnail: UIImage?
@@ -46,6 +49,9 @@ final class CameraModel: ObservableObject {
     private var rotation: AVCaptureDevice.RotationCoordinator?
     private var rotationWatch: NSKeyValueObservation?
     private var watching: [NSObjectProtocol] = []
+    /// The live frames of scan mode, and the turn that makes them upright, which the rotation coordinator gives.
+    private var frameFeed: ScanFrameFeed?
+    private var previewAngle: CGFloat = 90
 
     init() {
         let center = NotificationCenter.default
@@ -85,7 +91,12 @@ final class CameraModel: ObservableObject {
         if !active {
             running = false
             let box = capture
-            box.queue.async { box.stop() }
+            let light = torch
+            torch = false
+            box.queue.async {
+                if light { box.setTorch(false) }
+                box.stop()
+            }
             return
         }
         interrupted = false
@@ -142,6 +153,8 @@ final class CameraModel: ObservableObject {
                 self.stops = CameraModel.lensStops(base: setup.base, lowest: setup.lowest, highest: setup.highest, telephoto: setup.telephoto)
                 self.hasFlash = setup.flash
                 if !setup.flash { self.flash = false }
+                self.hasTorch = setup.torch
+                self.torch = false
                 self.followRotation()
             }
         }
@@ -169,11 +182,29 @@ final class CameraModel: ObservableObject {
             let angle = coordinator.videoRotationAngleForHorizonLevelPreview
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
+                    self?.previewAngle = angle
+                    self?.frameFeed?.setUprightTurn(angle)
                     guard let connection = self?.previewLayer?.connection, connection.isVideoRotationAngleSupported(angle) else { return }
                     connection.videoRotationAngle = angle
                 }
             }
         }
+    }
+
+    /// Scan mode's frames go to `feed` while it is given, and stop with nil. Scanning is with the back camera.
+    func setFrames(_ feed: ScanFrameFeed?) {
+        frameFeed = feed
+        feed?.setUprightTurn(previewAngle)
+        if feed != nil, position == .front { flip() }
+        let box = capture
+        box.queue.async { box.setFrames(feed) }
+    }
+
+    func setTorch(_ on: Bool) {
+        torch = on && hasTorch
+        let box = capture
+        let wanted = torch
+        box.queue.async { box.setTorch(wanted) }
     }
 
     func focus(at point: CGPoint) -> Bool {
@@ -194,14 +225,15 @@ final class CameraModel: ObservableObject {
     }
 
     /// A photo in `format` with its file extension, or nil when none could be taken. Original is HEIC where the camera writes it,
-    /// else JPEG; PNG is made from the JPEG, with its turn put into the pixels.
-    func takePhoto(format: PhotoFormat) async -> (data: Data, ext: String)? {
+    /// else JPEG; PNG is made from the JPEG, with its turn put into the pixels. `flash` overrides the flash button, which
+    /// scan mode leaves out.
+    func takePhoto(format: PhotoFormat, flash useFlash: Bool? = nil) async -> (data: Data, ext: String)? {
         guard !busy, running else { return nil }
         busy = true
         defer { busy = false }
         let angle = rotation?.videoRotationAngleForHorizonLevelCapture ?? 90
         let box = capture
-        let withFlash = flash && hasFlash
+        let withFlash = (useFlash ?? flash) && hasFlash
         let shot: (Data?, String) = await withCheckedContinuation { continuation in
             box.capture(flash: withFlash, angle: angle, original: format == .original) { continuation.resume(returning: ($0, $1)) }
         }

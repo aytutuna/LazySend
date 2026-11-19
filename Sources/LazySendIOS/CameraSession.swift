@@ -30,6 +30,7 @@ struct CameraSetup {
     var telephoto: Double?
     var highest: Double
     var flash: Bool
+    var torch: Bool
 }
 
 /// The capture session and its photo output. Every method runs on `queue`, so the session is set up, started and
@@ -38,6 +39,9 @@ final class CameraSession: @unchecked Sendable {
     let session = AVCaptureSession()
     let queue = DispatchQueue(label: "LazySend.camera")
     private let output = AVCapturePhotoOutput()
+    // The live frames of scan mode, which are only in the session while that mode is in front.
+    private let frameOutput = AVCaptureVideoDataOutput()
+    private let frameQueue = DispatchQueue(label: "LazySend.camera.frames", qos: .userInitiated)
     private var input: AVCaptureDeviceInput?
     private var device: AVCaptureDevice?
     private var pending: [Int64: PhotoDelegate] = [:]
@@ -76,7 +80,32 @@ final class CameraSession: @unchecked Sendable {
         }
         setZoom(base)
         return CameraSetup(device: camera, base: base, lowest: Double(camera.minAvailableVideoZoomFactor), telephoto: telephoto, highest: min(Double(camera.maxAvailableVideoZoomFactor), base * 10),
-                           flash: output.supportedFlashModes.contains(.on))
+                           flash: output.supportedFlashModes.contains(.on), torch: camera.hasTorch)
+    }
+
+    /// Hands the camera's frames to `delegate` (BGRA, scaled down by the camera itself: the photo preset's frames are
+    /// 12 megapixels, which only the page outline would read), or stops them with nil and takes the output out of the
+    /// session.
+    func setFrames(_ delegate: AVCaptureVideoDataOutputSampleBufferDelegate?) {
+        session.beginConfiguration()
+        if let delegate {
+            frameOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: NSNumber(value: kCVPixelFormatType_32BGRA),
+                                         kCVPixelBufferWidthKey as String: NSNumber(value: 960),
+                                         kCVPixelBufferHeightKey as String: NSNumber(value: 720)]
+            frameOutput.alwaysDiscardsLateVideoFrames = true
+            frameOutput.setSampleBufferDelegate(delegate, queue: frameQueue)
+            if !session.outputs.contains(frameOutput), session.canAddOutput(frameOutput) { session.addOutput(frameOutput) }
+        } else {
+            frameOutput.setSampleBufferDelegate(nil, queue: nil)
+            if session.outputs.contains(frameOutput) { session.removeOutput(frameOutput) }
+        }
+        session.commitConfiguration()
+    }
+
+    func setTorch(_ on: Bool) {
+        guard let camera = device, camera.hasTorch, (try? camera.lockForConfiguration()) != nil else { return }
+        camera.torchMode = on ? .on : .off
+        camera.unlockForConfiguration()
     }
 
     func start() {
