@@ -1,8 +1,9 @@
 Lazy Send third-party notices
 
 Lazy Send's source is public to read under the PolyForm Noncommercial
-License (the LICENSE file). This file lists the code from other people that
-is part of the Windows app, where it came from and under what terms.
+License (the LICENSE file). This file lists the code and data from other
+people that is part of the Windows, Android and iPhone apps, where it came
+from and under what terms.
 
 
 1. Code that ships with the app
@@ -50,6 +51,23 @@ ZXing.Net 0.16.11 (zxing.dll)
     pairing QR code and makes no connections with it.
 
 
+ONNX Runtime 1.24.2 (iPhone app)
+    Copyright (c) Microsoft Corporation. MIT License, in full below.
+    https://github.com/microsoft/onnxruntime
+    Runs the page corner model of the camera's Scan mode on the phone. It comes
+    from Microsoft's release archive, with the Objective-C bindings of
+    onnxruntime-swift-package-manager 1.24.2 kept in Vendor/onnxruntime. The
+    runtime statically links code from other projects (protobuf, abseil, Eigen,
+    flatbuffers and more). Their notices are ONNXRuntime-THIRD-PARTY-NOTICES.txt,
+    which ships in the app with the model.
+
+DocAligner FastViT-T8 model, fastvit_t8_h_e_bifpn_256_fp32.onnx, release 1.1.1
+(iPhone app)
+    By DocsaidLab. Apache License 2.0, in full below.
+    https://github.com/DocsaidLab/DocAligner
+    The model file is unchanged. It finds the corners of a page in a photo. It
+    is fetched by scripts/fetch_docaligner.sh and is not in the repository.
+
 ZXing core 3.5.3 (Android app)
     By the ZXing authors. https://github.com/zxing/zxing
     Apache License 2.0, in full below. The Android app uses it to read and to draw
@@ -61,7 +79,37 @@ CameraX, WorkManager (Android app)
     They carry the app's network calls, its screens, the camera preview and
     its background checks.
 
+The tests of the iPhone app's corner model use six frames of the SmartDoc 2015
+Challenge 1 dataset, which are never part of an app. They are under CC BY 4.0;
+the attribution is in Tests/LazySendScanModelTests/Fixtures/Pages/README.md.
+
+
 2. Licence texts
+
+ONNX Runtime
+
+    MIT License
+
+    Copyright (c) Microsoft Corporation
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
 
 Apache License 2.0
 
