@@ -1,31 +1,57 @@
 #if os(iOS)
 import AVFoundation
 import LazySendKit
+import LazySendScan
 import SwiftUI
 import UIKit
 
-/// The camera tab: a live viewfinder, and every photo goes to the chosen device's clipboard as soon as it is taken.
+/// The camera tab: a live viewfinder, and every photo goes to the chosen device's clipboard as soon as it is taken. Scan mode
+/// (`ScanChrome`) takes pages instead, which go as one file when the scan is done.
 struct CameraView: View {
     @EnvironmentObject private var model: AppModel
     @ObservedObject var camera: CameraModel
+    @ObservedObject var scan: ScanModel
     @ObservedObject var timeline: Timeline
     let active: Bool
     let pair: () -> Void
     let showHistory: () -> Void
     @State private var sentHidden = false
+    @State private var mode = CameraMode.photo
+    @State private var drawerOpen = false
+    @State private var showsPages = false
 
     var body: some View {
         GeometryReader { geometry in
             let wide = geometry.size.width > geometry.size.height
             ZStack {
                 Color.black.ignoresSafeArea()
-                CameraPreview(camera: camera, active: active && camera.availability == .available && !camera.interrupted)
-                    .ignoresSafeArea()
-                if let line = shownMessage {
-                    card(line)
+                if ScanDemo.isOn && mode == .scan {
+                    DemoCameraFrame()
+                } else {
+                    CameraPreview(camera: camera, active: active && camera.availability == .available && !camera.interrupted,
+                                  outline: mode == .scan ? scan.live?.outline : nil, steady: scan.live?.isSteady ?? false)
+                        .ignoresSafeArea()
+                    if let line = shownMessage {
+                        card(line)
+                    }
                 }
-                chrome(wide: wide)
+                if mode == .scan {
+                    ScanChrome(camera: camera, scan: scan, timeline: timeline, mode: $mode, drawerOpen: $drawerOpen,
+                               showsPages: $showsPages, wide: wide, pair: pair)
+                } else {
+                    chrome(wide: wide)
+                }
             }
+        }
+        .onAppear { scan.configure(camera: camera) }
+        .onChange(of: model.scanFilter, initial: true) { _, filter in scan.filter = filter }
+        .onChange(of: model.scanAuto, initial: true) { _, auto in scan.auto = auto }
+        .onChange(of: scanLive, initial: true) { _, live in scan.setLive(live) }
+        .sheet(isPresented: $showsPages) {
+            ScanPagesView(scan: scan)
+        }
+        .fullScreenCover(item: $scan.shotEditing) { request in
+            CornerEditorView(request: request) { scan.answer(request, $0) }
         }
         .onChange(of: camera.lastName) { _, _ in sentHidden = false }
         .onChange(of: entry?.state) { _, state in
@@ -36,6 +62,12 @@ struct CameraView: View {
                 sentHidden = true
             }
         }
+    }
+
+    /// The page outline is followed while scan mode is in front of a running camera and nothing covers it.
+    private var scanLive: Bool {
+        guard active, mode == .scan, !showsPages, scan.shotEditing == nil, scan.pageEditing == nil else { return false }
+        return ScanDemo.isOn || (camera.availability == .available && !camera.interrupted)
     }
 
     private var shownMessage: String? {
@@ -76,7 +108,7 @@ struct CameraView: View {
         return layout {
             VStack(spacing: 12) {
                 topBar
-                if model.targets.isEmpty { pairCard }
+                if model.targets.isEmpty { PairCard(pair: pair) }
                 if let problem = camera.problem {
                     Text(problem).font(.footnote).foregroundStyle(.white).padding(8).background(Color.red.opacity(0.8), in: Capsule())
                 }
@@ -150,6 +182,7 @@ struct CameraView: View {
             }
             .accessibilityIdentifier("camera.format")
             Spacer()
+            ModeSwitch(mode: $mode)
             TargetMenu { target in
                 Label(target.name, systemImage: target.phone ? "iphone" : "laptopcomputer")
                     .font(.subheadline.weight(.semibold))
@@ -162,22 +195,6 @@ struct CameraView: View {
         }
         .padding(.horizontal)
         .padding(.top, 8)
-    }
-
-    private var pairCard: some View {
-        VStack(spacing: 10) {
-            Text("Pair a device to send photos")
-                .font(.headline)
-                .foregroundStyle(.white)
-                .multilineTextAlignment(.center)
-                .accessibilityIdentifier("camera.pairTitle")
-            Button("Pair a device", action: pair)
-                .buttonStyle(.borderedProminent)
-                .accessibilityIdentifier("camera.pair")
-        }
-        .padding(16)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Color.black.opacity(0.55)))
-        .padding(.horizontal)
     }
 
     private var shutter: some View {
@@ -277,11 +294,35 @@ struct CameraView: View {
     }
 }
 
-/// The session's live picture. A tap focuses and a pinch zooms.
+/// The card that asks for a device while none is paired.
+struct PairCard: View {
+    let pair: () -> Void
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Text("Pair a device to send photos")
+                .font(.headline)
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .accessibilityIdentifier("camera.pairTitle")
+            Button("Pair a device", action: pair)
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("camera.pair")
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Color.black.opacity(0.55)))
+        .padding(.horizontal)
+    }
+}
+
+/// The session's live picture. A tap focuses and a pinch zooms. In scan mode the outline of the page found is drawn over it.
 struct CameraPreview: UIViewRepresentable {
     let camera: CameraModel
     /// A tap focuses and a pinch zooms only while this is true.
     let active: Bool
+    /// The page's corners as shares of the sensor's frame, green while it holds still, else yellow.
+    var outline: Quad?
+    var steady = false
 
     func makeUIView(context: Context) -> CameraPreviewView {
         let view = CameraPreviewView()
@@ -292,12 +333,16 @@ struct CameraPreview: UIViewRepresentable {
 
     func updateUIView(_ view: CameraPreviewView, context: Context) {
         view.active = active
+        view.show(outline: outline, steady: steady)
     }
 }
 
 final class CameraPreviewView: UIView {
     weak var camera: CameraModel?
     private let focusSquare = UIView()
+    private let outlineLayer = CAShapeLayer()
+    private var outline: Quad?
+    private var steady = false
     private var pinchStart = 1.0
     var active = true {
         didSet {
@@ -323,12 +368,45 @@ final class CameraPreviewView: UIView {
         focusSquare.alpha = 0
         focusSquare.isUserInteractionEnabled = false
         addSubview(focusSquare)
+        outlineLayer.lineWidth = 3
+        outlineLayer.lineJoin = .round
+        layer.addSublayer(outlineLayer)
         addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped(_:))))
         addGestureRecognizer(UIPinchGestureRecognizer(target: self, action: #selector(pinched(_:))))
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) is not used")
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        outlineLayer.frame = bounds
+        redraw()
+    }
+
+    func show(outline: Quad?, steady: Bool) {
+        guard outline != self.outline || steady != self.steady else { return }
+        self.outline = outline
+        self.steady = steady
+        redraw()
+    }
+
+    private func redraw() {
+        guard let outline else {
+            outlineLayer.path = nil
+            return
+        }
+        let path = UIBezierPath()
+        for (index, corner) in outline.corners.enumerated() {
+            let point = previewLayer.layerPointConverted(fromCaptureDevicePoint: corner)
+            if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
+        }
+        path.close()
+        let color = steady ? UIColor.systemGreen : UIColor.systemYellow
+        outlineLayer.strokeColor = color.cgColor
+        outlineLayer.fillColor = color.withAlphaComponent(0.15).cgColor
+        outlineLayer.path = path.cgPath
     }
 
     @MainActor

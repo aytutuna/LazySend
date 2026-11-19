@@ -10,11 +10,12 @@ struct RootView: View {
     // The tab Pair was opened from, which the app goes back to when Pair closes.
     @State private var pairOrigin: AppTab?
     @StateObject private var camera = CameraModel()
+    @StateObject private var scan = ScanModel()
 
     var body: some View {
         TabView(selection: $tab) {
             Tab("Camera", systemImage: "camera", value: AppTab.camera) {
-                CameraView(camera: camera, timeline: model.timeline, active: tab == .camera && phase == .active, pair: pair,
+                CameraView(camera: camera, scan: scan, timeline: model.timeline, active: tab == .camera && phase == .active, pair: pair,
                            showHistory: { openFiles([]) })
             }
             Tab("Files", systemImage: "folder", value: AppTab.files) {
