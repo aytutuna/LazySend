@@ -165,7 +165,7 @@ struct ScanChrome: View {
     // MARK: The line over the picture
 
     private var canShoot: Bool {
-        scan.canShoot && model.selectedTarget != nil
+        scan.canShoot
     }
 
     private var sentEntry: TimelineEntry? {

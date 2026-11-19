@@ -104,6 +104,18 @@ final class ScanModelTests: XCTestCase {
         XCTAssertNil(scan.lastName)
     }
 
+    func testFramesFollowOnlyInScanModeOnTheActiveCameraTabWithNothingOverIt() {
+        XCTAssertTrue(ScanModel.follows(active: true, scanning: true, covered: false, cameraReady: true))
+        // Another tab or an app that is not active: the camera is stopped, so the frames are too.
+        XCTAssertFalse(ScanModel.follows(active: false, scanning: true, covered: false, cameraReady: true))
+        // Photo mode takes no frames.
+        XCTAssertFalse(ScanModel.follows(active: true, scanning: false, covered: false, cameraReady: true))
+        // The pages sheet or the corner editor over it.
+        XCTAssertFalse(ScanModel.follows(active: true, scanning: true, covered: true, cameraReady: true))
+        // No camera, no permission, an interruption.
+        XCTAssertFalse(ScanModel.follows(active: true, scanning: true, covered: false, cameraReady: false))
+    }
+
     func testThePagesFilterIsKeptForALaterCut() throws {
         let scan = ScanModel()
         let gray = try XCTUnwrap(PagePipeline.wholePage(photo: photo(), source: Data(), filter: .grayscale))

@@ -46,10 +46,18 @@ final class ScanModel: ObservableObject {
     private var isLive = false
     private var thumbnails: [UUID: UIImage] = [:]
     private let finder: CornerModel? = FastViTCornerModel.isAvailable ? FastViTCornerModel.shared : nil
-    /// Set by the owner of the settings: the filter new pages get, and whether the shutter is automatic.
+    /// Set by the owner of the settings: the filter new pages get, whether the shutter is automatic, and whether there is a
+    /// device for the scan to go to, which a page is not taken without.
     var filter = CaptureFilter.enhanced
+    var hasTarget = false
     var auto = true {
         didSet { if auto && !oldValue { tracker.rearm() } }
+    }
+
+    /// The frames flow only while the camera tab is in front with the app active (`active`, which is also when the camera
+    /// runs), scan mode is shown, a sheet or the corner editor is not covering it, and the camera can be used.
+    nonisolated static func follows(active: Bool, scanning: Bool, covered: Bool, cameraReady: Bool) -> Bool {
+        active && scanning && !covered && cameraReady
     }
 
     func configure(camera: CameraModel) {
@@ -94,7 +102,7 @@ final class ScanModel: ObservableObject {
     var canShoot: Bool {
         guard let camera else { return false }
         let ready = ScanDemo.isOn || (camera.availability == .available && !camera.interrupted && !camera.busy)
-        return ready && !working && shotEditing == nil && pageEditing == nil
+        return ready && hasTarget && !working && shotEditing == nil && pageEditing == nil
     }
 
     // MARK: Taking a page
