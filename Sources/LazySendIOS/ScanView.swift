@@ -268,7 +268,8 @@ struct ScanChrome: View {
             }
             .frame(width: 70, height: 72)
         }
-        .disabled(count == 0)
+        // Not while a shot is being cut out or the editor is up: that answer would open over the sheet.
+        .disabled(count == 0 || scan.working || scan.shotEditing != nil)
         .accessibilityLabel(ScanText.pages(count))
         .accessibilityHint("Shows the pages taken")
         .accessibilityIdentifier("scan.pages")

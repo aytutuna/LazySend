@@ -50,6 +50,7 @@ struct ScanPagesView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Keep scanning") { dismiss() }
+                        .disabled(scan.working)
                         .accessibilityIdentifier("pages.close")
                 }
                 ToolbarItem(placement: .confirmationAction) {
@@ -70,7 +71,7 @@ struct ScanPagesView: View {
                 }
             }
         }
-        .interactiveDismissDisabled(sending)
+        .interactiveDismissDisabled(sending || scan.working)
         .fullScreenCover(item: $viewing) { page in
             PageViewer(page: page)
         }
