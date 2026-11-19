@@ -84,6 +84,14 @@ jobs:
           app="$RUNNER_TEMP/LazySend.xcarchive/Products/Applications/LazySend.app"
           rm -rf "$app/Frameworks/onnxruntime.framework"
           rmdir "$app/Frameworks" 2>/dev/null || true
+      - name: Check the model is in the app once and the executable does not load ONNX Runtime
+        run: |
+          app="$RUNNER_TEMP/LazySend.xcarchive/Products/Applications/LazySend.app"
+          if otool -L "$app/LazySend" | grep -q onnxruntime; then
+            echo "The executable loads onnxruntime.framework"
+            exit 1
+          fi
+          [ "$(find "$app" -name '*.onnx' | wc -l | tr -d ' ')" = 1 ]             || { echo "The app must hold the model exactly once" >&2; exit 1; }
       # An unsigned build drops the entitlements, so the share extension and the app are signed ad hoc with
       # theirs before the export, which then signs them for real and keeps the app group.
       - name: Keep the entitlements

@@ -230,6 +230,16 @@ jobs:
             -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}" \
             -derivedDataPath "$RUNNER_TEMP/app-build" \
             CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES
+      # The upload workflow deletes ONNX Runtime's framework copy from the archive, which is only safe when the executable does
+      # not load it; and the model must be in the app once, not twice.
+      - name: Check ONNX Runtime is linked in and the model is in the app once
+        run: |
+          app="$RUNNER_TEMP/app-build/Build/Products/Debug-iphonesimulator/LazySend.app"
+          if otool -L "$app/LazySend" | grep -q onnxruntime; then
+            echo "The executable loads onnxruntime.framework"
+            exit 1
+          fi
+          [ "$(find "$app" -name '*.onnx' | wc -l | tr -d ' ')" = 1 ]             || { echo "The app must hold the model exactly once" >&2; exit 1; }
       - name: Run the UI tests
         timeout-minutes: 30
         run: |
