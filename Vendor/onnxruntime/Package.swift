@@ -5,8 +5,9 @@
 //
 // The Objective-C bindings from microsoft/onnxruntime-swift-package-manager 1.24.2 (commit b7fb7f7),
 // kept here since that repository is no longer on GitHub (November 2026). Only the onnxruntime library
-// is kept: the training API, the extensions and the tests are left out. The runtime itself is still
-// Microsoft's release archive.
+// is kept: the training API, the extensions and the tests are left out. The runtime itself is
+// Microsoft's release archive, byte for byte; download.onnxruntime.ai stopped serving it in November
+// 2026, so a copy lives on this repository's deps-onnxruntime-1.24.2 release.
 
 import PackageDescription
 
@@ -22,7 +23,7 @@ let package = Package(
                 path: "objectivec",
                 cxxSettings: [.define("SPM_BUILD")]),
         .binaryTarget(name: "onnxruntime",
-                      url: "https://download.onnxruntime.ai/pod-archive-onnxruntime-c-1.24.2.zip",
+                      url: "https://github.com/aytutuna/LazySend/releases/download/deps-onnxruntime-1.24.2/pod-archive-onnxruntime-c-1.24.2.zip",
                       checksum: "f7100a992d2a8135168c8afd831e6a58b465349101982aa58b3e11d36e600b54"),
     ],
     cxxLanguageStandard: .cxx17
