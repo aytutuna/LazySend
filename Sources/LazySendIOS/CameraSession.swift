@@ -115,7 +115,25 @@ final class CameraSession: @unchecked Sendable {
             usePhotoFormat()
         }
         session.commitConfiguration()
+        if delegate == nil { restorePhotoSize() }
         if let camera = device { setZoom(CameraLens.startZoom(camera)) }
+    }
+
+    /// The largest size in `listed` that is `wanted` or smaller; nil when every one is larger.
+    static func photoSize(from listed: [CMVideoDimensions], wanted: CMVideoDimensions) -> CMVideoDimensions? {
+        let area = { (size: CMVideoDimensions) in Int(size.width) * Int(size.height) }
+        return listed.filter { area($0) <= area(wanted) }.max { area($0) < area($1) }
+    }
+
+    /// Only a size the format in use lists may be set: any other throws, and the format is only the photo preset's once the
+    /// configuration is committed.
+    private func restorePhotoSize() {
+        guard let camera = device, let before = photoDimensions else { return }
+        photoDimensions = nil
+        let wanted = before.width > 0 ? before : CameraSession.scanPhoto
+        if let size = CameraSession.photoSize(from: camera.activeFormat.supportedMaxPhotoDimensions, wanted: wanted) {
+            output.maxPhotoDimensions = size
+        }
     }
 
     /// The photo size scan mode takes: 12 megapixels, which a page needs no more than.
@@ -160,13 +178,12 @@ final class CameraSession: @unchecked Sendable {
         guard scanning else { return }
         scanning = false
         if session.canSetSessionPreset(.photo) { session.sessionPreset = .photo }
-        if let before = photoDimensions { output.maxPhotoDimensions = before }
-        photoDimensions = nil
     }
 
     func setTorch(_ on: Bool) {
-        guard let camera = device, camera.hasTorch, (try? camera.lockForConfiguration()) != nil else { return }
-        camera.torchMode = on ? .on : .off
+        let mode: AVCaptureDevice.TorchMode = on ? .on : .off
+        guard let camera = device, camera.hasTorch, camera.isTorchModeSupported(mode), (try? camera.lockForConfiguration()) != nil else { return }
+        camera.torchMode = mode
         camera.unlockForConfiguration()
     }
 
@@ -178,9 +195,14 @@ final class CameraSession: @unchecked Sendable {
         if session.isRunning { session.stopRunning() }
     }
 
+    /// `factor` held to the range the format in use allows, which differs from one format to the next.
+    static func clampZoom(_ factor: Double, lowest: Double, highest: Double) -> Double {
+        min(max(factor, lowest), max(lowest, highest))
+    }
+
     func setZoom(_ factor: Double) {
         guard let camera = device, (try? camera.lockForConfiguration()) != nil else { return }
-        camera.videoZoomFactor = CGFloat(factor)
+        camera.videoZoomFactor = CGFloat(CameraSession.clampZoom(factor, lowest: Double(camera.minAvailableVideoZoomFactor), highest: Double(camera.maxAvailableVideoZoomFactor)))
         camera.unlockForConfiguration()
     }
 

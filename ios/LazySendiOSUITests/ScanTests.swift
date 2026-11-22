@@ -51,6 +51,19 @@ final class ScanTests: XCTestCase {
     }
 
     @MainActor
+    func testGoingBackToPhotoWithPagesInTheStackKeepsTheCameraTab() {
+        let app = XCUIApplication.launched(demo: true, tab: nil, scan: true)
+        app.item("mode.scan").tap()
+        takePage(app, expecting: "1 page")
+        app.item("mode.photo").tap()
+        XCTAssertTrue(app.item("camera.shutter").waitForExistence(timeout: 30))
+        XCTAssertFalse(app.item("scan.shutter").exists)
+        app.item("mode.scan").tap()
+        XCTAssertTrue(app.item("scan.pages").waitForExistence(timeout: 30))
+        XCTAssertEqual(app.item("scan.pages").label, "1 page")
+    }
+
+    @MainActor
     func testTheScanPageSaysWhenAPageIsFoundAndAutoCanBeTurnedOff() {
         let app = XCUIApplication.launched(demo: true, tab: nil, scan: true)
         app.item("mode.scan").tap()
