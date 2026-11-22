@@ -96,7 +96,8 @@ final class CameraSession: @unchecked Sendable {
     /// stays while scan mode is in front; the owner stops delivering instead of removing it. While it is there the camera
     /// runs a smaller video format that still takes 12 megapixel photos (`outlineFormat`), as Lazy Scan does, since the
     /// photo preset's frames are 12 megapixels and heat the phone for an outline that is read at 480 pixels.
-    func setFrames(_ delegate: AVCaptureVideoDataOutputSampleBufferDelegate?) {
+    /// Returns the highest zoom the format now in use allows, in the same terms as `CameraSetup.highest`.
+    func setFrames(_ delegate: AVCaptureVideoDataOutputSampleBufferDelegate?) -> Double? {
         session.beginConfiguration()
         if let delegate {
             frameOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: NSNumber(value: kCVPixelFormatType_32BGRA)]
@@ -116,7 +117,10 @@ final class CameraSession: @unchecked Sendable {
         }
         session.commitConfiguration()
         if delegate == nil { restorePhotoSize() }
-        if let camera = device { setZoom(CameraLens.startZoom(camera)) }
+        guard let camera = device else { return nil }
+        let start = CameraLens.startZoom(camera)
+        setZoom(start)
+        return min(Double(camera.maxAvailableVideoZoomFactor), start * 10)
     }
 
     /// The largest size in `listed` that is `wanted` or smaller; nil when every one is larger.

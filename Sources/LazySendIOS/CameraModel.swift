@@ -44,6 +44,7 @@ final class CameraModel: ObservableObject {
     @Published private(set) var zoomLevel = 1.0
     @Published private(set) var stops: [LensStop] = []
     private var highest = 1.0
+    private var telephoto: Double?
     private var zoomNow = 1.0
     private weak var previewLayer: AVCaptureVideoPreviewLayer?
     private var rotation: AVCaptureDevice.RotationCoordinator?
@@ -147,6 +148,7 @@ final class CameraModel: ObservableObject {
                 self.position = next
                 self.base = setup.base
                 self.highest = setup.highest
+                self.telephoto = setup.telephoto
                 self.lowest = setup.lowest
                 self.zoomNow = setup.base
                 self.zoomLevel = 1
@@ -197,7 +199,18 @@ final class CameraModel: ObservableObject {
         feed?.setUprightTurn(previewAngle)
         if feed != nil, position == .front { flip() }
         let box = capture
-        box.queue.async { box.setFrames(feed) }
+        box.queue.async {
+            let top = box.setFrames(feed)
+            Task { @MainActor in self.zoomReset(highest: top) }
+        }
+    }
+
+    // The session goes back to the starting zoom with every format change, and the new format has its own top.
+    private func zoomReset(highest top: Double?) {
+        if let top { highest = top }
+        zoomNow = base
+        zoomLevel = 1
+        stops = CameraModel.lensStops(base: base, lowest: lowest, highest: highest, telephoto: telephoto)
     }
 
     func setTorch(_ on: Bool) {
