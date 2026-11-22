@@ -130,10 +130,10 @@ final class CameraSession: @unchecked Sendable {
     private func restorePhotoSize() {
         guard let camera = device, let before = photoDimensions else { return }
         photoDimensions = nil
-        let wanted = before.width > 0 ? before : CameraSession.scanPhoto
-        if let size = CameraSession.photoSize(from: camera.activeFormat.supportedMaxPhotoDimensions, wanted: wanted) {
-            output.maxPhotoDimensions = size
-        }
+        guard before.width > 0, let size = CameraSession.photoSize(from: camera.activeFormat.supportedMaxPhotoDimensions, wanted: before) else { return }
+        session.beginConfiguration()
+        output.maxPhotoDimensions = size
+        session.commitConfiguration()
     }
 
     /// The photo size scan mode takes: 12 megapixels, which a page needs no more than.
@@ -164,10 +164,11 @@ final class CameraSession: @unchecked Sendable {
         }
         guard let chosen = best, chosen != camera.activeFormat, session.canSetSessionPreset(.inputPriority),
               (try? camera.lockForConfiguration()) != nil else { return }
+        // Read while the photo preset's format is still the active one.
+        if photoDimensions == nil { photoDimensions = output.maxPhotoDimensions }
         session.sessionPreset = .inputPriority
         camera.activeFormat = chosen
         camera.unlockForConfiguration()
-        if photoDimensions == nil { photoDimensions = output.maxPhotoDimensions }
         output.maxPhotoDimensions = photo
         output.maxPhotoQualityPrioritization = .quality
         scanning = true
