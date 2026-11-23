@@ -2913,6 +2913,22 @@
         }
       }
     },
+    "The page could not be saved." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The page could not be saved."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sayfa kaydedilemedi."
+          }
+        }
+      }
+    },
     "Corners" : {
       "localizations" : {
         "en" : {
