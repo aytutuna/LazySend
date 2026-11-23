@@ -1,13 +1,18 @@
 package com.lazysend.lazysend.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
@@ -43,6 +48,7 @@ import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
@@ -68,11 +74,12 @@ private suspend fun AwaitPointerEventScope.nextChange(id: PointerId): PointerInp
     awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == id }
 
 /**
- * The lens buttons in a capsule, as in the phone's own camera. Holding or dragging along it opens a wheel that sets the zoom
- * continuously and closes a moment after the finger lifts. [top] is the camera's highest zoom ratio.
+ * A single button with the zoom now; a tap opens it into the lens buttons in a capsule, as in the phone's own camera, which fold
+ * back after a moment. Holding or dragging along it opens a wheel that sets the zoom continuously and closes a moment after the
+ * finger lifts. [top] is the camera's highest zoom ratio; [outside] changes whenever the preview or the shutter is touched.
  */
 @Composable
-fun ZoomControl(now: Float, stops: List<Float>, top: Float, onZoom: (Float) -> Unit) {
+fun ZoomControl(now: Float, stops: List<Float>, top: Float, outside: Int, onZoom: (Float) -> Unit) {
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     val slop = LocalViewConfiguration.current.touchSlop
@@ -83,6 +90,7 @@ fun ZoomControl(now: Float, stops: List<Float>, top: Float, onZoom: (Float) -> U
     val liveRange by rememberUpdatedState(range)
     val liveStops by rememberUpdatedState(stops)
     val liveZoom by rememberUpdatedState(onZoom)
+    var expanded by remember { mutableStateOf(false) }
     var wheelOpen by remember { mutableStateOf(false) }
     var touching by remember { mutableStateOf(false) }
     var animation by remember { mutableStateOf<Job?>(null) }
@@ -98,14 +106,26 @@ fun ZoomControl(now: Float, stops: List<Float>, top: Float, onZoom: (Float) -> U
         if (wheelOpen && !touching) {
             delay(1500)
             wheelOpen = false
+            expanded = false
         }
     }
+    LaunchedEffect(expanded, wheelOpen, touching) {
+        if (expanded && !wheelOpen && !touching) {
+            delay(2000)
+            expanded = false
+        }
+    }
+    LaunchedEffect(outside) { expanded = false }
 
     val name = stringResource(R.string.zoom)
     Box(
         Modifier
             .semantics(mergeDescendants = true) {
                 contentDescription = name
+                onClick {
+                    expanded = true
+                    true
+                }
                 stateDescription = zoomLabel(now)
                 progressBarRangeInfo = ProgressBarRangeInfo(stops.indices.minBy { abs(stops[it] - now) }.toFloat(), 0f..(stops.size - 1).toFloat(), stops.size - 2)
                 setProgress {
@@ -117,7 +137,7 @@ fun ZoomControl(now: Float, stops: List<Float>, top: Float, onZoom: (Float) -> U
             .pointerInput(perDoubling, slop) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                    if (wheelOpen) touching = true
+                    touching = true
                     // A short press is left to the buttons; a hold or a move along the control takes it over.
                     val moved = withTimeoutOrNull(holdTime) {
                         var drag = false
@@ -157,32 +177,35 @@ fun ZoomControl(now: Float, stops: List<Float>, top: Float, onZoom: (Float) -> U
             },
         contentAlignment = Alignment.Center,
     ) {
-        if (wheelOpen) Wheel(now, stops, range, perDoubling) else Capsule(now, stops, ::zoomTo)
+        if (wheelOpen) Wheel(now, stops, range, perDoubling) else Capsule(now, stops, expanded, { expanded = true }, ::zoomTo)
     }
 }
 
 @Composable
-private fun Capsule(now: Float, stops: List<Float>, onStop: (Float) -> Unit) {
+private fun Capsule(now: Float, stops: List<Float>, expanded: Boolean, onExpand: () -> Unit, onStop: (Float) -> Unit) {
     val current = stops.lastOrNull { it <= now + 0.01f }
+    val scrim by animateColorAsState(if (expanded) ZoomScrim else Color.Transparent, tween(200), label = "scrim")
     Row(
-        Modifier.background(ZoomScrim, CircleShape).padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        Modifier.background(scrim, CircleShape).padding(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         stops.forEach { value ->
             val active = value == current
-            Box(
-                Modifier.size(if (active) 40.dp else 32.dp).background(Color.Black.copy(alpha = if (active) 0.55f else 0.2f), CircleShape)
-                    .clickable { if (abs(now - value) > 0.01f) onStop(value) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    if (active) zoomLabel(now) else stopLabel(value),
-                    color = if (active) ZoomAccent else Color.White,
-                    fontSize = if (active) 14.sp else 12.sp,
-                    style = MaterialTheme.typography.labelLarge,
-                    maxLines = 1,
-                )
+            AnimatedVisibility(expanded || active, enter = fadeIn() + expandHorizontally(), exit = fadeOut() + shrinkHorizontally()) {
+                Box(
+                    Modifier.padding(horizontal = 1.dp).size(if (active) 40.dp else 32.dp)
+                        .background(Color.Black.copy(alpha = if (active) 0.55f else 0.2f), CircleShape)
+                        .clickable { if (!expanded) onExpand() else if (abs(now - value) > 0.01f) onStop(value) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        if (active) zoomLabel(now) else stopLabel(value),
+                        color = if (active) ZoomAccent else Color.White,
+                        fontSize = if (active) 14.sp else 12.sp,
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
+                    )
+                }
             }
         }
     }

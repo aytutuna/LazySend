@@ -132,6 +132,7 @@ fun CameraScreen(
     var busy by remember { mutableStateOf(false) }
     var flash by rememberSaveable { mutableIntStateOf(ImageCapture.FLASH_MODE_OFF) }
     var focus by remember { mutableStateOf<Offset?>(null) }
+    var outside by remember { mutableIntStateOf(0) }
 
     val running = resumed && granted && hasCamera
     DisposableEffect(running, front) {
@@ -209,6 +210,7 @@ fun CameraScreen(
             Modifier.fillMaxSize()
                 .pointerInput(camera) {
                     detectTapGestures { at ->
+                        outside++
                         val current = camera ?: return@detectTapGestures
                         val point = view?.meteringPointFactory?.createPoint(at.x, at.y) ?: return@detectTapGestures
                         current.cameraControl.startFocusAndMetering(FocusMeteringAction.Builder(point).build())
@@ -217,6 +219,7 @@ fun CameraScreen(
                 }
                 .pointerInput(camera) {
                     detectTransformGestures { _, _, zoom, _ ->
+                        outside++
                         val current = camera ?: return@detectTransformGestures
                         val state = current.cameraInfo.zoomState.value ?: return@detectTransformGestures
                         current.cameraControl.setZoomRatio((state.zoomRatio * zoom).coerceIn(state.minZoomRatio, state.maxZoomRatio))
@@ -265,12 +268,13 @@ fun CameraScreen(
             val ready = camera != null && !busy && targets.isNotEmpty()
             zoom?.let { state ->
                 val stops = lensStops(state.minZoomRatio, state.maxZoomRatio, telephoto)
-                if (stops.size > 1) ZoomControl(state.zoomRatio, stops, state.maxZoomRatio) { camera?.cameraControl?.setZoomRatio(it) }
+                if (stops.size > 1) ZoomControl(state.zoomRatio, stops, state.maxZoomRatio, outside) { camera?.cameraControl?.setZoomRatio(it) }
             }
             Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 20.dp), verticalAlignment = Alignment.Top) {
                 Box(Modifier.weight(1f), contentAlignment = Alignment.TopStart) { Thumb(shot, entries, targets.firstOrNull { it.id == selected }?.name, onHistory) }
                 Shutter(ready) {
                     onClearProblem()
+                    outside++
                     busy = true
                     scope.launch {
                         val file = newFile()
