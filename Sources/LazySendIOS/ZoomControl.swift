@@ -52,10 +52,13 @@ enum ZoomDial {
     }
 }
 
-/// The lens buttons in a capsule, as in the Camera app. Holding or dragging along it opens a wheel that sets the zoom
-/// continuously and closes a moment after the finger lifts.
+/// A single button with the zoom now; a tap opens it into the lens buttons in a capsule, as in the Camera app, which fold back
+/// after a moment. Holding or dragging along it opens a wheel that sets the zoom continuously and closes a moment after the
+/// finger lifts.
 struct ZoomControl: View {
     @ObservedObject var camera: CameraModel
+    @State private var expanded = false
+    @State private var folding: Task<Void, Never>?
     @State private var wheelOpen = false
     @State private var startZoom: Double?
     @State private var dragOrigin: CGFloat?
@@ -76,10 +79,12 @@ struct ZoomControl: View {
         .animation(.easeOut(duration: 0.15), value: wheelOpen)
         .simultaneousGesture(touch)
         .onChange(of: pressed) { _, down in if !down { released() } }
+        .onChange(of: camera.otherTouches) { _, _ in fold() }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Zoom")
         .accessibilityValue(ZoomDial.label(camera.zoomLevel, active: true))
         .accessibilityIdentifier("camera.zoom")
+        .accessibilityAction { expand() }
         .accessibilityAdjustableAction { direction in
             guard let next = ZoomDial.step(from: camera.zoomLevel, stops: values, up: direction == .increment) else { return }
             camera.animateZoom(to: next)
@@ -93,22 +98,26 @@ struct ZoomControl: View {
             ForEach(values, id: \.self) { value in
                 let active = value == current
                 let size: CGFloat = active ? 40 : 32
-                Button { tapped(value) } label: {
-                    Text(ZoomDial.label(active ? camera.zoomLevel : value, active: active))
-                        .font(.system(size: active ? 15 : 13, weight: .semibold))
-                        .minimumScaleFactor(0.7)
-                        .lineLimit(1)
-                        .foregroundStyle(active ? Color.yellow : Color.white)
-                        .frame(width: size, height: size)
-                        .background(Color.black.opacity(active ? 0.55 : 0.2), in: Circle())
+                if expanded || active {
+                    Button { tapped(value) } label: {
+                        Text(ZoomDial.label(active ? camera.zoomLevel : value, active: active))
+                            .font(.system(size: active ? 15 : 13, weight: .semibold))
+                            .minimumScaleFactor(0.7)
+                            .lineLimit(1)
+                            .foregroundStyle(active ? Color.yellow : Color.white)
+                            .frame(width: size, height: size)
+                            .background(Color.black.opacity(active ? 0.55 : 0.2), in: Circle())
+                    }
+                    .allowsHitTesting(!wheelOpen)
+                    .accessibilityIdentifier("camera.lens." + ZoomDial.label(value, active: false))
+                    .transition(.scale.combined(with: .opacity))
                 }
-                .allowsHitTesting(!wheelOpen)
-                .accessibilityIdentifier("camera.lens." + ZoomDial.label(value, active: false))
             }
         }
-        .animation(.easeOut(duration: 0.15), value: current)
+        .animation(.easeOut(duration: 0.2), value: current)
+        .animation(.easeOut(duration: 0.2), value: expanded)
         .padding(4)
-        .background(Color.black.opacity(0.35), in: Capsule())
+        .background(Color.black.opacity(expanded ? 0.35 : 0), in: Capsule())
     }
 
     private var wheel: some View {
@@ -152,8 +161,33 @@ struct ZoomControl: View {
     }
 
     private func tapped(_ value: Double) {
-        guard !wheelOpen, abs(camera.zoomLevel - value) > 0.01 else { return }
+        guard !wheelOpen else { return }
+        guard expanded else {
+            expand()
+            return
+        }
+        scheduleFold()
+        guard abs(camera.zoomLevel - value) > 0.01 else { return }
         camera.animateZoom(to: value)
+    }
+
+    private func expand() {
+        expanded = true
+        scheduleFold()
+    }
+
+    private func fold() {
+        folding?.cancel()
+        expanded = false
+    }
+
+    private func scheduleFold() {
+        folding?.cancel()
+        folding = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard !Task.isCancelled else { return }
+            expanded = false
+        }
     }
 
     // Touch down starts a hold that opens the wheel; moving along the control opens it at once.
@@ -163,6 +197,7 @@ struct ZoomControl: View {
                 if startZoom == nil {
                     startZoom = camera.zoomLevel
                     closing?.cancel()
+                    folding?.cancel()
                     hold = Task { @MainActor in
                         try? await Task.sleep(nanoseconds: 400_000_000)
                         guard !Task.isCancelled else { return }
@@ -186,11 +221,15 @@ struct ZoomControl: View {
         hold?.cancel()
         startZoom = nil
         dragOrigin = nil
-        guard wheelOpen else { return }
+        guard wheelOpen else {
+            if expanded { scheduleFold() }
+            return
+        }
         closing = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_500_000_000)
             guard !Task.isCancelled else { return }
             wheelOpen = false
+            expanded = false
         }
     }
 }

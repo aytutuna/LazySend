@@ -193,7 +193,10 @@ struct CameraView: View {
     }
 
     private var shutter: some View {
-        Button { shoot() } label: {
+        Button {
+            camera.touchedElsewhere()
+            shoot()
+        } label: {
             ZStack {
                 Circle().stroke(Color.white, lineWidth: 4).frame(width: 74, height: 74)
                 Circle().fill(Color.white).frame(width: 60, height: 60)
@@ -406,6 +409,7 @@ final class CameraPreviewView: UIView {
 
     @MainActor
     @objc private func tapped(_ tap: UITapGestureRecognizer) {
+        camera?.touchedElsewhere()
         let point = tap.location(in: self)
         let spot = previewLayer.captureDevicePointConverted(fromLayerPoint: point)
         // Outside the frame is a black band.
@@ -419,7 +423,10 @@ final class CameraPreviewView: UIView {
     @MainActor
     @objc private func pinched(_ pinch: UIPinchGestureRecognizer) {
         guard let camera else { return }
-        if pinch.state == .began { pinchStart = camera.zoom }
+        if pinch.state == .began {
+            pinchStart = camera.zoom
+            camera.touchedElsewhere()
+        }
         if pinch.state == .changed { camera.setZoom(pinchStart * Double(pinch.scale)) }
     }
 }

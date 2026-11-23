@@ -157,6 +157,7 @@ fun CameraScreen(
     var flash by rememberSaveable { mutableIntStateOf(ImageCapture.FLASH_MODE_OFF) }
     var torch by rememberSaveable { mutableStateOf(false) }
     var focus by remember { mutableStateOf<Offset?>(null) }
+    var outside by remember { mutableIntStateOf(0) }
 
     // Scanning is with the back camera.
     val useFront = front && !scanning
@@ -295,7 +296,7 @@ fun CameraScreen(
     val zoomControl: @Composable () -> Unit = {
         zoom?.let { state ->
             val stops = lensStops(state.minZoomRatio, state.maxZoomRatio, telephoto)
-            if (stops.size > 1) ZoomControl(state.zoomRatio, stops, state.maxZoomRatio) { camera?.cameraControl?.setZoomRatio(it) }
+            if (stops.size > 1) ZoomControl(state.zoomRatio, stops, state.maxZoomRatio, outside) { camera?.cameraControl?.setZoomRatio(it) }
         }
     }
 
@@ -313,6 +314,7 @@ fun CameraScreen(
             Modifier.fillMaxSize()
                 .pointerInput(camera) {
                     detectTapGestures { at ->
+                        outside++
                         val current = camera ?: return@detectTapGestures
                         val point = view?.meteringPointFactory?.createPoint(at.x, at.y) ?: return@detectTapGestures
                         current.cameraControl.startFocusAndMetering(FocusMeteringAction.Builder(point).build())
@@ -321,6 +323,7 @@ fun CameraScreen(
                 }
                 .pointerInput(camera) {
                     detectTransformGestures { _, _, zoom, _ ->
+                        outside++
                         val current = camera ?: return@detectTransformGestures
                         val state = current.cameraInfo.zoomState.value ?: return@detectTransformGestures
                         current.cameraControl.setZoomRatio((state.zoomRatio * zoom).coerceIn(state.minZoomRatio, state.maxZoomRatio))
@@ -373,6 +376,7 @@ fun CameraScreen(
                 onScanning = onScanning,
                 zoom = zoomControl,
                 onPages = { pagesOpen = true },
+                onShutter = { outside++ },
             )
         } else {
             PhotoChrome(
@@ -393,6 +397,7 @@ fun CameraScreen(
                 canShoot = camera != null && !busy && targets.isNotEmpty(),
                 onShoot = {
                     onClearProblem()
+                    outside++
                     busy = true
                     scope.launch {
                         val file = newFile()

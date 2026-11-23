@@ -77,7 +77,7 @@ class ScanScreenshotsTest {
     }
 
     private val threePages = listOf(CaptureFilter.Enhanced, CaptureFilter.Grayscale, CaptureFilter.BlackAndWhite)
-    private val zoomStops: @Composable () -> Unit = { ZoomControl(1f, listOf(0.6f, 1f, 2f, 5f), 8f) {} }
+    private val zoomStops: @Composable () -> Unit = { ZoomControl(1f, listOf(0.6f, 1f, 2f, 5f), 8f, 0) {} }
 
     @Composable
     private fun Viewfinder(content: @Composable () -> Unit) {

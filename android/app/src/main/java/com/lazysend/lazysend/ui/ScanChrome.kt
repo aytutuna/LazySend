@@ -160,6 +160,7 @@ fun ScanChrome(
     onScanning: (Boolean) -> Unit,
     zoom: @Composable () -> Unit,
     onPages: () -> Unit,
+    onShutter: () -> Unit = {},
 ) {
     val pages by scan.pages.collectAsState()
     val live by scan.live.collectAsState()
@@ -204,7 +205,10 @@ fun ScanChrome(
                 // Not while a shot is being cut out or the editor is up: that answer would open over the sheet.
                 PagesStack(scan, pages, enabled = pages.isNotEmpty() && !working && shotEditing == null, onClick = onPages)
             }
-            Shutter(canShoot, stringResource(R.string.scan_take_page), ring) { scan.shoot() }
+            Shutter(canShoot, stringResource(R.string.scan_take_page), ring) {
+                onShutter()
+                scan.shoot()
+            }
             Box(Modifier.weight(1f))
         }
     }
