@@ -74,17 +74,78 @@ final class ScanPageStoreTests: XCTestCase {
         XCTAssertEqual(store.load().count, 1)
     }
 
-    func testAFolderThatWasNotFinishedIsLeftOutAndRemoved() throws {
+
+    private func exists(_ name: String) -> Bool {
+        FileManager.default.fileExists(atPath: folder.appendingPathComponent(name).path)
+    }
+
+    func testAnIncompleteFolderThatIsNotListedAndTheTemporaryOnesAreRemoved() throws {
         let store = ScanPageStore(folder: folder)
         let kept = page(1)
         try store.save(kept, source: Data())
-        let stray = folder.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: stray, withIntermediateDirectories: true)
-        let broken = page(2)
-        try store.save(broken, source: Data())
-        try FileManager.default.removeItem(at: folder.appendingPathComponent(broken.id.uuidString).appendingPathComponent("page.json"))
+        let stray = UUID().uuidString
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent(stray), withIntermediateDirectories: true)
+        try Data([1]).write(to: folder.appendingPathComponent(stray).appendingPathComponent("page.jpg"))
+        let temp = ".tmp-" + UUID().uuidString
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent(temp), withIntermediateDirectories: true)
         XCTAssertEqual(store.load().map(\.id), [kept.id])
-        XCTAssertFalse(FileManager.default.fileExists(atPath: stray.path))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.appendingPathComponent(broken.id.uuidString).path))
+        XCTAssertFalse(exists(stray))
+        XCTAssertFalse(exists(temp))
+    }
+
+    func testAListedPageThatCannotBeReadStaysOnDiskAndInTheList() throws {
+        let store = ScanPageStore(folder: folder)
+        let pages = [page(1), page(2)]
+        for page in pages { try store.save(page, source: Data([3])) }
+        try Data("not json".utf8).write(to: folder.appendingPathComponent(pages[0].id.uuidString).appendingPathComponent("page.json"))
+        XCTAssertEqual(store.load().map(\.id), [pages[1].id])
+        XCTAssertTrue(exists(pages[0].id.uuidString))
+        XCTAssertEqual(store.source(of: pages[0].id), Data([3]))
+        let list = try JSONDecoder().decode([UUID].self, from: Data(contentsOf: folder.appendingPathComponent("order.json")))
+        XCTAssertEqual(list, pages.map(\.id))
+    }
+
+    func testACompletePageTheListLacksIsAddedAtTheEnd() throws {
+        let store = ScanPageStore(folder: folder)
+        let pages = [page(1), page(2), page(3)]
+        for page in pages { try store.save(page, source: Data([1])) }
+        try store.setOrder([pages[2].id])
+        XCTAssertEqual(Set(store.load().map(\.id)), Set(pages.map(\.id)))
+        XCTAssertEqual(store.load().first?.id, pages[2].id)
+        XCTAssertEqual(store.load().count, 3)
+        XCTAssertTrue(exists(pages[0].id.uuidString))
+        let list = try JSONDecoder().decode([UUID].self, from: Data(contentsOf: folder.appendingPathComponent("order.json")))
+        XCTAssertEqual(list.count, 3)
+        XCTAssertEqual(list.first, pages[2].id)
+    }
+
+    func testAMissingOrUnreadableListDeletesNothing() throws {
+        let store = ScanPageStore(folder: folder)
+        let pages = [page(1), page(2)]
+        for page in pages { try store.save(page, source: Data([1])) }
+        let stray = UUID().uuidString
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent(stray), withIntermediateDirectories: true)
+        try Data("{".utf8).write(to: folder.appendingPathComponent("order.json"))
+        XCTAssertEqual(Set(store.load().map(\.id)), Set(pages.map(\.id)))
+        XCTAssertTrue(exists(stray))
+        try FileManager.default.removeItem(at: folder.appendingPathComponent("order.json"))
+        XCTAssertEqual(Set(store.load().map(\.id)), Set(pages.map(\.id)))
+        XCTAssertTrue(exists(stray))
+        XCTAssertTrue(exists(pages[0].id.uuidString))
+    }
+
+    func testSavingWithoutAPhotoKeepsTheOneStored() throws {
+        let store = ScanPageStore(folder: folder)
+        var saved = page(1)
+        try store.save(saved, source: Data([4, 4]))
+        saved.filter = .grayscale
+        saved.jpeg = Data([0xFF, 0xD8, 9])
+        try store.save(saved, source: nil)
+        XCTAssertEqual(store.source(of: saved.id), Data([4, 4]))
+        XCTAssertEqual(store.load().first?.filter, .grayscale)
+        XCTAssertEqual(store.load().first?.jpeg, Data([0xFF, 0xD8, 9]))
+        XCTAssertThrowsError(try store.save(page(2), source: nil))
+        XCTAssertEqual(store.load().count, 1)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: folder.path).filter { $0.hasPrefix(".tmp-") }, [])
     }
 }
