@@ -2,7 +2,9 @@ package com.lazysend.lazysend.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.padding
@@ -17,11 +19,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lazysend.lazysend.R
 import com.lazysend.lazysend.transfer.PhotoFormat
@@ -74,15 +80,24 @@ fun AddButton(format: PhotoFormat, galleryEnabled: Boolean, onGallery: () -> Uni
 
 /** Who a send goes to; the same chip is on the camera, over the picture, and on the Files tab. */
 @Composable
-fun TargetChip(current: PcRow, all: List<PcRow>, onSelect: (String) -> Unit, container: Color, content: Color) {
+fun TargetChip(current: PcRow, all: List<PcRow>, onSelect: (String) -> Unit, container: Color, content: Color, showLink: Boolean = false) {
     var open by remember { mutableStateOf(false) }
     Box {
-        Text(
-            current.name,
+        Row(
             Modifier.clip(RoundedCornerShape(50)).background(container).clickable { open = true }.padding(horizontal = 14.dp, vertical = 8.dp),
-            color = content,
-            style = MaterialTheme.typography.labelLarge,
-        )
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // A phone that connects to this one has no link to show.
+            if (showLink && !current.guest) {
+                val connected = current.link != null
+                val state = stringResource(if (connected) R.string.connected else R.string.not_connected)
+                Box(
+                    Modifier.padding(end = 8.dp).size(8.dp).background(if (connected) Color(0xFF34C759) else Color(0xFFFF3B30), CircleShape)
+                        .semantics { contentDescription = state },
+                )
+            }
+            Text(current.name, color = content, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
         DropdownMenu(open, { open = false }) {
             all.forEach { row ->
                 DropdownMenuItem(

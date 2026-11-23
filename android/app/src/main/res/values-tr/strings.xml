@@ -25,6 +25,8 @@
     <string name="empty_body">Bilgisayarınızda Lazy Send\'i açın, Telefon eşleştir\'i seçin ve gösterdiği kodu tarayın.</string>
     <string name="connected_over">%1$s üzerinden bağlı</string>
     <string name="not_reachable">%1$s cihazına ulaşılamıyor</string>
+    <string name="connected">Bağlı</string>
+    <string name="not_connected">Bağlı değil</string>
     <string name="sent_to">Alıcı: %1$s</string>
     <string name="received_from">Gönderen: %1$s</string>
     <string name="state_paused">Duraklatıldı</string>

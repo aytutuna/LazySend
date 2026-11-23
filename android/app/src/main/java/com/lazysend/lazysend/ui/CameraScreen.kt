@@ -256,7 +256,7 @@ fun CameraScreen(
                 Box(Modifier.weight(1f))
                 FormatChip(format, onFormat)
                 Box(Modifier.padding(start = 8.dp))
-                targets.firstOrNull { it.id == selected }?.let { TargetChip(it, targets, onSelect, Scrim, Color.White) }
+                targets.firstOrNull { it.id == selected }?.let { TargetChip(it, targets, onSelect, Scrim, Color.White, showLink = true) }
             }
             problem?.let {
                 Text(it, Modifier.padding(8.dp).background(MaterialTheme.colorScheme.error, RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 6.dp), color = MaterialTheme.colorScheme.onError, style = MaterialTheme.typography.bodySmall)
