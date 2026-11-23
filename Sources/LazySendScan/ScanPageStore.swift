@@ -101,9 +101,11 @@ public final class ScanPageStore: @unchecked Sendable {
         try JSONEncoder().encode(ids).write(to: orderFile, options: .atomic)
     }
 
+    /// The folder goes first: a kill before the list is written leaves a listed id with no folder, which a load skips,
+    /// where the other way round would leave a whole folder the next load takes in again.
     public func remove(_ id: UUID) {
-        if let ids = order() { try? setOrder(ids.filter { $0 != id }) }
         try? files.removeItem(at: pageFolder(id))
+        if let ids = order() { try? setOrder(ids.filter { $0 != id }) }
     }
 
     public func removeAll() {
