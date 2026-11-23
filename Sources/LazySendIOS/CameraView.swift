@@ -406,6 +406,7 @@ final class CameraPreviewView: UIView {
 
     @MainActor
     @objc private func tapped(_ tap: UITapGestureRecognizer) {
+        camera?.touchedElsewhere()
         let point = tap.location(in: self)
         let spot = previewLayer.captureDevicePointConverted(fromLayerPoint: point)
         // Outside the frame is a black band.
@@ -419,7 +420,10 @@ final class CameraPreviewView: UIView {
     @MainActor
     @objc private func pinched(_ pinch: UIPinchGestureRecognizer) {
         guard let camera else { return }
-        if pinch.state == .began { pinchStart = camera.zoom }
+        if pinch.state == .began {
+            pinchStart = camera.zoom
+            camera.touchedElsewhere()
+        }
         if pinch.state == .changed { camera.setZoom(pinchStart * Double(pinch.scale)) }
     }
 }

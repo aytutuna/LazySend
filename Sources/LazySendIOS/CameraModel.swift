@@ -43,6 +43,8 @@ final class CameraModel: ObservableObject {
     /// The zoom now, 1 at the main lens's view; 0.5 is the ultra wide lens where the phone has one.
     @Published private(set) var zoomLevel = 1.0
     @Published private(set) var stops: [LensStop] = []
+    /// Counts the touches on the preview and the shutter, which fold the zoom control back to its single button.
+    @Published private(set) var otherTouches = 0
     private var highest = 1.0
     private var telephoto: Double?
     private var crop = false
@@ -237,6 +239,10 @@ final class CameraModel: ObservableObject {
     /// The most the zoom goes to, as a multiple of the starting view.
     var zoomCeiling: Double { highest / base }
 
+    func touchedElsewhere() {
+        otherTouches += 1
+    }
+
     func setZoom(_ zoom: Double) {
         zoomAnimation?.cancel()
         applyZoom(zoom)
@@ -270,6 +276,7 @@ final class CameraModel: ObservableObject {
     /// scan mode leaves out.
     func takePhoto(format: PhotoFormat, flash useFlash: Bool? = nil) async -> (data: Data, ext: String)? {
         guard !busy, running else { return nil }
+        touchedElsewhere()
         busy = true
         defer { busy = false }
         let angle = rotation?.videoRotationAngleForHorizonLevelCapture ?? 90

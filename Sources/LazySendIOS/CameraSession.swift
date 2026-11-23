@@ -90,8 +90,10 @@ final class CameraSession: @unchecked Sendable {
             telephoto = switchOvers.first
         }
         setZoom(base)
-        // No phone has a 48 megapixel format without a 48 megapixel main camera.
-        let crop = position == .back && camera.formats.contains { $0.supportedMaxPhotoDimensions.contains { Int($0.width) * Int($0.height) >= 40_000_000 } }
+        // A virtual camera lists its own formats at the 12 megapixels it shoots as a whole; the 48 megapixel sizes belong to the
+        // wide lens behind it, so that is where they are looked for too.
+        let lenses = [camera] + camera.constituentDevices.filter { $0.deviceType == .builtInWideAngleCamera }
+        let crop = position == .back && lenses.contains { $0.formats.contains { CameraSession.hasHighResolution($0.supportedMaxPhotoDimensions) } }
         return CameraSetup(device: camera, base: base, lowest: Double(camera.minAvailableVideoZoomFactor), telephoto: telephoto, crop: crop, highest: min(Double(camera.maxAvailableVideoZoomFactor), base * 10),
                            flash: output.supportedFlashModes.contains(.on), torch: camera.hasTorch)
     }
@@ -125,6 +127,11 @@ final class CameraSession: @unchecked Sendable {
         let start = CameraLens.startZoom(camera)
         setZoom(start)
         return min(Double(camera.maxAvailableVideoZoomFactor), start * 10)
+    }
+
+    /// Whether a camera that lists `sizes` takes 48 megapixel photos (8064 x 6048); 12 megapixel ones are 4032 x 3024.
+    static func hasHighResolution(_ sizes: [CMVideoDimensions]) -> Bool {
+        sizes.contains { Int($0.width) * Int($0.height) >= 40_000_000 }
     }
 
     /// The largest size in `listed` that is `wanted` or smaller; nil when every one is larger.

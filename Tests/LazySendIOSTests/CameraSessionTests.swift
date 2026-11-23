@@ -25,6 +25,12 @@ final class CameraSessionTests: XCTestCase {
         XCTAssertNil(CameraSession.photoSize(from: [], wanted: size(4032, 3024)))
     }
 
+    func testOnlyA48MegapixelSizeCountsAsHighResolution() {
+        XCTAssertTrue(CameraSession.hasHighResolution([size(4032, 3024), size(8064, 6048)]))
+        XCTAssertFalse(CameraSession.hasHighResolution([size(1920, 1080), size(4032, 3024)]))
+        XCTAssertFalse(CameraSession.hasHighResolution([]))
+    }
+
     func testZoomIsHeldToTheRangeOfTheFormat() {
         XCTAssertEqual(CameraSession.clampZoom(0.5, lowest: 1, highest: 15), 1)
         XCTAssertEqual(CameraSession.clampZoom(30, lowest: 1, highest: 15), 15)
