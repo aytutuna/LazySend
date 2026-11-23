@@ -63,6 +63,14 @@ final class ScanTests: XCTestCase {
         XCTAssertEqual(app.item("scan.pages").label, "1 page")
     }
 
+    /// The stored pages are read a moment after the app opens, so the count is waited for.
+    @MainActor
+    private func expectLabel(_ element: XCUIElement, _ label: String) {
+        let deadline = Date().addingTimeInterval(30)
+        while Date() < deadline && element.label != label { Thread.sleep(forTimeInterval: 0.3) }
+        XCTAssertEqual(element.label, label)
+    }
+
     // What the system does to an app it needs the memory of: the process goes and the app opens again, in Photo mode.
     @MainActor
     func testPagesTakenSurviveTheAppBeingClosedAndOpenedAgain() {
@@ -77,18 +85,18 @@ final class ScanTests: XCTestCase {
         XCTAssertTrue(again.item("camera.shutter").waitForExistence(timeout: 30))
         again.item("mode.scan").tap()
         XCTAssertTrue(again.item("scan.pages").waitForExistence(timeout: 30))
-        XCTAssertEqual(again.item("scan.pages").label, "2 pages")
+        expectLabel(again.item("scan.pages"), "2 pages")
         again.item("scan.pages").tap()
         XCTAssertTrue(again.item("page.1").waitForExistence(timeout: 30))
         again.item("page.1.menu").tap()
         again.buttons["Delete"].tap()
         again.item("pages.close").tap()
-        XCTAssertEqual(again.item("scan.pages").label, "1 page")
+        expectLabel(again.item("scan.pages"), "1 page")
         again.terminate()
         let third = XCUIApplication.launched(demo: true, tab: nil, scan: true, restoring: true)
         third.item("mode.scan").tap()
         XCTAssertTrue(third.item("scan.pages").waitForExistence(timeout: 30))
-        XCTAssertEqual(third.item("scan.pages").label, "1 page")
+        expectLabel(third.item("scan.pages"), "1 page")
     }
 
     @MainActor
