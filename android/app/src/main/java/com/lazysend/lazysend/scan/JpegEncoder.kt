@@ -55,7 +55,8 @@ object PhotoReader {
 
         val options = BitmapFactory.Options().apply {
             inPreferredConfig = Bitmap.Config.ARGB_8888
-            inSampleSize = sampleSize(max(bounds.outWidth, bounds.outHeight), MAX_LONG_SIDE)
+            // A little under the limit, so a 8160 px sensor is read at half size instead of whole (200 MB) and then shrunk.
+            inSampleSize = sampleSize(max(bounds.outWidth, bounds.outHeight), MAX_LONG_SIDE * 19 / 20)
         }
         var bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: return null
         val big = max(bitmap.width, bitmap.height)

@@ -11,18 +11,19 @@ private const val TAG = "CornerModel"
 
 /**
  * DocAligner's FastViT-T8 corner model (DocsaidLab/DocAligner 1.1.1, Apache-2.0) on ONNX Runtime. `model` gives
- * the file's bytes; it is called once, on the first run, so they are not kept after the session has them. The
+ * the file's bytes; it is called once, on the first run (a failed load is not tried again), so they are not kept after the session has them. The
  * session is made then and kept, all graph optimizations on, two threads; one run at a time.
  */
 class OnnxCornerModel(private val model: () -> ByteArray) : CornerModel {
     private val lock = Any()
     private var session: OrtSession? = null
+    private var failed = false
 
     override fun heatmaps(input: FloatArray): CornerHeatmaps? {
         val side = CornerModelInput.SIDE
         if (input.size != 3 * side * side) return null
         return try {
-            synchronized(lock) { run(loaded(), input, side) }
+            synchronized(lock) { if (failed) null else run(loaded(), input, side) }
         } catch (e: Exception) {
             Log.e(TAG, "Corner model did not run", e)
             null
@@ -59,7 +60,12 @@ class OnnxCornerModel(private val model: () -> ByteArray) : CornerModel {
             setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
             setIntraOpNumThreads(2)
         }
-        return options.use { OrtEnvironment.getEnvironment().createSession(model(), it) }.also { session = it }
+        return try {
+            options.use { OrtEnvironment.getEnvironment().createSession(model(), it) }.also { session = it }
+        } catch (e: Exception) {
+            failed = true
+            throw e
+        }
     }
 }
 

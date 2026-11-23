@@ -12,6 +12,7 @@ import com.lazysend.lazysend.host.GalleryIndex
 import com.lazysend.lazysend.host.HostAdvertiser
 import com.lazysend.lazysend.host.HostController
 import com.lazysend.lazysend.host.HostIdentity
+import com.lazysend.lazysend.scan.CornerModels
 import com.lazysend.lazysend.transfer.Clipper
 import com.lazysend.lazysend.transfer.MediaAssets
 import com.lazysend.lazysend.transfer.NsdFinder
@@ -32,6 +33,9 @@ class AppGraph(private val app: Application) {
     val pcs = PcStore(File(app.filesDir, "pcs.json"), box::seal, box::open)
     val timeline = Timeline(File(app.filesDir, "timeline.json"))
     val settings = AppSettings(app)
+
+    /** One session for the process, so a new view model does not read the 16 MB model again. */
+    val cornerModel by lazy { CornerModels.fromAssets(app) }
     val files = MediaFiles(app)
     val notifications = Notifications(app)
     private val clipper = Clipper(app)

@@ -9,6 +9,9 @@ abstract class CornerModelAssets : DefaultTask() {
     @get:InputFiles
     abstract val model: ConfigurableFileCollection
 
+    @get:InputFiles
+    abstract val notices: ConfigurableFileCollection
+
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
 
@@ -16,7 +19,9 @@ abstract class CornerModelAssets : DefaultTask() {
     fun copy() {
         val file = model.singleFile
         if (!file.exists()) throw GradleException("The corner model is missing: run scripts/fetch_docaligner.sh")
-        file.copyTo(outputDir.get().asFile.resolve(file.name), overwrite = true)
+        val out = outputDir.get().asFile
+        file.copyTo(out.resolve(file.name), overwrite = true)
+        notices.forEach { it.copyTo(out.resolve("licenses/${it.name}"), overwrite = true) }
     }
 }
 
@@ -85,11 +90,14 @@ android {
     }
 }
 
-// The model is fetched, not checked in; a build without it would ship a scanner that finds nothing.
+// The model is fetched, not checked in, and its licence texts ride along in the assets; a build without it would ship a scanner that finds nothing.
 androidComponents {
     onVariants { variant ->
         val task = tasks.register<CornerModelAssets>("add${variant.name.replaceFirstChar { it.uppercase() }}CornerModel") {
             model.from(rootProject.file("../Sources/LazySendScanModel/Models/fastvit_t8_h_e_bifpn_256_fp32.onnx"))
+            notices.from(
+                rootProject.fileTree("../Sources/LazySendScanModel/Models") { include("*LICENSE.txt", "*THIRD-PARTY-NOTICES.txt") },
+            )
         }
         variant.sources.assets?.addGeneratedSourceDirectory(task, CornerModelAssets::outputDir)
     }

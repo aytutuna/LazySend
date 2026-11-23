@@ -113,6 +113,9 @@ fun CornerEditor(request: CornerRequest, onAnswer: (CornerAnswer) -> Unit) {
     // The model is plain state: this makes what reads it draw again after a change.
     var version by remember { mutableIntStateOf(0) }
     val changed = { version++; Unit }
+    // Keyed on version so the buttons are worked out again after a change, here and not only inside the stage.
+    val canUse = remember(version) { model.canUseCorners }
+    val canReset = remember(version) { model.canReset }
     val image by produceState<ImageBitmap?>(null, request.id) {
         value = withContext(Dispatchers.Default) { request.photo.forDisplay().asImageBitmap() }
     }
@@ -123,7 +126,7 @@ fun CornerEditor(request: CornerRequest, onAnswer: (CornerAnswer) -> Unit) {
                 Text(stringResource(if (request.replacing == null) R.string.corners_retake else R.string.cancel))
             }
             Text(stringResource(R.string.corners_title), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
-            TextButton({ onAnswer(CornerAnswer.Use(model.corners)) }, enabled = model.canUseCorners) { Text(stringResource(R.string.corners_use)) }
+            TextButton({ onAnswer(CornerAnswer.Use(model.corners)) }, enabled = canUse) { Text(stringResource(R.string.corners_use)) }
         }
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (request.replacing == null) Text(stringResource(R.string.corners_reason), style = MaterialTheme.typography.bodyMedium)
@@ -134,7 +137,7 @@ fun CornerEditor(request: CornerRequest, onAnswer: (CornerAnswer) -> Unit) {
             Box(Modifier.weight(1f).fillMaxWidth()) { Stage(model, image, version, changed) }
         }
         Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            OutlinedButton({ model.reset(); changed() }, enabled = model.canReset) { Text(stringResource(R.string.corners_reset)) }
+            OutlinedButton({ model.reset(); changed() }, enabled = canReset) { Text(stringResource(R.string.corners_reset)) }
             OutlinedButton({ onAnswer(CornerAnswer.Whole) }) { Text(stringResource(R.string.corners_whole)) }
         }
     }
@@ -187,10 +190,11 @@ private fun Stage(model: CornerEditorModel, image: ImageBitmap?, version: Int, c
             },
     ) {
         Canvas(Modifier.fillMaxSize()) {
-            scale(density, density, pivot = Offset.Zero) { drawStage(model, image, size, version) }
+            // The model is plain state: reading version here is what draws it again after a change.
+            version.let { scale(density, density, pivot = Offset.Zero) { drawStage(model, image, size) } }
         }
         if (image == null) CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color.White)
-        if (pixels != IntSize.Zero) Handles(model, frame, density, changed)
+        if (pixels != IntSize.Zero) Handles(model, frame, density, version, changed)
     }
 }
 
@@ -220,11 +224,9 @@ private fun moveByKey(model: CornerEditorModel, event: androidx.compose.ui.input
 }
 
 /**
- * The photo, the page's outline over it with the rest dimmed, the handles and, while a corner moves, the magnifier. [version] is
- * not read: it is what makes the model's changes draw again.
+ * The photo, the page's outline over it with the rest dimmed, the handles and, while a corner moves, the magnifier.
  */
-@Suppress("UNUSED_PARAMETER")
-private fun DrawScope.drawStage(model: CornerEditorModel, image: ImageBitmap?, size: ViewSize, version: Int) {
+private fun DrawScope.drawStage(model: CornerEditorModel, image: ImageBitmap?, size: ViewSize) {
     val frame = model.shownFrame(size)
     if (image != null) drawPhoto(image, frame.x, frame.y, frame.width, frame.height)
     val points = model.viewCorners(frame)
@@ -297,7 +299,7 @@ private fun DrawScope.drawLoupe(model: CornerEditorModel, image: ImageBitmap, fr
  * with its actions. Touches go past them to the stage.
  */
 @Composable
-private fun Handles(model: CornerEditorModel, frame: PhotoRect, density: Float, changed: () -> Unit) {
+private fun Handles(model: CornerEditorModel, frame: PhotoRect, density: Float, version: Int, changed: () -> Unit) {
     val corners = listOf(R.string.corner_top_left, R.string.corner_top_right, R.string.corner_bottom_right, R.string.corner_bottom_left)
     val edges = listOf(R.string.edge_top, R.string.edge_right, R.string.edge_bottom, R.string.edge_left)
     for (index in 0 until 8) {

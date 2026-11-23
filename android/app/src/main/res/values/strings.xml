@@ -149,6 +149,7 @@
     <string name="scan_not_sharp">Not sharp yet</string>
     <string name="scan_too_dark">Too dark</string>
     <string name="scan_found">Page found · hold still</string>
+    <string name="camera_take_photo">Take photo</string>
     <string name="scan_take_page">Take page</string>
     <string name="scan_pages_hint">Shows the pages taken</string>
     <plurals name="scan_pages">

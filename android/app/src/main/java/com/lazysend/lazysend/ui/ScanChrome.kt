@@ -204,7 +204,7 @@ fun ScanChrome(
                 // Not while a shot is being cut out or the editor is up: that answer would open over the sheet.
                 PagesStack(scan, pages, enabled = pages.isNotEmpty() && !working && shotEditing == null, onClick = onPages)
             }
-            Shutter(canShoot, ring) { scan.shoot() }
+            Shutter(canShoot, stringResource(R.string.scan_take_page), ring) { scan.shoot() }
             Box(Modifier.weight(1f))
         }
     }
@@ -218,7 +218,7 @@ private fun AutoChip(auto: Boolean, onAuto: (Boolean) -> Unit) {
         stringResource(R.string.scan_auto),
         Modifier.clip(RoundedCornerShape(50))
             .background(if (auto) MaterialTheme.colorScheme.primary else Scrim)
-            .semantics { stateDescription = state; contentDescription = hint }
+            .semantics { stateDescription = "$state. $hint" }
             .selectable(auto, role = Role.Switch) { onAuto(!auto) }
             .heightIn(min = 36.dp)
             .padding(horizontal = 12.dp, vertical = 8.dp),

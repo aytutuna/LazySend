@@ -149,6 +149,7 @@
     <string name="scan_not_sharp">Henüz net değil</string>
     <string name="scan_too_dark">Çok karanlık</string>
     <string name="scan_found">Sayfa bulundu · sabit tutun</string>
+    <string name="camera_take_photo">Fotoğraf çek</string>
     <string name="scan_take_page">Sayfa çek</string>
     <string name="scan_pages_hint">Çekilen sayfaları gösterir</string>
     <plurals name="scan_pages">

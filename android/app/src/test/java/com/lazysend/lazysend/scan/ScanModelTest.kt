@@ -5,6 +5,7 @@ import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -86,6 +87,20 @@ class ScanModelTest {
         scan.waitForDisk()
         assertEquals(scan.ids(), store.load().map { it.id })
         assertEquals(listOf<Byte>(10, 20, 30), scan.ids().map { store.source(it)!!.single() })
+    }
+
+    @Test
+    fun aPageWrittenAfterTheScopeIsCancelledStillLands() = runTest {
+        val store = makeStore()
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val scan = ScanModel(scope, store, null, ScanFrameFeed(null), { "Scan.pdf" }, dispatcher, dispatcher)
+        advanceUntilIdle()
+        val page = page(10)
+        scan.add(page, jpeg(10))
+        scope.cancel()
+        advanceUntilIdle()
+        assertEquals(listOf(page.id), store.load().map { it.id })
     }
 
     @Test

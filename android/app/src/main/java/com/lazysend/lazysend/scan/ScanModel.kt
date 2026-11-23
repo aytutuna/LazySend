@@ -9,6 +9,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -179,7 +180,8 @@ class ScanModel(
 
     private fun persist(job: (ScanPageStore) -> Unit) {
         val store = store ?: return
-        scope.launch(disk) { job(store) }
+        // NonCancellable: leaving the screen right after a shot must not lose the page being written.
+        scope.launch(disk + NonCancellable) { job(store) }
     }
 
     /** Returns once the pages are read and everything asked of the store so far is written. */
@@ -257,7 +259,11 @@ class ScanModel(
                 tracker.reset()
                 return@launch
             }
-            val outcome = withContext(work) { read(data, filter, finder) }
+            val outcome = try {
+                withContext(work) { read(data, filter, finder) }
+            } catch (e: OutOfMemoryError) {
+                Outcome.Failed
+            }
             _working.value = false
             when (outcome) {
                 is Outcome.Page -> add(outcome.page, data)
@@ -366,7 +372,13 @@ class ScanModel(
         scope.launch {
             // Read on the store's queue, after whatever is still being written for the page.
             val data = memory ?: store?.let { withContext(disk) { it.source(id) } }
-            val photo = data?.let { withContext(work) { PhotoReader.decode(it) } }
+            val photo = data?.let {
+                try {
+                    withContext(work) { PhotoReader.decode(it) }
+                } catch (e: OutOfMemoryError) {
+                    null
+                }
+            }
             _working.value = false
             if (data == null || photo == null) {
                 _problem.value = ScanProblem.Res(R.string.scan_photo_unreadable)
@@ -439,10 +451,6 @@ class ScanModel(
                 _sending.value = false
             }
         }
-    }
-
-    fun clearProblem() {
-        _problem.value = null
     }
 
     /** The pages [ids] went in one file named [name]; pages taken while it was being sent stay. */

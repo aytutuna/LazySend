@@ -123,6 +123,14 @@ class ScanPageTest {
     }
 
     @Test
+    fun aBigPhotoIsReadAtAHalfSizeOrShrunkToTheLimit() {
+        val half = PhotoReader.decode(JpegEncoder.encode(RgbaImage.filled(8160, 40, 90, 90, 90), false)!!)!!
+        assertEquals(4080, half.width)
+        val shrunk = PhotoReader.decode(JpegEncoder.encode(RgbaImage.filled(5000, 40, 90, 90, 90), false)!!)!!
+        assertEquals(4096, shrunk.width)
+    }
+
+    @Test
     fun aThumbnailIsNoLargerThanAskedForByMoreThanTheSampling() {
         val jpeg = JpegEncoder.encode(RgbaImage.filled(400, 300, 90, 90, 90), false)!!
         val thumb = jpeg.toThumbnail(100)!!

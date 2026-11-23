@@ -45,6 +45,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lazysend.lazysend.R
@@ -135,7 +137,7 @@ internal fun PhotoChrome(
         zoom()
         Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 20.dp), verticalAlignment = Alignment.Top) {
             Box(Modifier.weight(1f), contentAlignment = Alignment.TopStart) { Thumb(shot, entries, target?.name, onHistory) }
-            Shutter(canShoot, onClick = onShoot)
+            Shutter(canShoot, stringResource(R.string.camera_take_photo), onClick = onShoot)
             Box(Modifier.weight(1f), contentAlignment = Alignment.TopEnd) {
                 Box(
                     Modifier.size(52.dp).alpha(if (canFlip) 1f else 0.4f).clip(CircleShape).background(Scrim).clickable(enabled = canFlip, onClick = onFlip),
@@ -208,9 +210,9 @@ internal fun Panel(content: @Composable () -> Unit) {
 
 /** The shutter; [progress] fills a green ring round it, which is Auto's count while a page holds still. */
 @Composable
-internal fun Shutter(enabled: Boolean, progress: Float = 0f, onClick: () -> Unit) {
+internal fun Shutter(enabled: Boolean, label: String, progress: Float = 0f, onClick: () -> Unit) {
     Box(Modifier.size(76.dp).alpha(if (enabled) 1f else 0.4f), contentAlignment = Alignment.Center) {
-        Box(Modifier.size(76.dp).border(4.dp, Color.White, CircleShape).padding(7.dp).clip(CircleShape).background(Color.White).clickable(enabled = enabled, onClick = onClick))
+        Box(Modifier.size(76.dp).border(4.dp, Color.White, CircleShape).padding(7.dp).clip(CircleShape).background(Color.White).semantics { contentDescription = label }.clickable(enabled = enabled, onClick = onClick))
         if (progress > 0f) {
             Canvas(Modifier.size(76.dp)) {
                 val width = 4.dp.toPx()

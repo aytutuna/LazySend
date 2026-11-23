@@ -27,7 +27,6 @@ import com.lazysend.lazysend.transfer.convertedName
 import com.lazysend.lazysend.transfer.SendService
 import com.lazysend.lazysend.transfer.clipboardName
 import com.lazysend.lazysend.scan.CaptureFilter
-import com.lazysend.lazysend.scan.CornerModels
 import com.lazysend.lazysend.scan.ScanDemo
 import com.lazysend.lazysend.scan.ScanFrameFeed
 import com.lazysend.lazysend.scan.ScanModel
@@ -114,9 +113,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         } else {
             ScanPageStore(File(app.noBackupFilesDir, "scan-pages"))
         }
-        val finder = if (demo) ScanDemo.finder() else CornerModels.fromAssets(app)
+        val finder = if (demo) ScanDemo.finder() else graph.cornerModel
         val power = app.getSystemService(PowerManager::class.java)
-        val warm = { Build.VERSION.SDK_INT >= 29 && power.currentThermalStatus >= PowerManager.THERMAL_STATUS_MODERATE }
+        val warm = { Build.VERSION.SDK_INT >= 29 && power.currentThermalStatus >= PowerManager.THERMAL_STATUS_LIGHT }
         val model = ScanModel(
             viewModelScope, store, finder, ScanFrameFeed(finder, warm), ::sendScan,
             disk = Dispatchers.IO.limitedParallelism(1), fixedLive = if (demo) ScanDemo.update else null,
