@@ -191,6 +191,7 @@ struct CameraView: View {
                 }
                 .accessibilityIdentifier("camera.format")
             }
+            .barSide(.leading)
             ModeSwitch(mode: $mode)
             HStack {
                 TargetMenu { target in
@@ -205,7 +206,9 @@ struct CameraView: View {
                 }
                 .accessibilityIdentifier("camera.target")
             }
+            .barSide(.trailing)
         }
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .padding(.horizontal)
         .padding(.top, 8)
     }

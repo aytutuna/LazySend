@@ -44,8 +44,14 @@ struct CenteredBar: Layout {
     var gap: CGFloat = 0
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        guard subviews.count == 3 else { return .zero }
         let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        guard subviews.count == 3 else {
+            assertionFailure("CenteredBar takes three views")
+            if axis == .horizontal {
+                return CGSize(width: sizes.map(\.width).reduce(0, +), height: sizes.map(\.height).max() ?? 0)
+            }
+            return CGSize(width: sizes.map(\.width).max() ?? 0, height: sizes.map(\.height).reduce(0, +))
+        }
         if axis == .horizontal {
             let width = proposal.width ?? sizes[1].width + 2 * max(sizes[0].width, sizes[2].width)
             let side = max(0, (width - sizes[1].width) / 2)
@@ -57,7 +63,16 @@ struct CenteredBar: Layout {
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        guard subviews.count == 3 else { return }
+        guard subviews.count == 3 else {
+            // Not what this is for; the views are still shown, one after the other.
+            var point = bounds.origin
+            for view in subviews {
+                let size = view.sizeThatFits(.unspecified)
+                view.place(at: point, anchor: .topLeading, proposal: .unspecified)
+                if axis == .horizontal { point.x += size.width } else { point.y += size.height }
+            }
+            return
+        }
         let middle = subviews[1].sizeThatFits(.unspecified)
         if axis == .horizontal {
             let side = ProposedViewSize(width: max(0, (bounds.width - middle.width) / 2), height: bounds.height)
@@ -69,6 +84,14 @@ struct CenteredBar: Layout {
             subviews[2].place(at: CGPoint(x: bounds.midX, y: bounds.midY + middle.height / 2 + gap), anchor: .top, proposal: side)
         }
         subviews[1].place(at: CGPoint(x: bounds.midX, y: bounds.midY), anchor: .center, proposal: .unspecified)
+    }
+}
+
+extension View {
+    /// A side of the top bar: it takes the room its `CenteredBar` gives it and is clipped there, so it can never reach the
+    /// switch.
+    func barSide(_ alignment: Alignment) -> some View {
+        frame(maxWidth: .infinity, alignment: alignment).clipped()
     }
 }
 
@@ -165,6 +188,7 @@ struct ScanChrome: View {
                     .accessibilityIdentifier("scan.torch")
                 }
             }
+            .barSide(.leading)
             ModeSwitch(mode: $mode)
             HStack {
                 TargetMenu { target in
@@ -179,7 +203,9 @@ struct ScanChrome: View {
                 }
                 .accessibilityIdentifier("camera.target")
             }
+            .barSide(.trailing)
         }
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .padding(.horizontal)
         .padding(.top, 8)
     }
