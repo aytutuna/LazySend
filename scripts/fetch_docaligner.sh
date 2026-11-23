@@ -1,8 +1,8 @@
 #!/bin/bash
 # Fetches DocAligner's FastViT-T8 corner model (DocsaidLab/DocAligner release 1.1.1, Apache-2.0, see
 # Sources/LazySendScanModel/Models/DocAligner-LICENSE.txt) into Sources/LazySendScanModel/Models, the
-# page corner model of the iPhone app's scan mode. It is not checked in; without it scan mode finds no page by itself
-# (the corner editor still works) and the tests that need it skip. The file is checked against its SHA-256. Runs in macOS bash
+# page corner model of the iPhone and Android apps' scan mode. It is not checked in; without it the iPhone app's scan mode
+# finds no page by itself (the corner editor still works) and the tests that need it skip, but the Android build fails. The file is checked against its SHA-256. Runs in macOS bash
 # and in Git Bash on Windows.
 set -euo pipefail
 

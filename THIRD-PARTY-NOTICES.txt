@@ -59,7 +59,8 @@ ONNX Runtime 1.24.2 (iPhone and Android apps)
     onnxruntime-swift-package-manager 1.24.2 kept in Vendor/onnxruntime. The
     runtime statically links code from other projects (protobuf, abseil, Eigen,
     flatbuffers and more). Their notices are ONNXRuntime-THIRD-PARTY-NOTICES.txt,
-    which ships in the app with the model. The Android app carries the
+    which ships in the iPhone app with the model; the Android app has it, and the
+    licence texts of the runtime and the model, in its assets/licenses. The Android app carries the
     onnxruntime-android 1.24.2 package from Maven Central, with its Java classes
     and native libraries as built by Microsoft.
 
