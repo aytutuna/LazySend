@@ -45,7 +45,9 @@ final class CameraModel: ObservableObject {
     @Published private(set) var stops: [LensStop] = []
     private var highest = 1.0
     private var telephoto: Double?
+    private var crop = false
     private var zoomNow = 1.0
+    private var zoomAnimation: Task<Void, Never>?
     private weak var previewLayer: AVCaptureVideoPreviewLayer?
     private var rotation: AVCaptureDevice.RotationCoordinator?
     private var rotationWatch: NSKeyValueObservation?
@@ -149,10 +151,11 @@ final class CameraModel: ObservableObject {
                 self.base = setup.base
                 self.highest = setup.highest
                 self.telephoto = setup.telephoto
+                self.crop = setup.crop
                 self.lowest = setup.lowest
                 self.zoomNow = setup.base
                 self.zoomLevel = 1
-                self.stops = CameraModel.lensStops(base: setup.base, lowest: setup.lowest, highest: setup.highest, telephoto: setup.telephoto)
+                self.stops = CameraModel.lensStops(base: setup.base, lowest: setup.lowest, highest: setup.highest, telephoto: setup.telephoto, crop: setup.crop)
                 self.hasFlash = setup.flash
                 if !setup.flash { self.flash = false }
                 self.hasTorch = setup.torch
@@ -208,9 +211,10 @@ final class CameraModel: ObservableObject {
     // The session goes back to the starting zoom with every format change, and the new format has its own top.
     private func zoomReset(highest top: Double?) {
         if let top { highest = top }
+        zoomAnimation?.cancel()
         zoomNow = base
         zoomLevel = 1
-        stops = CameraModel.lensStops(base: base, lowest: lowest, highest: highest, telephoto: telephoto)
+        stops = CameraModel.lensStops(base: base, lowest: lowest, highest: highest, telephoto: telephoto, crop: crop)
     }
 
     func setTorch(_ on: Bool) {
@@ -229,7 +233,30 @@ final class CameraModel: ObservableObject {
     /// The zoom now, 1 at the starting view.
     var zoom: Double { zoomNow / base }
 
+    /// The most the zoom goes to, as a multiple of the starting view.
+    var zoomCeiling: Double { highest / base }
+
     func setZoom(_ zoom: Double) {
+        zoomAnimation?.cancel()
+        applyZoom(zoom)
+    }
+
+    /// Moves to `level` in about a fifth of a second, by equal steps in the ratio so the view changes at an even pace.
+    func animateZoom(to level: Double) {
+        zoomAnimation?.cancel()
+        let from = zoomLevel
+        zoomAnimation = Task { @MainActor in
+            let steps = 12
+            for step in 1...steps {
+                try? await Task.sleep(nanoseconds: 16_000_000)
+                guard !Task.isCancelled else { return }
+                let t = Double(step) / Double(steps)
+                applyZoom(from * pow(level / from, t * t * (3 - 2 * t)))
+            }
+        }
+    }
+
+    private func applyZoom(_ zoom: Double) {
         zoomNow = min(max(zoom * base, lowest), max(base, highest))
         zoomLevel = zoomNow / base
         let box = capture
@@ -266,15 +293,12 @@ final class CameraModel: ObservableObject {
     }
 
     /// The lens buttons as multiples of the main lens: the ultra wide where the zoom goes below it, 1, and the telephoto lens where the
-    /// phone has one, else the main lens doubled if the zoom reaches that far.
-    nonisolated static func lensStops(base: Double, lowest: Double, highest: Double, telephoto: Double?) -> [LensStop] {
+    /// phone has one; the main lens doubled where the phone has no telephoto or crops its 48 megapixel main camera.
+    nonisolated static func lensStops(base: Double, lowest: Double, highest: Double, telephoto: Double?, crop: Bool = false) -> [LensStop] {
         var values = [1.0]
         if lowest < base { values.insert(lowest / base, at: 0) }
-        if let tele = telephoto {
-            if tele > base, tele <= highest { values.append(tele / base) }
-        } else if base * 2 <= highest {
-            values.append(2)
-        }
+        if (crop || telephoto == nil) && base * 2 <= highest { values.append(2) }
+        if let tele = telephoto, tele > base, tele <= highest, abs(tele / base - 2) > 0.01 { values.append(tele / base) }
         return values.map { LensStop(value: $0) }
     }
 

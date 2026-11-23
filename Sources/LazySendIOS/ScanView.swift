@@ -144,6 +144,7 @@ struct ScanChrome: View {
             .frame(maxWidth: .infinity)
             if !wide { Spacer(minLength: 0) }
             VStack(spacing: 0) {
+                if camera.stops.count > 1 { ZoomControl(camera: camera).padding(.top, wide ? 0 : 8) }
                 DrawerHandle(open: $drawerOpen)
                 if drawerOpen {
                     ScanDrawer(camera: camera, group: $group)

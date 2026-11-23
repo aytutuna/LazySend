@@ -30,6 +30,8 @@ struct CameraSetup {
     var lowest: Double
     /// The zoom factor where the telephoto lens takes over, on a phone that has one.
     var telephoto: Double?
+    /// The main camera takes 48 megapixel photos, so its middle can be cropped to a 2x view.
+    var crop: Bool
     var highest: Double
     var flash: Bool
     var torch: Bool
@@ -88,7 +90,9 @@ final class CameraSession: @unchecked Sendable {
             telephoto = switchOvers.first
         }
         setZoom(base)
-        return CameraSetup(device: camera, base: base, lowest: Double(camera.minAvailableVideoZoomFactor), telephoto: telephoto, highest: min(Double(camera.maxAvailableVideoZoomFactor), base * 10),
+        // No phone has a 48 megapixel format without a 48 megapixel main camera.
+        let crop = position == .back && camera.formats.contains { $0.supportedMaxPhotoDimensions.contains { Int($0.width) * Int($0.height) >= 40_000_000 } }
+        return CameraSetup(device: camera, base: base, lowest: Double(camera.minAvailableVideoZoomFactor), telephoto: telephoto, crop: crop, highest: min(Double(camera.maxAvailableVideoZoomFactor), base * 10),
                            flash: output.supportedFlashModes.contains(.on), torch: camera.hasTorch)
     }
 

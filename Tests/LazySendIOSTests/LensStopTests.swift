@@ -25,6 +25,15 @@ final class LensStopTests: XCTestCase {
         XCTAssertEqual(values(1, 1, 10, 2), [1, 2])
     }
 
+    func testACroppedMainCameraAddsTwiceBesideTheTelephoto() {
+        XCTAssertEqual(values(2, 1, 20, 6, crop: true), [0.5, 1, 2, 3])
+        XCTAssertEqual(values(2, 1, 20, 10, crop: true), [0.5, 1, 2, 5])
+    }
+
+    func testATelephotoAtTwiceIsNotListedAgain() {
+        XCTAssertEqual(values(1, 1, 10, 2, crop: true), [1, 2])
+    }
+
     func testATelephotoBeyondTheZoomRangeIsLeftOut() {
         XCTAssertEqual(values(2, 1, 5, 6), [0.5, 1])
     }
