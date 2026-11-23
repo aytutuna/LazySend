@@ -24,7 +24,7 @@ fetch() {
     echo "$name: already fetched"
     return
   fi
-  curl -fsSL -o "$file.part" "$release/$name"
+  curl -fsSL --retry 3 --retry-all-errors --retry-delay 10 -o "$file.part" "$release/$name"
   local hash
   hash=$(sha256 "$file.part")
   if [ "$hash" != "$expected" ]; then
