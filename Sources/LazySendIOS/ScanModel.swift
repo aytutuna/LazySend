@@ -51,6 +51,16 @@ final class ScanModel: ObservableObject {
     private var thumbnails: [UUID: UIImage] = [:]
     private let finder: CornerModel? = FastViTCornerModel.isAvailable ? FastViTCornerModel.shared : nil
     private let store: ScanPageStore?
+    /// The store is only touched on this queue, in the order the work was asked for, so a delete after a save wins.
+    private let queue = DispatchQueue(label: "LazySend.scanPages", qos: .utility)
+    /// The pages the store has, or will have once the work queued for it is done.
+    private var stored: Set<UUID> = []
+    /// The photos of pages that could not be saved, so they can still be cut again this session.
+    private var kept: [UUID: Data] = [:]
+    private var loading = false
+    private var loadTask: Task<Void, Never>?
+    private var removedWhileLoading: Set<UUID> = []
+    private var orderChangedWhileLoading = false
     /// Set by the owner of the settings: the filter new pages get, whether the shutter is automatic, and whether there is a
     /// device for the scan to go to, which a page is not taken without.
     var filter = CaptureFilter.enhanced
@@ -89,7 +99,41 @@ final class ScanModel: ObservableObject {
 
     init(store: ScanPageStore? = nil) {
         self.store = store
-        pages = store?.load() ?? []
+        guard let store else { return }
+        loading = true
+        loadTask = Task {
+            let loaded = await onQueue { store.load() }
+            finishLoading(loaded)
+        }
+    }
+
+    /// The pages the store held come first; a page taken before they were read goes after them.
+    private func finishLoading(_ loaded: [ScanPage]) {
+        loading = false
+        let have = Set(pages.map(\.id))
+        let fromDisk = loaded.filter { !removedWhileLoading.contains($0.id) && !have.contains($0.id) }
+        stored.formUnion(fromDisk.map(\.id))
+        pages = fromDisk + pages
+        removedWhileLoading = []
+        if orderChangedWhileLoading { saveOrder() }
+        orderChangedWhileLoading = false
+    }
+
+    private func onQueue<T>(_ work: @escaping () -> T) async -> T {
+        await withCheckedContinuation { continuation in
+            queue.async { continuation.resume(returning: work()) }
+        }
+    }
+
+    private func persist(_ work: @escaping (ScanPageStore) -> Void) {
+        guard let store else { return }
+        queue.async { work(store) }
+    }
+
+    /// Returns once the pages are read and everything asked of the store so far is written.
+    func waitForDisk() async {
+        await loadTask?.value
+        await onQueue {}
     }
 
     /// Where the app keeps the pages of a scan in progress. The demo's is in the temporary folder and starts empty, unless the test relaunches
@@ -256,16 +300,24 @@ final class ScanModel: ObservableObject {
                 problem = String(localized: "The page could not be cut out.")
                 return
             }
+            // The page it replaces went while it was being cut: it must not come back.
+            if let replacing = request.replacing, !pages.contains(where: { $0.id == replacing }) { return }
             add(page, source: request.source)
         }
     }
 
     /// The page added at the end, or in place of the page it was cut again from, with the photo it was cut from.
     func add(_ page: ScanPage, source: Data) {
-        do {
-            try store?.save(page, source: source)
-        } catch {
-            problem = String(localized: "The page could not be saved.")
+        // A page the store has keeps its photo, so a cut again writes only the page.
+        let photo = stored.contains(page.id) ? nil : source
+        stored.insert(page.id)
+        let id = page.id
+        persist { [weak self] store in
+            do {
+                try store.save(page, source: photo)
+            } catch {
+                Task { @MainActor in self?.saveFailed(id, source: source) }
+            }
         }
         thumbnails[page.id] = nil
         if let index = pages.firstIndex(where: { $0.id == page.id }) {
@@ -276,14 +328,27 @@ final class ScanModel: ObservableObject {
         }
     }
 
+    private func saveFailed(_ id: UUID, source: Data) {
+        guard pages.contains(where: { $0.id == id }) else { return }
+        stored.remove(id)
+        kept[id] = source
+        problem = String(localized: "The page could not be saved.")
+    }
+
     /// The page cut again: its photo is read and the editor opens at the corners it was cut along.
     func recut(_ page: ScanPage) {
         guard !working else { return }
         working = true
         let store = store
+        let id = page.id
+        let memory = kept[id]
         Task {
+            // Read on the store's queue, after whatever is still being written for the page.
+            var found = memory
+            if found == nil { found = await onQueue { store?.source(of: id) } }
+            let data = found
             let read = await Task.detached(priority: .userInitiated) { () -> (Data, RgbaImage)? in
-                guard let data = store?.source(of: page.id), let photo = PhotoReader.decode(data) else { return nil }
+                guard let data, let photo = PhotoReader.decode(data) else { return nil }
                 return (data, photo)
             }.value
             working = false
@@ -299,9 +364,19 @@ final class ScanModel: ObservableObject {
     // MARK: The pages
 
     func delete(_ id: UUID) {
-        pages.removeAll { $0.id == id }
-        thumbnails[id] = nil
-        store?.remove(id)
+        drop([id])
+    }
+
+    private func drop(_ ids: [UUID]) {
+        let gone = Set(ids)
+        pages.removeAll { gone.contains($0.id) }
+        for id in ids {
+            thumbnails[id] = nil
+            kept[id] = nil
+            stored.remove(id)
+        }
+        if loading { removedWhileLoading.formUnion(ids) }
+        persist { store in ids.forEach(store.remove) }
     }
 
     func move(from source: IndexSet, to destination: Int) {
@@ -317,15 +392,19 @@ final class ScanModel: ObservableObject {
     }
 
     private func saveOrder() {
-        try? store?.setOrder(pages.map(\.id))
+        // The stored list is not read yet; it is written when it is.
+        if loading {
+            orderChangedWhileLoading = true
+            return
+        }
+        let ids = pages.map(\.id)
+        persist { try? $0.setOrder(ids) }
     }
 
-    /// The pages went in one file named `name`.
-    func sent(_ name: String) {
+    /// The pages `ids` went in one file named `name`; pages taken while it was being sent stay.
+    func sent(_ name: String, ids: [UUID]) {
         lastName = name
-        pages = []
-        thumbnails = [:]
-        store?.removeAll()
+        drop(ids)
         tracker.reset()
     }
 

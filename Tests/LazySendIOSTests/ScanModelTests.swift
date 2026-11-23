@@ -16,8 +16,17 @@ final class ScanModelTests: XCTestCase {
         try XCTUnwrap(PagePipeline.wholePage(photo: photo(shade), filter: .original, id: id))
     }
 
-    private func folder() -> URL {
-        FileManager.default.temporaryDirectory.appendingPathComponent("scan-model-" + UUID().uuidString)
+    private var folders: [URL] = []
+
+    override func tearDown() {
+        for url in folders { try? FileManager.default.removeItem(at: url) }
+        folders = []
+    }
+
+    private func makeStore() -> ScanPageStore {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("scan-model-" + UUID().uuidString)
+        folders.append(url)
+        return ScanPageStore(folder: url)
     }
 
     private func model(with shades: [UInt8], store: ScanPageStore? = nil) throws -> ScanModel {
@@ -33,12 +42,12 @@ final class ScanModelTests: XCTestCase {
         }
     }
 
-    func testPagesAreShownInTheOrderTheyWereTaken() throws {
-        let scan = try model(with: [10, 20, 30])
-        let store = ScanPageStore(folder: folder())
-        let kept = try model(with: [10, 20, 30], store: store)
-        XCTAssertEqual(store.load().map(\.id), kept.pages.map(\.id))
-        XCTAssertEqual(kept.pages.compactMap { store.source(of: $0.id) }, [Data([10]), Data([20]), Data([30])])
+    func testPagesAreShownInTheOrderTheyWereTakenAndKeptInTheStore() async throws {
+        let store = makeStore()
+        let scan = try model(with: [10, 20, 30], store: store)
+        await scan.waitForDisk()
+        XCTAssertEqual(store.load().map(\.id), scan.pages.map(\.id))
+        XCTAssertEqual(scan.pages.compactMap { store.source(of: $0.id) }, [Data([10]), Data([20]), Data([30])])
     }
 
     func testAPageMovesEarlierAndLaterAndStopsAtTheEnds() throws {
@@ -64,47 +73,111 @@ final class ScanModelTests: XCTestCase {
         XCTAssertEqual(scan.pages.map(\.id), [ids[1], ids[0]])
     }
 
-    func testPagesComeBackInOrderWhenTheModelIsMadeAgain() throws {
-        let store = ScanPageStore(folder: folder())
+    func testPagesComeBackInOrderWhenTheModelIsMadeAgain() async throws {
+        let store = makeStore()
         let scan = try model(with: [10, 20, 30], store: store)
         let ids = scan.pages.map(\.id)
         scan.shift(ids[0], by: 1)
+        await scan.waitForDisk()
         let again = ScanModel(store: store)
+        await again.waitForDisk()
         XCTAssertEqual(again.pages.map(\.id), [ids[1], ids[0], ids[2]])
         XCTAssertEqual(again.pages[0].jpeg, scan.pages[0].jpeg)
         XCTAssertNotNil(again.thumbnail(again.pages[0]))
     }
 
-    func testADeletedPageStaysGoneAfterARelaunch() throws {
-        let store = ScanPageStore(folder: folder())
+    func testAPageTakenBeforeTheStoredOnesAreReadGoesAfterThem() async throws {
+        let store = makeStore()
+        let first = try model(with: [10, 20], store: store)
+        await first.waitForDisk()
+        let again = ScanModel(store: store)
+        let late = try page(30)
+        again.add(late, source: Data([30]))
+        XCTAssertEqual(again.pages.map(\.id), [late.id])
+        await again.waitForDisk()
+        XCTAssertEqual(again.pages.map(\.id), first.pages.map(\.id) + [late.id])
+        XCTAssertEqual(store.load().map(\.id), first.pages.map(\.id) + [late.id])
+    }
+
+    func testAPageDeletedBeforeTheStoredOnesAreReadDoesNotComeBack() async throws {
+        let store = makeStore()
+        let first = try model(with: [10, 20], store: store)
+        await first.waitForDisk()
+        let again = ScanModel(store: store)
+        again.delete(first.pages[0].id)
+        await again.waitForDisk()
+        XCTAssertEqual(again.pages.map(\.id), [first.pages[1].id])
+        XCTAssertEqual(store.load().map(\.id), [first.pages[1].id])
+    }
+
+    func testADeletedPageStaysGoneAfterARelaunch() async throws {
+        let store = makeStore()
         let scan = try model(with: [10, 20, 30], store: store)
         let ids = scan.pages.map(\.id)
         scan.delete(ids[1])
+        await scan.waitForDisk()
         XCTAssertNil(store.source(of: ids[1]))
-        XCTAssertEqual(ScanModel(store: store).pages.map(\.id), [ids[0], ids[2]])
+        let again = ScanModel(store: store)
+        await again.waitForDisk()
+        XCTAssertEqual(again.pages.map(\.id), [ids[0], ids[2]])
     }
 
-    func testADraggedOrderIsKeptAfterARelaunch() throws {
-        let store = ScanPageStore(folder: folder())
+    func testADraggedOrderIsKeptAfterARelaunch() async throws {
+        let store = makeStore()
         let scan = try model(with: [10, 20, 30], store: store)
         let ids = scan.pages.map(\.id)
         scan.move(from: IndexSet(integer: 0), to: 3)
-        XCTAssertEqual(ScanModel(store: store).pages.map(\.id), [ids[1], ids[2], ids[0]])
+        await scan.waitForDisk()
+        let again = ScanModel(store: store)
+        await again.waitForDisk()
+        XCTAssertEqual(again.pages.map(\.id), [ids[1], ids[2], ids[0]])
     }
 
     func testARecutReadsThePhotoFromTheStoreAndKeepsItsPlace() async throws {
-        let store = ScanPageStore(folder: folder())
+        let store = makeStore()
         let scan = ScanModel(store: store)
         let photo = photo(20)
         let page = try XCTUnwrap(PagePipeline.wholePage(photo: photo, filter: .original))
         scan.add(page, source: try XCTUnwrap(JpegEncoder.encode(photo, gray: false)))
+        await scan.waitForDisk()
         let again = ScanModel(store: store)
+        await again.waitForDisk()
         again.recut(again.pages[0])
         await wait { again.pageEditing != nil }
         let request = try XCTUnwrap(again.pageEditing)
         XCTAssertEqual(request.replacing, page.id)
         XCTAssertEqual(request.photo.width, 120)
         XCTAssertEqual(request.photo.height, 160)
+    }
+
+    func testACutAgainAnsweredAfterItsPageWasDeletedDoesNotBringItBack() async throws {
+        let scan = try model(with: [10, 20])
+        let target = scan.pages[0]
+        let request = CornerRequest(photo: photo(10), source: Data([10]), corners: target.corners, filter: .original, replacing: target.id)
+        scan.pageEditing = request
+        scan.delete(target.id)
+        scan.answer(request, .whole)
+        await wait { !scan.working }
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertEqual(scan.pages.count, 1)
+        XCTAssertFalse(scan.pages.contains { $0.id == target.id })
+    }
+
+    func testARecutStillWorksForAPageThatCouldNotBeSaved() async throws {
+        // A file where the folder should be, so nothing can be written.
+        let blocked = FileManager.default.temporaryDirectory.appendingPathComponent("scan-model-" + UUID().uuidString)
+        folders.append(blocked)
+        try Data().write(to: blocked)
+        let scan = ScanModel(store: ScanPageStore(folder: blocked))
+        let photo = photo(40)
+        let page = try XCTUnwrap(PagePipeline.wholePage(photo: photo, filter: .original))
+        scan.add(page, source: try XCTUnwrap(JpegEncoder.encode(photo, gray: false)))
+        await scan.waitForDisk()
+        await wait { scan.problem != nil }
+        XCTAssertNotNil(scan.problem)
+        scan.recut(scan.pages[0])
+        await wait { scan.pageEditing != nil }
+        XCTAssertEqual(try XCTUnwrap(scan.pageEditing).replacing, page.id)
     }
 
     func testAPageCutAgainKeepsItsPlaceAndTakesTheNewCorners() async throws {
@@ -148,7 +221,7 @@ final class ScanModelTests: XCTestCase {
 
     func testSendingTheScanEmptiesThePagesAndKeepsTheFileName() throws {
         let scan = try model(with: [10, 20])
-        scan.sent("Scan 2026-11-18 14.05.pdf")
+        scan.sent("Scan 2026-11-18 14.05.pdf", ids: scan.pages.map(\.id))
         XCTAssertTrue(scan.pages.isEmpty)
         XCTAssertEqual(scan.lastName, "Scan 2026-11-18 14.05.pdf")
         // The next page it takes clears the line about the last scan.
@@ -156,14 +229,30 @@ final class ScanModelTests: XCTestCase {
         XCTAssertNil(scan.lastName)
     }
 
-    func testSendingTheScanClearsTheStore() throws {
-        let store = ScanPageStore(folder: folder())
+    func testSendingTheScanClearsItsPagesFromTheStore() async throws {
+        let store = makeStore()
         let scan = try model(with: [10, 20], store: store)
         let ids = scan.pages.map(\.id)
-        scan.sent("Scan.pdf")
+        scan.sent("Scan.pdf", ids: ids)
+        await scan.waitForDisk()
         XCTAssertTrue(store.load().isEmpty)
         XCTAssertNil(store.source(of: ids[0]))
-        XCTAssertTrue(ScanModel(store: store).pages.isEmpty)
+        let again = ScanModel(store: store)
+        await again.waitForDisk()
+        XCTAssertTrue(again.pages.isEmpty)
+    }
+
+    func testAPageTakenWhileTheScanWasBeingSentSurvivesTheSend() async throws {
+        let store = makeStore()
+        let scan = try model(with: [10, 20], store: store)
+        let sending = scan.pages.map(\.id)
+        let late = try page(30)
+        scan.add(late, source: Data([30]))
+        scan.sent("Scan.pdf", ids: sending)
+        XCTAssertEqual(scan.pages.map(\.id), [late.id])
+        await scan.waitForDisk()
+        XCTAssertEqual(store.load().map(\.id), [late.id])
+        XCTAssertEqual(store.source(of: late.id), Data([30]))
     }
 
     func testTheCameraTakesFramesOnlyInScanModeOnTheActiveCameraTab() {

@@ -24,6 +24,7 @@ struct ScanPagesView: View {
                     let ids = offsets.map { scan.pages[$0].id }
                     ids.forEach { scan.delete($0) }
                 }
+                .deleteDisabled(busy)
                 if let who = model.selectedTarget?.name, !scan.pages.isEmpty {
                     Group {
                         if scan.pages.count == 1 {
@@ -50,7 +51,7 @@ struct ScanPagesView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Keep scanning") { dismiss() }
-                        .disabled(scan.working)
+                        .disabled(scan.working || sending)
                         .accessibilityIdentifier("pages.close")
                 }
                 ToolbarItem(placement: .confirmationAction) {
@@ -118,6 +119,7 @@ struct ScanPagesView: View {
                 Button("Move later", systemImage: "arrow.down") { scan.shift(page.id, by: 1) }
                     .disabled(index == scan.pages.count - 1)
                 Button("Delete", systemImage: "trash", role: .destructive) { scan.delete(page.id) }
+                    .disabled(busy)
             } label: {
                 Image(systemName: "ellipsis.circle")
                     .font(.title3)
@@ -129,14 +131,20 @@ struct ScanPagesView: View {
         }
     }
 
+    /// A page is not deleted while another is being cut again, since the cut would bring it back.
+    private var busy: Bool {
+        scan.working || scan.pageEditing != nil
+    }
+
     private func done() {
         guard let target = model.selectedTarget else { return }
         sending = true
         failure = nil
+        let batch = scan.pages
         Task {
             do {
-                let name = try await model.sendScan(scan.pages, to: target)
-                scan.sent(name)
+                let name = try await model.sendScan(batch, to: target)
+                scan.sent(name, ids: batch.map(\.id))
                 dismiss()
             } catch {
                 failure = error.localizedDescription
