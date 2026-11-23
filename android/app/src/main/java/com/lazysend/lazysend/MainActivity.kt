@@ -41,6 +41,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.lazysend.lazysend.data.EntryKind
 import com.lazysend.lazysend.data.TimelineEntry
+import com.lazysend.lazysend.scan.ScanDemo
 import com.lazysend.lazysend.transfer.SendService
 import com.lazysend.lazysend.transfer.shareableUri
 import com.lazysend.lazysend.ui.AppViewModel
@@ -65,6 +66,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Read before the view model is first used, which builds the scan model with or without the demo.
+        if (BuildConfig.DEBUG) ScanDemo.configure(intent)
         enableEdgeToEdge()
         lifecycleScope.launch { repeatOnLifecycle(Lifecycle.State.STARTED) { model.watch() } }
         // The service that keeps hosting going with the screen off can only be started from the front.
@@ -86,6 +89,9 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun App() {
         var tab by rememberSaveable { mutableStateOf(Tab.Camera) }
+        var scanning by rememberSaveable { mutableStateOf(BuildConfig.DEBUG && ScanDemo.on) }
+        val scanFilter by model.scanFilter.collectAsState()
+        val scanAuto by model.scanAuto.collectAsState()
         var screen by rememberSaveable { mutableStateOf(Screen.Main) }
         // The camera asks for its permission once the start-up requests have been answered, as two requests at once cancel each other.
         var startupAsked by rememberSaveable { mutableStateOf(false) }
@@ -195,6 +201,13 @@ class MainActivity : ComponentActivity() {
                         onClearProblem = model::clearCameraProblem,
                         format = state.format,
                         onFormat = model::photoFormat,
+                        scan = model.scan,
+                        scanning = scanning,
+                        onScanning = { scanning = it },
+                        scanFilter = scanFilter,
+                        onScanFilter = model::setScanFilter,
+                        scanAuto = scanAuto,
+                        onScanAuto = model::setScanAuto,
                     )
                     Tab.Clipboard -> ClipboardScreen(
                         target = target,

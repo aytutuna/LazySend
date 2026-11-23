@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
@@ -25,8 +26,17 @@ import com.lazysend.lazysend.transfer.convertPhoto
 import com.lazysend.lazysend.transfer.convertedName
 import com.lazysend.lazysend.transfer.SendService
 import com.lazysend.lazysend.transfer.clipboardName
+import com.lazysend.lazysend.scan.CaptureFilter
+import com.lazysend.lazysend.scan.CornerModels
+import com.lazysend.lazysend.scan.ScanDemo
+import com.lazysend.lazysend.scan.ScanFrameFeed
+import com.lazysend.lazysend.scan.ScanModel
+import com.lazysend.lazysend.scan.ScanPage
+import com.lazysend.lazysend.scan.ScanPageStore
+import com.lazysend.lazysend.scan.ScanPdf
 import com.lazysend.lazysend.transfer.pasted
 import com.lazysend.lazysend.transfer.photoName
+import com.lazysend.lazysend.transfer.scanName
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -70,6 +80,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val clipProblem = MutableStateFlow<String?>(null)
     val saveCameraPhotos: StateFlow<Boolean> get() = graph.settings.saveCameraPhotos
 
+    /** The scan mode of the camera tab; it lives as long as the app does, so a scan in progress survives leaving the camera. */
+    val scan: ScanModel = createScan()
+
     val state: StateFlow<MainState> = combine(
         combine(graph.pcs.pcs, graph.host.core.guests.guests, graph.host.core.feed.progress) { pcs, guests, feeds -> Triple(pcs, guests, feeds) },
         graph.timeline.entries, graph.connector.current, selected, combine(photoAccess, graph.settings.photoFormat) { access, format -> access to format },
@@ -93,6 +106,29 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** True while this phone hosts with a guest paired: the screen that sees it asks for the service that keeps it going. */
     val keepHosting: StateFlow<Boolean> get() = graph.host.keepAlive
 
+    private fun createScan(): ScanModel {
+        val app = getApplication<Application>()
+        val demo = BuildConfig.DEBUG && ScanDemo.on
+        val store = if (demo) {
+            ScanPageStore(File(app.cacheDir, "demo-scan-pages")).also { it.removeAll() }
+        } else {
+            ScanPageStore(File(app.noBackupFilesDir, "scan-pages"))
+        }
+        val finder = if (demo) ScanDemo.finder() else CornerModels.fromAssets(app)
+        val power = app.getSystemService(PowerManager::class.java)
+        val warm = { Build.VERSION.SDK_INT >= 29 && power.currentThermalStatus >= PowerManager.THERMAL_STATUS_MODERATE }
+        val model = ScanModel(
+            viewModelScope, store, finder, ScanFrameFeed(finder, warm), ::sendScan,
+            disk = Dispatchers.IO.limitedParallelism(1), fixedLive = if (demo) ScanDemo.update else null,
+        )
+        if (demo) model.camera = ScanDemo.camera
+        return model
+    }
+
+    override fun onCleared() {
+        scan.feed.close()
+    }
+
     fun select(id: String) {
         selected.value = id
         graph.settings.target = id
@@ -101,6 +137,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun saveCameraPhotos(on: Boolean) = graph.settings.saveCameraPhotos(on)
 
     fun photoFormat(format: PhotoFormat) = graph.settings.photoFormat(format)
+
+    val scanFilter: StateFlow<CaptureFilter> get() = graph.settings.scanFilter
+    val scanAuto: StateFlow<Boolean> get() = graph.settings.scanAuto
+
+    fun setScanFilter(filter: CaptureFilter) = graph.settings.scanFilter(filter)
+
+    fun setScanAuto(on: Boolean) = graph.settings.scanAuto(on)
 
     /**
      * Sends what was picked in the Files tab at once to the selected device. Photos are converted to the chosen format as each one is
@@ -221,26 +264,52 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return dir
     }
 
-    // The file goes through the provider so the sending service reads its name and size like any picked file.
     private fun sendClipped(file: File, problem: MutableStateFlow<String?>, at: Long): Boolean {
+        try {
+            handOver(file, clip = true, at)
+        } catch (e: Exception) {
+            problem.value = e.message ?: getApplication<Application>().getString(R.string.target_gone)
+            return false
+        }
+        return true
+    }
+
+    // The file goes through the provider so the sending service reads its name and size like any picked file.
+    private fun handOver(file: File, clip: Boolean, at: Long) {
         val context = getApplication<Application>()
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
         val guest = selectedGuest()
         val pc = selectedPc()
-        try {
-            when {
-                guest != null -> SendService.queueFiles(context, guest.id, listOf(uri), clip = true)
-                pc != null -> SendService.sendFiles(context, pc.id, listOf(uri), clip = true, at = at)
-                else -> {
-                    problem.value = context.getString(R.string.target_gone)
-                    return false
-                }
-            }
-        } catch (e: Exception) {
-            problem.value = e.message ?: context.getString(R.string.target_gone)
-            return false
+        when {
+            guest != null -> SendService.queueFiles(context, guest.id, listOf(uri), clip = clip)
+            pc != null -> SendService.sendFiles(context, pc.id, listOf(uri), clip = clip, at = at)
+            else -> throw IOException(context.getString(R.string.target_gone))
         }
-        return true
+    }
+
+    /**
+     * Sends a scan to the selected device as one file named by its time and returns the name: a page as the JPEG it is, to be put on
+     * the clipboard there like a camera photo, two or more as one PDF. Scans are not saved to the gallery. Throws when the file
+     * cannot be written or the device is gone.
+     */
+    private suspend fun sendScan(pages: List<ScanPage>): String = withContext(Dispatchers.IO) {
+        val at = System.currentTimeMillis()
+        val single = pages.size == 1
+        val bytes = if (single) pages[0].jpeg else withContext(Dispatchers.Default) { ScanPdf.make(pages) }
+        val dir = cacheFolder("scan")
+        val sent = graph.timeline.entries.value
+        val name = scanName(at, if (single) "jpg" else "pdf") { name ->
+            File(dir, name).exists() || sent.any { it.direction == Direction.Sent && it.title == name }
+        }
+        val file = File(dir, name)
+        try {
+            file.writeBytes(bytes)
+            handOver(file, clip = single, at)
+        } catch (e: Exception) {
+            file.delete()
+            throw e
+        }
+        name
     }
 
     private fun saveToGallery(file: File) {
