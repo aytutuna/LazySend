@@ -17,9 +17,8 @@ final class ScanPageTests: XCTestCase {
 
     func testAPhotoIsCutOutAlongItsCornersAndKeepsThemForALaterCut() throws {
         let photo = PhotoScenes.woodScene()
-        let page = try XCTUnwrap(PagePipeline.page(photo: photo, source: Data([1, 2, 3]), corners: truth, filter: .enhanced))
+        let page = try XCTUnwrap(PagePipeline.page(photo: photo, corners: truth, filter: .enhanced))
         XCTAssertEqual(page.corners, truth)
-        XCTAssertEqual(page.source, Data([1, 2, 3]))
         let size = try jpegSize(page.jpeg)
         XCTAssertEqual(size.width, page.width)
         XCTAssertEqual(size.height, page.height)
@@ -31,11 +30,11 @@ final class ScanPageTests: XCTestCase {
     func testGrayAndBlackAndWhiteFiltersMakeOneComponentJpegsAndOriginalKeepsColour() throws {
         let photo = PhotoScenes.woodScene()
         for filter in [CaptureFilter.grayscale, .blackAndWhite] {
-            let page = try XCTUnwrap(PagePipeline.page(photo: photo, source: Data(), corners: truth, filter: filter))
+            let page = try XCTUnwrap(PagePipeline.page(photo: photo, corners: truth, filter: filter))
             XCTAssertTrue(page.gray, "\(filter)")
             XCTAssertEqual(try jpegSize(page.jpeg).components, 1, "\(filter)")
         }
-        let original = try XCTUnwrap(PagePipeline.page(photo: photo, source: Data(), corners: truth, filter: .original))
+        let original = try XCTUnwrap(PagePipeline.page(photo: photo, corners: truth, filter: .original))
         XCTAssertFalse(original.gray)
         XCTAssertEqual(try jpegSize(original.jpeg).components, 3)
         var options = PerspectiveOptions()
@@ -47,7 +46,7 @@ final class ScanPageTests: XCTestCase {
 
     func testTheWholePhotoIsOnlyFiltered() throws {
         let photo = PhotoScenes.woodScene()
-        let page = try XCTUnwrap(PagePipeline.wholePage(photo: photo, source: Data(), filter: .original))
+        let page = try XCTUnwrap(PagePipeline.wholePage(photo: photo, filter: .original))
         XCTAssertEqual(page.width, photo.width)
         XCTAssertEqual(page.height, photo.height)
         XCTAssertEqual(page.corners, PageFinder.wholePhoto(width: photo.width, height: photo.height))
@@ -57,7 +56,7 @@ final class ScanPageTests: XCTestCase {
         let photo = PhotoScenes.woodScene()
         let line = Quad(topLeft: CGPoint(x: 10, y: 10), topRight: CGPoint(x: 10, y: 10),
                         bottomRight: CGPoint(x: 10, y: 10), bottomLeft: CGPoint(x: 10, y: 10))
-        XCTAssertNil(PagePipeline.page(photo: photo, source: Data(), corners: line, filter: .enhanced))
+        XCTAssertNil(PagePipeline.page(photo: photo, corners: line, filter: .enhanced))
     }
 
     func testThePageDpiIsKeptWithinItsLimits() {
@@ -94,7 +93,7 @@ final class ScanPdfTests: XCTestCase {
     private func page(width: Int, height: Int, dpi: Int, gray: Bool, shade: UInt8) throws -> ScanPage {
         let image = RgbaImage.filled(width: width, height: height, r: shade, g: shade, b: shade)
         let jpeg = try XCTUnwrap(JpegEncoder.encode(image, gray: gray))
-        return ScanPage(source: Data(), corners: PageFinder.wholePhoto(width: width, height: height), filter: .original,
+        return ScanPage(corners: PageFinder.wholePhoto(width: width, height: height), filter: .original,
                         jpeg: jpeg, width: width, height: height, dpi: dpi, gray: gray)
     }
 

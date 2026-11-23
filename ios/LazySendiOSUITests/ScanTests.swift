@@ -63,6 +63,34 @@ final class ScanTests: XCTestCase {
         XCTAssertEqual(app.item("scan.pages").label, "1 page")
     }
 
+    // What the system does to an app it needs the memory of: the process goes and the app opens again, in Photo mode.
+    @MainActor
+    func testPagesTakenSurviveTheAppBeingClosedAndOpenedAgain() {
+        let app = XCUIApplication.launched(demo: true, tab: nil, scan: true)
+        app.item("mode.scan").tap()
+        takePage(app, expecting: "1 page")
+        takePage(app, expecting: "2 pages")
+        app.item("mode.photo").tap()
+        XCTAssertTrue(app.item("camera.shutter").waitForExistence(timeout: 30))
+        app.terminate()
+        let again = XCUIApplication.launched(demo: true, tab: nil, scan: true, restoring: true)
+        XCTAssertTrue(again.item("camera.shutter").waitForExistence(timeout: 30))
+        again.item("mode.scan").tap()
+        XCTAssertTrue(again.item("scan.pages").waitForExistence(timeout: 30))
+        XCTAssertEqual(again.item("scan.pages").label, "2 pages")
+        again.item("scan.pages").tap()
+        XCTAssertTrue(again.item("page.1").waitForExistence(timeout: 30))
+        again.item("page.1.menu").tap()
+        again.buttons["Delete"].tap()
+        again.item("pages.close").tap()
+        XCTAssertEqual(again.item("scan.pages").label, "1 page")
+        again.terminate()
+        let third = XCUIApplication.launched(demo: true, tab: nil, scan: true, restoring: true)
+        third.item("mode.scan").tap()
+        XCTAssertTrue(third.item("scan.pages").waitForExistence(timeout: 30))
+        XCTAssertEqual(third.item("scan.pages").label, "1 page")
+    }
+
     @MainActor
     func testTheScanPageSaysWhenAPageIsFoundAndAutoCanBeTurnedOff() {
         let app = XCUIApplication.launched(demo: true, tab: nil, scan: true)

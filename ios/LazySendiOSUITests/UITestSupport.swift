@@ -10,10 +10,10 @@ import XCTest
 extension XCUIApplication {
     @MainActor
     static func launched(demo: Bool = false, approval: Bool = false, tab: String? = "Files", slowPairing: Bool = false,
-                         pairedOnly: Bool = false, scan: Bool = false, unsure: Bool = false) -> XCUIApplication {
+                         pairedOnly: Bool = false, scan: Bool = false, unsure: Bool = false, restoring: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-uiTesting"] + (demo ? ["-demoData"] : []) + (approval ? ["-demoApproval"] : []) + (slowPairing ? ["-slowPairing"] : []) + (pairedOnly ? ["-demoPc"] : [])
-            + (scan ? ["-demoScan"] : []) + (unsure ? ["-demoScanUnsure"] : [])
+            + (scan ? ["-demoScan"] : []) + (unsure ? ["-demoScanUnsure"] : []) + (restoring ? ["-demoScanRestore"] : [])
         app.launch()
         if let tab {
             let button = app.tabBars.buttons[tab]

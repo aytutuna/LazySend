@@ -24,9 +24,9 @@ enum CornerAnswer {
 }
 
 /// The scan mode of the camera tab: the live outline of the page, the shutter's decision (automatic or by hand), the pages
-/// taken so far and what a page becomes (found, cut out and cleaned up with the filter chosen). Pages stay in memory as
-/// JPEGs until Done sends them. The camera itself stays `CameraModel`'s: the frames come from its session and the photos
-/// from its photo output.
+/// taken so far and what a page becomes (found, cut out and cleaned up with the filter chosen). The pages are kept in the
+/// store until Done sends them, so a scan survives the app being closed by the system; memory holds only the page JPEGs.
+/// The camera itself stays `CameraModel`'s: the frames come from its session and the photos from its photo output.
 @MainActor
 final class ScanModel: ObservableObject {
     @Published private(set) var pages: [ScanPage] = []
@@ -50,6 +50,7 @@ final class ScanModel: ObservableObject {
     private var graceEnds = Date.distantPast
     private var thumbnails: [UUID: UIImage] = [:]
     private let finder: CornerModel? = FastViTCornerModel.isAvailable ? FastViTCornerModel.shared : nil
+    private let store: ScanPageStore?
     /// Set by the owner of the settings: the filter new pages get, whether the shutter is automatic, and whether there is a
     /// device for the scan to go to, which a page is not taken without.
     var filter = CaptureFilter.enhanced
@@ -84,6 +85,26 @@ final class ScanModel: ObservableObject {
     nonisolated static func autoShot(_ update: LiveQuadUpdate, auto: Bool, canShoot: Bool, inGrace: Bool) -> AutoShot {
         guard update.shouldCapture, auto else { return .none }
         return canShoot && !inGrace ? .take : .forget
+    }
+
+    init(store: ScanPageStore? = nil) {
+        self.store = store
+        pages = store?.load() ?? []
+    }
+
+    /// Where the app keeps the pages of a scan in progress. The demo's is in the temporary folder and starts empty, unless the test relaunches
+    /// the app to see what it kept.
+    static func liveStore() -> ScanPageStore {
+        let fm = FileManager.default
+        if ScanDemo.isOn {
+            let folder = fm.temporaryDirectory.appendingPathComponent("demo-scan-pages")
+            let store = ScanPageStore(folder: folder)
+            if !ScanDemo.restores { store.removeAll() }
+            return store
+        }
+        let base = (try? fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true))
+            ?? fm.temporaryDirectory
+        return ScanPageStore(folder: base.appendingPathComponent("Scan pages"))
     }
 
     func configure(camera: CameraModel) {
@@ -174,7 +195,7 @@ final class ScanModel: ObservableObject {
             working = false
             switch outcome {
             case .page(let page):
-                add(page)
+                add(page, source: data)
             case .corners(let photo, let corners):
                 shotEditing = CornerRequest(photo: photo, source: data, corners: corners, filter: filter, replacing: nil)
             case .failed:
@@ -194,7 +215,7 @@ final class ScanModel: ObservableObject {
     private nonisolated static func read(_ data: Data, filter: CaptureFilter, finder: CornerModel?) -> Outcome {
         guard let photo = PhotoReader.decode(data) else { return .failed }
         let found = PageFinder.find(photo, model: finder)
-        if found.clear, let page = PagePipeline.page(photo: photo, source: data, corners: found.corners, filter: filter) {
+        if found.clear, let page = PagePipeline.page(photo: photo, corners: found.corners, filter: filter) {
             return .page(page)
         }
         return .corners(photo, found.corners)
@@ -226,21 +247,26 @@ final class ScanModel: ObservableObject {
             let page = await Task.detached(priority: .userInitiated) { () -> ScanPage? in
                 let id = request.replacing ?? UUID()
                 if wholePhoto {
-                    return PagePipeline.wholePage(photo: request.photo, source: request.source, filter: request.filter, id: id)
+                    return PagePipeline.wholePage(photo: request.photo, filter: request.filter, id: id)
                 }
-                return PagePipeline.page(photo: request.photo, source: request.source, corners: cut, filter: request.filter, id: id)
+                return PagePipeline.page(photo: request.photo, corners: cut, filter: request.filter, id: id)
             }.value
             working = false
             guard let page else {
                 problem = String(localized: "The page could not be cut out.")
                 return
             }
-            add(page)
+            add(page, source: request.source)
         }
     }
 
-    /// The page added at the end, or in place of the page it was cut again from.
-    func add(_ page: ScanPage) {
+    /// The page added at the end, or in place of the page it was cut again from, with the photo it was cut from.
+    func add(_ page: ScanPage, source: Data) {
+        do {
+            try store?.save(page, source: source)
+        } catch {
+            problem = String(localized: "The page could not be saved.")
+        }
         thumbnails[page.id] = nil
         if let index = pages.firstIndex(where: { $0.id == page.id }) {
             pages[index] = page
@@ -254,15 +280,19 @@ final class ScanModel: ObservableObject {
     func recut(_ page: ScanPage) {
         guard !working else { return }
         working = true
+        let store = store
         Task {
-            let photo = await Task.detached(priority: .userInitiated) { PhotoReader.decode(page.source) }.value
+            let read = await Task.detached(priority: .userInitiated) { () -> (Data, RgbaImage)? in
+                guard let data = store?.source(of: page.id), let photo = PhotoReader.decode(data) else { return nil }
+                return (data, photo)
+            }.value
             working = false
-            guard let photo else {
+            guard let (source, photo) = read else {
                 problem = String(localized: "The photo could not be read.")
                 return
             }
             let corners = PageFinder.clamped(page.corners, width: photo.width, height: photo.height)
-            pageEditing = CornerRequest(photo: photo, source: page.source, corners: corners, filter: page.filter, replacing: page.id)
+            pageEditing = CornerRequest(photo: photo, source: source, corners: corners, filter: page.filter, replacing: page.id)
         }
     }
 
@@ -271,16 +301,23 @@ final class ScanModel: ObservableObject {
     func delete(_ id: UUID) {
         pages.removeAll { $0.id == id }
         thumbnails[id] = nil
+        store?.remove(id)
     }
 
     func move(from source: IndexSet, to destination: Int) {
         pages.move(fromOffsets: source, toOffset: destination)
+        saveOrder()
     }
 
     /// `id` one place earlier (`by` -1) or later (1).
     func shift(_ id: UUID, by step: Int) {
         guard let index = pages.firstIndex(where: { $0.id == id }), pages.indices.contains(index + step) else { return }
         pages.swapAt(index, index + step)
+        saveOrder()
+    }
+
+    private func saveOrder() {
+        try? store?.setOrder(pages.map(\.id))
     }
 
     /// The pages went in one file named `name`.
@@ -288,6 +325,7 @@ final class ScanModel: ObservableObject {
         lastName = name
         pages = []
         thumbnails = [:]
+        store?.removeAll()
         tracker.reset()
     }
 

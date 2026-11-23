@@ -1,12 +1,10 @@
 import CoreGraphics
 import Foundation
 
-/// A page of a scan: the photo as the camera wrote it with the corners the page was cut out along (so the page can be
-/// cut again), the filter it was cleaned up with, and the page as a JPEG.
+/// A page of a scan: the corners it was cut out along in the photo (so the page can be cut again from the photo, which
+/// `ScanPageStore` keeps), the filter it was cleaned up with, and the page as a JPEG.
 public struct ScanPage: Identifiable, Sendable {
     public let id: UUID
-    // TODO: spill the source photo to a temp file; a long scan holds every one in memory.
-    public var source: Data
     /// The corners in the upright photo's pixels.
     public var corners: Quad
     public var filter: CaptureFilter
@@ -18,10 +16,9 @@ public struct ScanPage: Identifiable, Sendable {
     /// The page has no colour (gray or black and white), so its JPEG has one component.
     public var gray: Bool
 
-    public init(id: UUID = UUID(), source: Data, corners: Quad, filter: CaptureFilter, jpeg: Data, width: Int, height: Int,
+    public init(id: UUID = UUID(), corners: Quad, filter: CaptureFilter, jpeg: Data, width: Int, height: Int,
                 dpi: Int, gray: Bool) {
         self.id = id
-        self.source = source
         self.corners = corners
         self.filter = filter
         self.jpeg = jpeg
@@ -45,21 +42,21 @@ public enum PagePipeline {
 
     /// The page of `photo` (upright) cut along `corners`. Nil when the corners outline no page or the page cannot be
     /// encoded.
-    public static func page(photo: RgbaImage, source: Data, corners: Quad, filter: CaptureFilter, id: UUID = UUID()) -> ScanPage? {
+    public static func page(photo: RgbaImage, corners: Quad, filter: CaptureFilter, id: UUID = UUID()) -> ScanPage? {
         let named = Quad.fromCorners(corners.corners)
         var options = PerspectiveOptions()
         options.maxLongSide = maxLongSide
         guard let cut = PerspectiveCorrector.correct(photo, quad: named, options: options) else { return nil }
         guard let made = cleaned(cut.image, filter: filter) else { return nil }
-        return ScanPage(id: id, source: source, corners: corners, filter: filter, jpeg: made.jpeg, width: made.width,
+        return ScanPage(id: id, corners: corners, filter: filter, jpeg: made.jpeg, width: made.width,
                         height: made.height, dpi: pageDPI(cut.plan.dpi, longSide: max(made.width, made.height)), gray: made.gray)
     }
 
     /// The whole photo as the page, as with Use whole photo in the corner editor: only the filter is applied.
-    public static func wholePage(photo: RgbaImage, source: Data, filter: CaptureFilter, id: UUID = UUID()) -> ScanPage? {
+    public static func wholePage(photo: RgbaImage, filter: CaptureFilter, id: UUID = UUID()) -> ScanPage? {
         guard let made = cleaned(photo, filter: filter) else { return nil }
         let dpi = pageDPI(nil, longSide: max(made.width, made.height))
-        return ScanPage(id: id, source: source, corners: PageFinder.wholePhoto(width: photo.width, height: photo.height),
+        return ScanPage(id: id, corners: PageFinder.wholePhoto(width: photo.width, height: photo.height),
                         filter: filter, jpeg: made.jpeg, width: made.width, height: made.height, dpi: dpi, gray: made.gray)
     }
 

@@ -10,7 +10,7 @@ struct RootView: View {
     // The tab Pair was opened from, which the app goes back to when Pair closes.
     @State private var pairOrigin: AppTab?
     @StateObject private var camera = CameraModel()
-    @StateObject private var scan = ScanModel()
+    @StateObject private var scan = ScanModel(store: ScanModel.liveStore())
 
     var body: some View {
         TabView(selection: $tab) {

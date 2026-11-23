@@ -13,6 +13,8 @@ enum ScanDemo {
     private static let arguments = ProcessInfo.processInfo.arguments
     static let isOn = arguments.contains("-demoScan")
     static let unsure = arguments.contains("-demoScanUnsure")
+    /// Keeps the pages of the run before, as the app does when the system closes it and it is opened again.
+    static let restores = arguments.contains("-demoScanRestore")
 
     static let width = 360
     static let height = 480
