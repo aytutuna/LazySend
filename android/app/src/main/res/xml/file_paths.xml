@@ -6,4 +6,5 @@
     <cache-path name="camera" path="camera/" />
     <cache-path name="clipboard" path="clipboard/" />
     <cache-path name="converted" path="converted/" />
+    <cache-path name="scan" path="scan/" />
 </paths>

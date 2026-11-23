@@ -54,12 +54,20 @@ fun pasted(text: CharSequence?, uri: String?, mime: String?): Pasted? = when {
 
 private val STAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd HH.mm.ss", Locale.ROOT)
 private val STAMP_MS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH.mm.ss.SSS", Locale.ROOT)
+private val STAMP_MINUTE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH.mm", Locale.ROOT)
 
 /** The name of a camera photo; the milliseconds are added only when [taken] says the plain name is in use. */
 fun photoName(time: Long, zone: ZoneId = ZoneId.systemDefault(), taken: (String) -> Boolean = { false }): String {
     val moment = Instant.ofEpochMilli(time).atZone(zone)
     val plain = "Photo ${STAMP.format(moment)}.jpg"
     return if (taken(plain)) "Photo ${STAMP_MS.format(moment)}.jpg" else plain
+}
+
+/** The name of a scan, to the minute; the seconds and milliseconds are added only when [taken] says the plain name is in use. */
+fun scanName(time: Long, extension: String, zone: ZoneId = ZoneId.systemDefault(), taken: (String) -> Boolean = { false }): String {
+    val moment = Instant.ofEpochMilli(time).atZone(zone)
+    val plain = "Scan ${STAMP_MINUTE.format(moment)}.$extension"
+    return if (taken(plain)) "Scan ${STAMP_MS.format(moment)}.$extension" else plain
 }
 
 fun clipboardName(time: Long, extension: String, zone: ZoneId = ZoneId.systemDefault()): String =

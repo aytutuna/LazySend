@@ -9,7 +9,7 @@ import kotlin.math.max
  * way), so the work is bounded by the small frame's size, not the camera's.
  */
 object FrameScaler {
-    fun downscaled(bgra: ByteArray, width: Int, height: Int, bytesPerRow: Int, maxLongSide: Int): RgbaImage? {
+    fun downscaled(bgra: ByteArray, width: Int, height: Int, bytesPerRow: Int, maxLongSide: Int, rgba: Boolean = false): RgbaImage? {
         if (width <= 0 || height <= 0 || maxLongSide <= 0 || bytesPerRow < width * 4) return null
         if (bgra.size < bytesPerRow * (height - 1) + width * 4) return null
         val longSide = max(width, height)
@@ -32,8 +32,8 @@ object FrameScaler {
                 val d = y1 * bytesPerRow + x1 * 4
                 val o = (oy * outWidth + ox) * 4
                 for (channel in 0 until 3) {
-                    // BGRA in, RGBA out.
-                    val from = 2 - channel
+                    // BGRA in (RGBA when `rgba`), RGBA out.
+                    val from = if (rgba) channel else 2 - channel
                     val sum = (bgra[a + from].toInt() and 0xFF) + (bgra[b + from].toInt() and 0xFF) +
                         (bgra[c + from].toInt() and 0xFF) + (bgra[d + from].toInt() and 0xFF)
                     pixels[o + channel] = ((sum + 2) / 4).toByte()

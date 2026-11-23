@@ -33,6 +33,14 @@ class ClipTest {
     }
 
     @Test
+    fun aScanIsNamedToTheMinuteAndGetsMillisecondsOnlyWhenTheNameIsTaken() {
+        val plain = scanName(time, "pdf", zone)
+        assertEquals("Scan 2026-11-15 14.03.pdf", plain)
+        assertEquals("Scan 2026-11-15 14.03.22.123.pdf", scanName(time, "pdf", zone) { it == plain })
+        assertEquals("Scan 2026-11-15 14.03.jpg", scanName(time, "jpg", zone) { it == plain })
+    }
+
+    @Test
     fun aClipboardFileIsNamedByItsTimeAndType() {
         assertEquals("Clipboard 2026-11-15 14.03.22.png", clipboardName(time, "png", zone))
     }
