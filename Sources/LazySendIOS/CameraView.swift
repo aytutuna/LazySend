@@ -113,7 +113,6 @@ struct CameraView: View {
 
     private func chrome(wide: Bool) -> some View {
         let layout = wide ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
-        let controls = wide ? AnyLayout(VStackLayout(spacing: 24)) : AnyLayout(HStackLayout(spacing: 0))
         return layout {
             VStack(spacing: 12) {
                 topBar
@@ -127,11 +126,9 @@ struct CameraView: View {
             if !wide { Spacer(minLength: 0) }
             VStack(spacing: 0) {
                 if camera.stops.count > 1 { lensPills.padding(.top, wide ? 0 : 8) }
-                controls {
+                CenteredBar(axis: wide ? .vertical : .horizontal, gap: 24) {
                     thumbnail
-                    if !wide { Spacer() }
                     shutter
-                    if !wide { Spacer() }
                     flip
                 }
                 .padding(wide ? .horizontal : .vertical, 20)
@@ -166,41 +163,48 @@ struct CameraView: View {
     }
 
     private var topBar: some View {
-        HStack {
-            if camera.hasFlash {
-                Button { camera.flash.toggle() } label: {
-                    Image(systemName: camera.flash ? "bolt.fill" : "bolt.slash.fill")
-                        .foregroundStyle(camera.flash ? Color.yellow : Color.white)
-                        .frame(width: 40, height: 40)
-                        .background(Color.black.opacity(0.4), in: Circle())
+        CenteredBar {
+            HStack(spacing: 8) {
+                if camera.hasFlash {
+                    Button { camera.flash.toggle() } label: {
+                        Image(systemName: camera.flash ? "bolt.fill" : "bolt.slash.fill")
+                            .foregroundStyle(camera.flash ? Color.yellow : Color.white)
+                            .frame(width: 40, height: 40)
+                            .background(Color.black.opacity(0.4), in: Circle())
+                    }
+                    .accessibilityLabel(camera.flash ? "Flash on" : "Flash off")
+                    .accessibilityIdentifier("camera.flash")
                 }
-                .accessibilityLabel(camera.flash ? "Flash on" : "Flash off")
-                .accessibilityIdentifier("camera.flash")
-            }
-            Menu {
-                Picker("Format", selection: Binding(get: { model.photoFormat }, set: { model.setPhotoFormat($0) })) {
-                    ForEach(PhotoFormat.allCases) { Text($0.title).tag($0) }
+                Menu {
+                    Picker("Format", selection: Binding(get: { model.photoFormat }, set: { model.setPhotoFormat($0) })) {
+                        ForEach(PhotoFormat.allCases) { Text($0.title).tag($0) }
+                    }
+                } label: {
+                    Text(model.photoFormat.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.black.opacity(0.4), in: Capsule())
                 }
-            } label: {
-                Text(model.photoFormat.title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.black.opacity(0.4), in: Capsule())
+                .accessibilityIdentifier("camera.format")
             }
-            .accessibilityIdentifier("camera.format")
-            Spacer()
             ModeSwitch(mode: $mode)
-            TargetMenu { target in
-                Label(target.name, systemImage: target.phone ? "iphone" : "laptopcomputer")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.black.opacity(0.4), in: Capsule())
+            HStack {
+                TargetMenu { target in
+                    Label(target.name, systemImage: target.phone ? "iphone" : "laptopcomputer")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.black.opacity(0.4), in: Capsule())
+                }
+                .accessibilityIdentifier("camera.target")
             }
-            .accessibilityIdentifier("camera.target")
         }
         .padding(.horizontal)
         .padding(.top, 8)

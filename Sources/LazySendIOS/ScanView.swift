@@ -27,12 +27,48 @@ struct ModeSwitch: View {
             Text(title)
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.white)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 10)
                 .frame(minHeight: 36)
                 .background(Capsule().fill(mode == value ? Color.accentColor : Color.clear))
         }
         .accessibilityAddTraits(mode == value ? .isSelected : [])
         .accessibilityIdentifier(identifier)
+    }
+}
+
+/// Three views in a row (or, vertical, a column) with the middle one exactly in the middle whatever the other two take: each
+/// of them gets half of what the middle leaves and is cut short there. A row puts them at its ends; a column puts them next to
+/// the middle one, `gap` away.
+struct CenteredBar: Layout {
+    var axis = Axis.horizontal
+    var gap: CGFloat = 0
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard subviews.count == 3 else { return .zero }
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        if axis == .horizontal {
+            let width = proposal.width ?? sizes[1].width + 2 * max(sizes[0].width, sizes[2].width)
+            let side = max(0, (width - sizes[1].width) / 2)
+            let heights = [0, 2].map { subviews[$0].sizeThatFits(ProposedViewSize(width: side, height: nil)).height }
+            return CGSize(width: width, height: max(sizes[1].height, heights.max() ?? 0))
+        }
+        let height = proposal.height ?? sizes[1].height + 2 * (gap + max(sizes[0].height, sizes[2].height))
+        return CGSize(width: sizes.map(\.width).max() ?? 0, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard subviews.count == 3 else { return }
+        let middle = subviews[1].sizeThatFits(.unspecified)
+        if axis == .horizontal {
+            let side = ProposedViewSize(width: max(0, (bounds.width - middle.width) / 2), height: bounds.height)
+            subviews[0].place(at: CGPoint(x: bounds.minX, y: bounds.midY), anchor: .leading, proposal: side)
+            subviews[2].place(at: CGPoint(x: bounds.maxX, y: bounds.midY), anchor: .trailing, proposal: side)
+        } else {
+            let side = ProposedViewSize(width: bounds.width, height: max(0, (bounds.height - middle.height) / 2 - gap))
+            subviews[0].place(at: CGPoint(x: bounds.midX, y: bounds.midY - middle.height / 2 - gap), anchor: .bottom, proposal: side)
+            subviews[2].place(at: CGPoint(x: bounds.midX, y: bounds.midY + middle.height / 2 + gap), anchor: .top, proposal: side)
+        }
+        subviews[1].place(at: CGPoint(x: bounds.midX, y: bounds.midY), anchor: .center, proposal: .unspecified)
     }
 }
 
@@ -69,7 +105,6 @@ struct ScanChrome: View {
 
     var body: some View {
         let layout = wide ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
-        let controls = wide ? AnyLayout(VStackLayout(spacing: 24)) : AnyLayout(HStackLayout(spacing: 0))
         return layout {
             VStack(spacing: 12) {
                 topBar
@@ -92,13 +127,10 @@ struct ScanChrome: View {
                         .padding(.horizontal)
                         .padding(.bottom, 8)
                 }
-                controls {
+                CenteredBar(axis: wide ? .vertical : .horizontal, gap: 24) {
                     pagesStack
-                    if !wide { Spacer() }
                     shutter
-                    if !wide { Spacer() }
-                    // The stack's width again, so the shutter stays in the middle.
-                    Color.clear.frame(width: 70, height: 72)
+                    Color.clear.frame(width: 0, height: 0)
                 }
                 .padding(wide ? .horizontal : .vertical, 20)
                 .padding(.horizontal, wide ? 0 : 24)
@@ -119,30 +151,34 @@ struct ScanChrome: View {
     // MARK: The top bar
 
     private var topBar: some View {
-        HStack {
-            autoChip
-            if camera.hasTorch {
-                Button { camera.setTorch(!camera.torch) } label: {
-                    Image(systemName: camera.torch ? "bolt.fill" : "bolt.slash.fill")
-                        .foregroundStyle(camera.torch ? Color.yellow : Color.white)
-                        .frame(width: 40, height: 40)
-                        .background(Color.black.opacity(0.4), in: Circle())
+        CenteredBar {
+            HStack(spacing: 8) {
+                autoChip
+                if camera.hasTorch {
+                    Button { camera.setTorch(!camera.torch) } label: {
+                        Image(systemName: camera.torch ? "bolt.fill" : "bolt.slash.fill")
+                            .foregroundStyle(camera.torch ? Color.yellow : Color.white)
+                            .frame(width: 40, height: 40)
+                            .background(Color.black.opacity(0.4), in: Circle())
+                    }
+                    .accessibilityLabel(camera.torch ? Text("Light on") : Text("Light off"))
+                    .accessibilityIdentifier("scan.torch")
                 }
-                .accessibilityLabel(camera.torch ? Text("Light on") : Text("Light off"))
-                .accessibilityIdentifier("scan.torch")
             }
-            Spacer(minLength: 4)
             ModeSwitch(mode: $mode)
-            TargetMenu { target in
-                Label(target.name, systemImage: target.phone ? "iphone" : "laptopcomputer")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.black.opacity(0.4), in: Capsule())
+            HStack {
+                TargetMenu { target in
+                    Label(target.name, systemImage: target.phone ? "iphone" : "laptopcomputer")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.black.opacity(0.4), in: Capsule())
+                }
+                .accessibilityIdentifier("camera.target")
             }
-            .accessibilityIdentifier("camera.target")
         }
         .padding(.horizontal)
         .padding(.top, 8)

@@ -92,6 +92,21 @@ final class ScanTests: XCTestCase {
     }
 
     @MainActor
+    func testTheModeSwitchAndTheShutterAreInTheMiddleInBothModes() {
+        let app = XCUIApplication.launched(demo: true, tab: nil, scan: true)
+        let middle = app.windows.firstMatch.frame.midX
+        for (mode, shutter) in [("photo", "camera.shutter"), ("scan", "scan.shutter")] {
+            app.item("mode." + mode).tap()
+            XCTAssertTrue(app.item(shutter).waitForExistence(timeout: 30))
+            let photo = app.item("mode.photo").frame
+            let scan = app.item("mode.scan").frame
+            XCTAssertEqual((photo.minX + scan.maxX) / 2, middle, accuracy: 1, mode)
+            XCTAssertEqual(app.item(shutter).frame.midX, middle, accuracy: 1, mode)
+            attach(app, as: "13-centred-" + mode)
+        }
+    }
+
+    @MainActor
     func testTheScanPageSaysWhenAPageIsFoundAndAutoCanBeTurnedOff() {
         let app = XCUIApplication.launched(demo: true, tab: nil, scan: true)
         app.item("mode.scan").tap()
