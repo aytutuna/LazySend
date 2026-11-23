@@ -19,4 +19,21 @@ struct TargetMenu<Label: View>: View {
         }
     }
 }
+
+/// Green while the app holds a link to the computer, red when it does not. A phone that connects to this one has no link to show.
+struct ConnectionDot: View {
+    @EnvironmentObject private var model: AppModel
+    let target: AppModel.Target
+
+    var body: some View {
+        if !target.phone {
+            let connected = model.links[target.id] != nil
+            Circle()
+                .fill(connected ? Color.green : Color.red)
+                .frame(width: 8, height: 8)
+                .accessibilityLabel(connected ? Text("Connected") : Text("Not connected"))
+                .accessibilityIdentifier("camera.connection")
+        }
+    }
+}
 #endif

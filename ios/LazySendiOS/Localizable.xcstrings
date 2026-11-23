@@ -113,6 +113,22 @@
         }
       }
     },
+    "Connected" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connected"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bağlı"
+          }
+        }
+      }
+    },
     "Connected over %@" : {
       "localizations" : {
         "en" : {
@@ -957,6 +973,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Alınan fotoğraf ve videoları Fotoğraflar'a kaydet"
+          }
+        }
+      }
+    },
+    "Not connected" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not connected"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bağlı değil"
           }
         }
       }

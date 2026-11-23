@@ -195,13 +195,16 @@ struct CameraView: View {
             ModeSwitch(mode: $mode)
             HStack {
                 TargetMenu { target in
-                    Label(target.name, systemImage: target.phone ? "iphone" : "laptopcomputer")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
+                    HStack(spacing: 6) {
+                        ConnectionDot(target: target)
+                        Label(target.name, systemImage: target.phone ? "iphone" : "laptopcomputer")
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
                         .background(Color.black.opacity(0.4), in: Capsule())
                 }
                 .accessibilityIdentifier("camera.target")
