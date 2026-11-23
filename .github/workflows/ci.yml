@@ -35,12 +35,18 @@ jobs:
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0"
+      # The app's assets take DocAligner's corner model from Sources/LazySendScanModel/Models; the build fails without it.
+      - name: Fetch the corner model
+        working-directory: .
+        run: bash scripts/fetch_docaligner.sh
       - name: Build
         run: ./gradlew assembleDebug --console=plain
       # The link client's tests run against a local TLS server; the screen tests render each screen and
       # write PNGs only when run through recordRoborazziDebug.
       - name: Test
         run: ./gradlew testDebugUnitTest --console=plain
+        env:
+          LAZYSEND_REQUIRE_CORNER_MODEL: '1'
 
   macos:
     # The link code in LazySendKit and the server in LazySendServer build and are tested on the Mac; their tests run a

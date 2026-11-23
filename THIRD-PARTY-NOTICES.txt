@@ -51,7 +51,7 @@ ZXing.Net 0.16.11 (zxing.dll)
     pairing QR code and makes no connections with it.
 
 
-ONNX Runtime 1.24.2 (iPhone app)
+ONNX Runtime 1.24.2 (iPhone and Android apps)
     Copyright (c) Microsoft Corporation. MIT License, in full below.
     https://github.com/microsoft/onnxruntime
     Runs the page corner model of the camera's Scan mode on the phone. It comes
@@ -59,14 +59,17 @@ ONNX Runtime 1.24.2 (iPhone app)
     onnxruntime-swift-package-manager 1.24.2 kept in Vendor/onnxruntime. The
     runtime statically links code from other projects (protobuf, abseil, Eigen,
     flatbuffers and more). Their notices are ONNXRuntime-THIRD-PARTY-NOTICES.txt,
-    which ships in the app with the model.
+    which ships in the app with the model. The Android app carries the
+    onnxruntime-android 1.24.2 package from Maven Central, with its Java classes
+    and native libraries as built by Microsoft.
 
 DocAligner FastViT-T8 model, fastvit_t8_h_e_bifpn_256_fp32.onnx, release 1.1.1
-(iPhone app)
+(iPhone and Android apps)
     By DocsaidLab. Apache License 2.0, in full below.
     https://github.com/DocsaidLab/DocAligner
     The model file is unchanged. It finds the corners of a page in a photo. It
-    is fetched by scripts/fetch_docaligner.sh and is not in the repository.
+    is fetched by scripts/fetch_docaligner.sh and is not in the repository; the Android
+    build copies it into the app's assets and fails without it.
 
 ZXing core 3.5.3 (Android app)
     By the ZXing authors. https://github.com/zxing/zxing
@@ -79,7 +82,7 @@ CameraX, WorkManager (Android app)
     They carry the app's network calls, its screens, the camera preview and
     its background checks.
 
-The tests of the iPhone app's corner model use six frames of the SmartDoc 2015
+The tests of the corner model, on the iPhone and on Android, use six frames of the SmartDoc 2015
 Challenge 1 dataset, which are never part of an app. They are under CC BY 4.0;
 the attribution is in Tests/LazySendScanModelTests/Fixtures/Pages/README.md.
 
