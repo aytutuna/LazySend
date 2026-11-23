@@ -299,7 +299,7 @@ final class CameraModel: ObservableObject {
         var values = [1.0]
         if lowest < base { values.insert(lowest / base, at: 0) }
         if (crop || telephoto == nil) && base * 2 <= highest { values.append(2) }
-        if let tele = telephoto, tele > base, tele <= highest, abs(tele / base - 2) > 0.01 { values.append(tele / base) }
+        if let tele = telephoto, tele > base, tele <= highest, !values.contains(where: { abs($0 - tele / base) < 0.01 }) { values.append(tele / base) }
         return values.sorted().map { LensStop(value: $0) }
     }
 
