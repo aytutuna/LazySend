@@ -315,6 +315,7 @@ final class ScanModel: ObservableObject {
         persist { [weak self] store in
             do {
                 try store.save(page, source: photo)
+                if photo != nil { Task { @MainActor in self?.kept[id] = nil } }
             } catch {
                 Task { @MainActor in self?.saveFailed(id, source: source) }
             }
