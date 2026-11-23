@@ -193,7 +193,10 @@ struct CameraView: View {
     }
 
     private var shutter: some View {
-        Button { shoot() } label: {
+        Button {
+            camera.touchedElsewhere()
+            shoot()
+        } label: {
             ZStack {
                 Circle().stroke(Color.white, lineWidth: 4).frame(width: 74, height: 74)
                 Circle().fill(Color.white).frame(width: 60, height: 60)

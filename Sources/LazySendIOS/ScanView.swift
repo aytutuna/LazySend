@@ -277,7 +277,10 @@ struct ScanChrome: View {
 
     private var shutter: some View {
         let progress: CGFloat = model.scanAuto && canShoot && scan.live?.state == .steadying ? CGFloat(scan.live?.progress ?? 0) : 0
-        return Button { scan.shoot() } label: {
+        return Button {
+            camera.touchedElsewhere()
+            scan.shoot()
+        } label: {
             ZStack {
                 Circle().stroke(Color.white, lineWidth: 4).frame(width: 74, height: 74)
                 Circle().fill(Color.white).frame(width: 60, height: 60)

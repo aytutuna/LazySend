@@ -276,7 +276,6 @@ final class CameraModel: ObservableObject {
     /// scan mode leaves out.
     func takePhoto(format: PhotoFormat, flash useFlash: Bool? = nil) async -> (data: Data, ext: String)? {
         guard !busy, running else { return nil }
-        touchedElsewhere()
         busy = true
         defer { busy = false }
         let angle = rotation?.videoRotationAngleForHorizonLevelCapture ?? 90

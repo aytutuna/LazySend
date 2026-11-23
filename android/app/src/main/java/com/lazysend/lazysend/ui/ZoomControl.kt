@@ -47,6 +47,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.progressBarRangeInfo
@@ -195,6 +196,7 @@ private fun Capsule(now: Float, stops: List<Float>, expanded: Boolean, onExpand:
                 Box(
                     Modifier.padding(horizontal = 1.dp).size(if (active) 40.dp else 32.dp)
                         .background(Color.Black.copy(alpha = if (active) 0.55f else 0.2f), CircleShape)
+                        .clearAndSetSemantics {}
                         .clickable { if (!expanded) onExpand() else if (abs(now - value) > 0.01f) onStop(value) },
                     contentAlignment = Alignment.Center,
                 ) {
