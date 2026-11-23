@@ -79,7 +79,6 @@ import com.lazysend.lazysend.data.EntryState
 import com.lazysend.lazysend.data.TimelineEntry
 import com.lazysend.lazysend.transfer.PhotoFormat
 import java.io.File
-import kotlin.math.abs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -168,6 +167,7 @@ fun CameraScreen(
     }
 
     var zoom by remember { mutableStateOf<ZoomState?>(null) }
+    val telephoto = remember(camera) { camera?.let { telephotoOf(context, it) } }
     DisposableEffect(camera) {
         val live = camera?.cameraInfo?.zoomState
         val observer = Observer<ZoomState> { zoom = it }
@@ -263,7 +263,10 @@ fun CameraScreen(
             }
             Box(Modifier.weight(1f))
             val ready = camera != null && !busy && targets.isNotEmpty()
-            LensPills(zoom) { camera?.cameraControl?.setZoomRatio(it) }
+            zoom?.let { state ->
+                val stops = lensStops(state.minZoomRatio, state.maxZoomRatio, telephoto)
+                if (stops.size > 1) ZoomControl(state.zoomRatio, stops, state.maxZoomRatio) { camera?.cameraControl?.setZoomRatio(it) }
+            }
             Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 20.dp), verticalAlignment = Alignment.Top) {
                 Box(Modifier.weight(1f), contentAlignment = Alignment.TopStart) { Thumb(shot, entries, targets.firstOrNull { it.id == selected }?.name, onHistory) }
                 Shutter(ready) {
@@ -337,26 +340,6 @@ private fun FormatChip(format: PhotoFormat, onFormat: (PhotoFormat) -> Unit) {
                 open = false
                 onFormat(it)
             }
-        }
-    }
-}
-
-@Composable
-private fun LensPills(state: ZoomState?, onZoom: (Float) -> Unit) {
-    val now = state?.zoomRatio ?: 1f
-    val stops = lensStops(state?.minZoomRatio ?: 1f, state?.maxZoomRatio ?: 1f)
-    // While a pinch is between two lenses the live value is shown in its place.
-    val shown = if (stops.any { abs(it - now) < 0.05f }) stops else (stops + now).sorted()
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-        shown.forEach { value ->
-            val selected = abs(value - now) < 0.05f
-            Text(
-                zoomLabel(value),
-                Modifier.padding(horizontal = 4.dp).clip(CircleShape).background(if (selected) Color.White else Scrim)
-                    .clickable { onZoom(value) }.padding(horizontal = 12.dp, vertical = 6.dp),
-                color = if (selected) Color.Black else Color.White,
-                style = MaterialTheme.typography.labelLarge,
-            )
         }
     }
 }

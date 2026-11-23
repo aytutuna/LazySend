@@ -27,6 +27,7 @@
     <string name="not_reachable">%1$s is not reachable</string>
     <string name="connected">Connected</string>
     <string name="not_connected">Not connected</string>
+    <string name="zoom">Zoom</string>
     <string name="sent_to">To %1$s</string>
     <string name="received_from">From %1$s</string>
     <string name="state_paused">Paused</string>

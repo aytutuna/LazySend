@@ -27,6 +27,7 @@
     <string name="not_reachable">%1$s cihazına ulaşılamıyor</string>
     <string name="connected">Bağlı</string>
     <string name="not_connected">Bağlı değil</string>
+    <string name="zoom">Yakınlaştırma</string>
     <string name="sent_to">Alıcı: %1$s</string>
     <string name="received_from">Gönderen: %1$s</string>
     <string name="state_paused">Duraklatıldı</string>
