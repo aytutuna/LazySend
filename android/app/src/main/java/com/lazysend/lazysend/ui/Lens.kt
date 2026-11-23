@@ -28,7 +28,7 @@ fun lensStops(min: Float, max: Float, telephoto: Float? = null): List<Float> = b
     add(1f)
     if (max >= 2f) add(2f)
     if (telephoto != null && telephoto <= max && abs(telephoto - 2f) > 0.05f) add(telephoto)
-}
+}.sorted()
 
 /** The longest of the physical lenses as a multiple of the main one, to the nearest half; nil when none is clearly longer. */
 fun telephotoRatio(main: Float, physical: List<Float>): Float? {
@@ -49,8 +49,9 @@ fun telephotoOf(context: Context, camera: Camera): Float? {
     return try {
         val manager = context.getSystemService(CameraManager::class.java)
         val logical = manager.getCameraCharacteristics(Camera2CameraInfo.from(camera.cameraInfo).cameraId)
-        val main = equivalentFocal(logical) ?: return null
-        telephotoRatio(main, logical.physicalCameraIds.mapNotNull { equivalentFocal(manager.getCameraCharacteristics(it)) })
+        val physical = logical.physicalCameraIds.mapNotNull { equivalentFocal(manager.getCameraCharacteristics(it)) }.sorted()
+        // The logical camera may list several lenses, so the main one is taken as the middle of the physical ones.
+        if (physical.size < 2) null else telephotoRatio(physical[(physical.size - 1) / 2], physical)
     } catch (e: Exception) {
         null
     }

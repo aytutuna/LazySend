@@ -64,8 +64,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 private val ZoomAccent = Color(0xFFB9C3FF)
 private val ZoomScrim = Color(0x59000000)
 
-private suspend fun AwaitPointerEventScope.nextChange(id: PointerId): PointerInputChange =
-    awaitPointerEvent(PointerEventPass.Initial).changes.first { it.id == id }
+private suspend fun AwaitPointerEventScope.nextChange(id: PointerId): PointerInputChange? =
+    awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == id }
 
 /**
  * The lens buttons in a capsule, as in the phone's own camera. Holding or dragging along it opens a wheel that sets the zoom
@@ -117,29 +117,35 @@ fun ZoomControl(now: Float, stops: List<Float>, top: Float, onZoom: (Float) -> U
             .pointerInput(perDoubling, slop) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    if (wheelOpen) touching = true
                     // A short press is left to the buttons; a hold or a move along the control takes it over.
                     val moved = withTimeoutOrNull(holdTime) {
                         var drag = false
                         var up = false
                         while (!drag && !up) {
                             val change = nextChange(down.id)
-                            up = !change.pressed
-                            drag = abs(change.position.x - down.position.x) > slop
+                            up = change == null || !change.pressed
+                            drag = change != null && abs(change.position.x - down.position.x) > slop
                         }
-                        drag
+                        drag && !up
                     }
-                    if (moved == false) return@awaitEachGesture
+                    if (moved == false) {
+                        touching = false
+                        return@awaitEachGesture
+                    }
                     animation?.cancel()
                     touching = true
                     wheelOpen = true
                     try {
                         val start = liveNow
                         var last = start
+                        var origin: Float? = null
                         while (true) {
-                            val change = nextChange(down.id)
+                            val change = nextChange(down.id) ?: break
                             change.consume()
                             if (!change.pressed) break
-                            val zoom = zoomAfterDrag(start, change.position.x - down.position.x, perDoubling, liveRange)
+                            val from = origin ?: change.position.x.also { origin = it }
+                            val zoom = zoomAfterDrag(start, change.position.x - from, perDoubling, liveRange)
                             if (crossesStop(last, zoom, liveStops)) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             last = zoom
                             liveZoom(zoom)
