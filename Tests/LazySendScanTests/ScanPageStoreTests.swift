@@ -68,8 +68,8 @@ final class ScanPageStoreTests: XCTestCase {
         let store = ScanPageStore(folder: folder)
         for byte: UInt8 in 1...3 { try store.save(page(byte), source: Data()) }
         store.removeAll()
-        XCTAssertTrue(store.load().isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
+        XCTAssertTrue(store.load().isEmpty)
         try store.save(page(4), source: Data())
         XCTAssertEqual(store.load().count, 1)
     }
