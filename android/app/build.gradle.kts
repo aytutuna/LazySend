@@ -5,6 +5,21 @@ plugins {
     alias(libs.plugins.roborazzi)
 }
 
+abstract class CornerModelAssets : DefaultTask() {
+    @get:InputFiles
+    abstract val model: ConfigurableFileCollection
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun copy() {
+        val file = model.singleFile
+        if (!file.exists()) throw GradleException("The corner model is missing: run scripts/fetch_docaligner.sh")
+        file.copyTo(outputDir.get().asFile.resolve(file.name), overwrite = true)
+    }
+}
+
 android {
     namespace = "com.lazysend.lazysend"
     compileSdk = 37
@@ -62,8 +77,21 @@ android {
         }
     }
 
+    // The page photos of the scan model's tests are read straight from the Swift tests' folder.
+    sourceSets.getByName("androidTest").assets.directories.add("../../Tests/LazySendScanModelTests/Fixtures/Pages")
+
     packaging {
         resources.excludes += setOf("/META-INF/{AL2.0,LGPL2.1}", "/META-INF/LICENSE*")
+    }
+}
+
+// The model is fetched, not checked in; a build without it would ship a scanner that finds nothing.
+androidComponents {
+    onVariants { variant ->
+        val task = tasks.register<CornerModelAssets>("add${variant.name.replaceFirstChar { it.uppercase() }}CornerModel") {
+            model.from(rootProject.file("../Sources/LazySendScanModel/Models/fastvit_t8_h_e_bifpn_256_fp32.onnx"))
+        }
+        variant.sources.assets?.addGeneratedSourceDirectory(task, CornerModelAssets::outputDir)
     }
 }
 
@@ -87,6 +115,7 @@ dependencies {
     implementation(libs.camerax.lifecycle)
     implementation(libs.camerax.view)
     implementation(libs.zxing.core)
+    implementation(libs.onnxruntime.android)
 
     implementation(libs.okhttp)
     implementation(libs.okhttp.coroutines)
@@ -94,6 +123,7 @@ dependencies {
     implementation(libs.coroutines.android)
 
     testImplementation(libs.junit)
+    testImplementation(libs.onnxruntime.desktop)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.okhttp.tls)
     testImplementation(libs.mockwebserver)
@@ -104,4 +134,7 @@ dependencies {
     testImplementation(libs.roborazzi)
     testImplementation(libs.roborazzi.compose)
     testImplementation(libs.roborazzi.junit.rule)
+
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
 }
