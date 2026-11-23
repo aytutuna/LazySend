@@ -129,6 +129,22 @@
         }
       }
     },
+    "Zoom" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zoom"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yakınlaştırma"
+          }
+        }
+      }
+    },
     "Connected over %@" : {
       "localizations" : {
         "en" : {

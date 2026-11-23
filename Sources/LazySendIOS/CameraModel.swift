@@ -152,6 +152,7 @@ final class CameraModel: ObservableObject {
                 self.highest = setup.highest
                 self.telephoto = setup.telephoto
                 self.crop = setup.crop
+                self.zoomAnimation?.cancel()
                 self.lowest = setup.lowest
                 self.zoomNow = setup.base
                 self.zoomLevel = 1
@@ -299,7 +300,7 @@ final class CameraModel: ObservableObject {
         if lowest < base { values.insert(lowest / base, at: 0) }
         if (crop || telephoto == nil) && base * 2 <= highest { values.append(2) }
         if let tele = telephoto, tele > base, tele <= highest, abs(tele / base - 2) > 0.01 { values.append(tele / base) }
-        return values.map { LensStop(value: $0) }
+        return values.sorted().map { LensStop(value: $0) }
     }
 
     nonisolated static func thumbnail(of photo: Data) -> UIImage? {

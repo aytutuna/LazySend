@@ -58,6 +58,8 @@ struct ZoomControl: View {
     @ObservedObject var camera: CameraModel
     @State private var wheelOpen = false
     @State private var startZoom: Double?
+    @State private var dragOrigin: CGFloat?
+    @GestureState private var pressed = false
     @State private var hold: Task<Void, Never>?
     @State private var closing: Task<Void, Never>?
     @State private var haptic = UISelectionFeedbackGenerator()
@@ -73,6 +75,7 @@ struct ZoomControl: View {
         .frame(height: 52)
         .animation(.easeOut(duration: 0.15), value: wheelOpen)
         .simultaneousGesture(touch)
+        .onChange(of: pressed) { _, down in if !down { released() } }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Zoom")
         .accessibilityValue(ZoomDial.label(camera.zoomLevel, active: true))
@@ -166,22 +169,29 @@ struct ZoomControl: View {
                         wheelOpen = true
                     }
                 }
-                if abs(drag.translation.width) > 6 { wheelOpen = true }
+                if dragOrigin == nil, abs(drag.translation.width) > 6 {
+                    dragOrigin = drag.translation.width
+                    wheelOpen = true
+                }
                 guard wheelOpen, let start = startZoom else { return }
-                let zoom = ZoomDial.zoom(from: start, dragged: drag.translation.width, in: range)
+                let zoom = ZoomDial.zoom(from: start, dragged: drag.translation.width - (dragOrigin ?? 0), in: range)
                 if ZoomDial.crossesStop(from: camera.zoomLevel, to: zoom, stops: values) { haptic.selectionChanged() }
                 camera.setZoom(zoom)
             }
-            .onEnded { _ in
-                hold?.cancel()
-                startZoom = nil
-                guard wheelOpen else { return }
-                closing = Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 1_500_000_000)
-                    guard !Task.isCancelled else { return }
-                    wheelOpen = false
-                }
-            }
+            .updating($pressed) { _, state, _ in state = true }
+    }
+
+    // Runs when the finger lifts and also when the system takes the touch away, which a gesture's own end does not.
+    private func released() {
+        hold?.cancel()
+        startZoom = nil
+        dragOrigin = nil
+        guard wheelOpen else { return }
+        closing = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard !Task.isCancelled else { return }
+            wheelOpen = false
+        }
     }
 }
 #endif

@@ -3,8 +3,8 @@ import XCTest
 @testable import LazySendIOS
 
 final class LensStopTests: XCTestCase {
-    private func values(_ base: Double, _ lowest: Double, _ highest: Double, _ telephoto: Double?) -> [Double] {
-        CameraModel.lensStops(base: base, lowest: lowest, highest: highest, telephoto: telephoto).map(\.value)
+    private func values(_ base: Double, _ lowest: Double, _ highest: Double, _ telephoto: Double?, crop: Bool = false) -> [Double] {
+        CameraModel.lensStops(base: base, lowest: lowest, highest: highest, telephoto: telephoto, crop: crop).map(\.value)
     }
 
     func testATripleCameraHasTheUltraWideTheMainLensAndTheTelephotoRatio() {
