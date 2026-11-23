@@ -113,7 +113,7 @@ struct ScanPagesView: View {
             Menu {
                 Button("View", systemImage: "eye") { viewing = page }
                 Button("Crop", systemImage: "crop") { scan.recut(page) }
-                    .disabled(scan.working)
+                    .disabled(scan.working || sending)
                 Button("Move earlier", systemImage: "arrow.up") { scan.shift(page.id, by: -1) }
                     .disabled(index == 0)
                 Button("Move later", systemImage: "arrow.down") { scan.shift(page.id, by: 1) }
@@ -131,9 +131,10 @@ struct ScanPagesView: View {
         }
     }
 
-    /// A page is not deleted while another is being cut again, since the cut would bring it back.
+    /// A page is not deleted while another is being cut again, since the cut would bring it back, nor while the pages are
+    /// being sent, since it would go anyway.
     private var busy: Bool {
-        scan.working || scan.pageEditing != nil
+        scan.working || scan.pageEditing != nil || sending
     }
 
     private func done() {
