@@ -341,9 +341,7 @@ final class TransferLinkTests: XCTestCase {
 
         var other = content
         other[0] = other[0] &+ 1
-        let different = try await phone.beginFile("IMG_0012.jpg", other, sourceId: "asset-other")
-        XCTAssertFalse(different.done)
-        _ = try await phone.put(different.id, offset: 0, other)
+        try await phone.upload("IMG_0012.jpg", other, sourceId: "asset-other")
         XCTAssertEqual(files(in: phoneFolder.appendingPathComponent("Gallery")).count, 2)
     }
 
