@@ -208,7 +208,7 @@ struct ApiError: Codable {
     var offset: Int64?
 }
 
-/// Why a request to the computer failed: its error answer (the codes are the stable ones in CONTRACTS.md),
+/// Why a request to the computer failed: its error answer (the codes are the stable ones),
 /// or a connection that did not work.
 public enum LinkError: Error, LocalizedError, Equatable {
     case refused(status: Int, code: String, message: String, offset: Int64?)

@@ -87,5 +87,5 @@ data class OutboxReply(val items: List<OutboxEntry> = emptyList(), val more: Boo
 @Serializable
 data class ApiError(val error: String, val message: String = "", val offset: Long? = null)
 
-/** An error answer from the PC: [code] is one of the stable codes in CONTRACTS.md. */
+/** An error answer from the PC: [code] is one of the stable codes. */
 class LinkException(val status: Int, val code: String, message: String, val offset: Long? = null) : Exception(message)

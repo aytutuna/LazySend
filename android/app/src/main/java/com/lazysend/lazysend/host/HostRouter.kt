@@ -33,7 +33,7 @@ class PairBody(
 )
 
 /**
- * What the host does with each request (the routes are in CONTRACTS.md). Unpaired clients may only check reachability and
+ * What the host does with each request. Unpaired clients may only check reachability and
  * pair with the open session's token or short code; everything else needs a guest's id and secret, and a wrong secret gets
  * 401. Every request counts towards its sender's rate limit, every failed secret or token towards its failure limit.
  */

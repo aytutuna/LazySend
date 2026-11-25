@@ -6,7 +6,7 @@ import java.io.EOFException
 import java.io.InputStream
 import kotlinx.serialization.encodeToString
 
-/** An error answer: a status and one of the stable codes in CONTRACTS.md. */
+/** An error answer: a status and one of the stable codes. */
 class HostError(val status: Int, val code: String, message: String, val offset: Long? = null) : Exception(message) {
     companion object {
         val unauthorized = HostError(401, "unauthorized", "This phone no longer recognizes this device. Pair it again.")

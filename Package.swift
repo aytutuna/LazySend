@@ -1,7 +1,7 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
-// LazySendKit is the phone side of the link in CONTRACTS.md and needs Foundation and Network only, so the
+// LazySendKit is the phone side of the link and needs Foundation and Network only, so the
 // Mac app can use it too. LazySendIOS holds the iPhone's views and services (every file is wrapped in
 // `#if os(iOS)`); ios/project.yml starts it from a thin app target. LazySendServer is the host side of
 // the link, which the Mac and the iPhone both run, and LazySendMac the Mac app's views and services (every file

@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 
-/// The short code of a pairing session, typed by a guest that cannot scan the QR code (CONTRACTS.md, "Short code").
+/// The short code of a pairing session, typed by a guest that cannot scan the QR code.
 public enum ShortCode {
     public static let length = 8
     public static let alphabet = Array("0123456789ABCDEFGHJKMNPQRSTVWXYZ")

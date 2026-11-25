@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 @testable import LazySendKit
 
-/// The computer's side of CONTRACTS.md, just enough for the client tests: pairing, items and their chunks,
+/// The computer's side of the link, just enough for the client tests: pairing, items and their chunks,
 /// the gallery index and the outbox, with hooks to break a connection or refuse a request.
 final class FakePc: @unchecked Sendable {
     struct Upload {

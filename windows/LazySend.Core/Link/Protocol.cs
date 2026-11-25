@@ -7,7 +7,7 @@ namespace LazySend.Core;
 
 /// <summary>
 /// The link between a paired phone and the desktop: HTTP/1.1 over TLS, the phone always opening the
-/// connection. The routes and their bodies are in CONTRACTS.md; this holds the constants, the
+/// connection. This holds the constants, the
 /// message types and the error codes.
 /// </summary>
 public static class Protocol

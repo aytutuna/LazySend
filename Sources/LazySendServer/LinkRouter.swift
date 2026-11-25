@@ -124,7 +124,7 @@ public struct LinkResponse {
     }
 }
 
-/// What the phone link server does with each request (the routes are in CONTRACTS.md). Unpaired clients may only
+/// What the phone link server does with each request. Unpaired clients may only
 /// check reachability and pair with the open pairing session's token; everything else needs a paired phone's id and
 /// secret, and a wrong secret gets 401. Every request counts towards the sender's rate limit, every failed secret or
 /// token towards its failure limit. The `on...` closures are called on the request's task.
