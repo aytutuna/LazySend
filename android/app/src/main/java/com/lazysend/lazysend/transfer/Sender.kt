@@ -186,13 +186,17 @@ class Sender(
     private suspend fun upload(send: OutgoingSend) {
         val id = send.id
         if (!uploading.add(id)) return
+        var sentTo: Pc? = null
         try {
+            // Another run of the same row may have delivered it while this one waited for its turn.
+            if (outgoing.get(id) == null) return
             val pc = connector.pc(send.pcId)
             if (pc == null) {
                 outgoing.remove(id)
                 timeline.update(id) { it.copy(state = EntryState.Failed, detail = "This device is not paired any more") }
                 return
             }
+            sentTo = pc
             timeline.update(id) { it.copy(state = EntryState.Active, detail = "") }
             val file = outgoing.file(send)
             val first = connector.connect(pc, userAction = true)
@@ -219,8 +223,7 @@ class Sender(
             timeline.update(id) { it.copy(state = EntryState.Paused) }
             throw e
         } catch (e: LinkException) {
-            val pc = connector.pc(send.pcId)
-            if (e.status == 401 && pc != null) forgottenBy(pc, id)
+            if (e.status == 401 && sentTo != null) forgottenBy(sentTo, id)
             else timeline.update(id) { it.copy(state = EntryState.Failed, detail = e.message.orEmpty()) }
         } catch (e: Exception) {
             // A file that cannot be read, a PC that cannot be reached and a refusal all end this one attempt, not the app; the copy stays.
@@ -233,6 +236,11 @@ class Sender(
 
     /** The PC does not know this phone any more: it is dropped, what waited for it fails, and the rows say why. */
     private fun forgottenBy(pc: Pc, id: String) {
+        // Pairing again in the meantime replaced the secret; the refusal was for the old one and the computer stays.
+        if (connector.pc(pc.id)?.secret != pc.secret) {
+            timeline.update(id) { it.copy(state = EntryState.Failed, detail = "Pairing changed while this was sent. Send it again.") }
+            return
+        }
         connector.forgotten(pc)
         val reason = "${pc.name} no longer knows this phone."
         for (send in outgoing.pending.filter { it.pcId == pc.id }) {
@@ -353,7 +361,7 @@ class Sender(
 
     /** The run stops at once and the PC leaves the list, instead of every photo being posted to be refused. */
     private fun galleryForgotten(pc: Pc, id: String) {
-        connector.pc(pc.id)?.let { forgottenBy(it, id) } ?: failGallery(id, "${pc.name} no longer knows this phone.")
+        if (connector.pc(pc.id) != null) forgottenBy(pc, id) else failGallery(id, "${pc.name} no longer knows this phone.")
     }
 
     private fun failGallery(id: String, reason: String) {

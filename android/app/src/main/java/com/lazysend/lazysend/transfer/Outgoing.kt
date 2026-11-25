@@ -36,15 +36,17 @@ class Outgoing(private val folder: File) {
     fun file(send: OutgoingSend) = File(folder, send.id)
 
     /** Copies [input] and records the send; the copy is removed again if it cannot be finished. */
-    @Synchronized
     fun add(send: OutgoingSend, input: InputStream): OutgoingSend {
         folder.mkdirs()
         val copy = file(send)
         try {
+            // The copy of a big file takes a while and runs outside the lock, which the screen reads the list through.
             copy.outputStream().use { input.copyTo(it) }
             val kept = send.copy(size = copy.length())
-            sends = sends.filterNot { it.id == send.id } + kept
-            save()
+            synchronized(this) {
+                sends = sends.filterNot { it.id == send.id } + kept
+                save()
+            }
             return kept
         } catch (e: Exception) {
             copy.delete()

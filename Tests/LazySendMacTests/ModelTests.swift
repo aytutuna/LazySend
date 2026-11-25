@@ -370,8 +370,9 @@ final class ModelTests: XCTestCase {
 
     func testAnOpenAddressSendsNothing() async throws {
         let phone = try await fixture.pair()
-        model.open([URL(string: "lazysend:open?file=%2Ftmp%2Fa.txt")!, URL(string: "lazysend://open?file=%2Ftmp%2Fb.txt")!,
-                    URL(string: "lazysend://pair?v=1&file=%2Ftmp%2Fc.txt")!])
+        let real = try fixture.file("named.txt").path.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
+        model.open([URL(string: "lazysend:open?file=" + real)!, URL(string: "lazysend://open?file=" + real)!,
+                    URL(string: "lazysend://pair?v=1&file=" + real)!])
         XCTAssertTrue(fixture.service.outbox.pending(phone.id).isEmpty)
     }
 

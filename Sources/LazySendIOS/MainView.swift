@@ -333,7 +333,7 @@ struct EntryRow: View {
             if entry.kind == .file, sent, entry.state == .active {
                 Button("Stop") { model.stopSending(entry.id) }
             }
-            if entry.kind == .text || entry.kind == .link, sent, entry.pcId != nil, entry.state == .paused || entry.state == .failed {
+            if entry.kind == .text || entry.kind == .link, sent, entry.pcId != nil, !entry.id.hasPrefix(HostModel.sentPrefix), entry.state == .paused || entry.state == .failed {
                 Button("Resume") { model.resumeSend(entry.id) }
                     .accessibilityIdentifier("entry.note.resume")
             }

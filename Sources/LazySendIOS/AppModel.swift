@@ -696,6 +696,7 @@ final class AppModel: ObservableObject {
         } else if let index = jobs.firstIndex(where: { $0.entryId == entryId }) {
             jobs.remove(at: index)
             resuming.remove(entryId)
+            if entryId.hasPrefix("share-") { queued.remove(String(entryId.dropFirst("share-".count))) }
             finish(entryId, .paused)
         }
     }
