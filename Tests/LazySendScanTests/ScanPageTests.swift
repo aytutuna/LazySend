@@ -90,6 +90,32 @@ final class ScanPageTests: XCTestCase {
 }
 
 final class ScanPdfTests: XCTestCase {
+    func testALongScanIsWrittenToAFilePageByPageAndMatchesTheOneBuiltInMemory() throws {
+        let sample = try page(width: 40, height: 60, dpi: 72, gray: false, shade: 120)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("long-scan-" + UUID().uuidString + ".pdf")
+        defer { try? FileManager.default.removeItem(at: url) }
+        var asked: [Int] = []
+
+        // Each page is made when it is asked for and dropped after: 150 pages of 400 KB are never in memory together.
+        try ScanPdf.write(count: 150, to: url) { index in
+            asked.append(index)
+            var made = sample
+            made.jpeg = Data(repeating: UInt8(index % 251), count: 400_000)
+            return made
+        }
+
+        XCTAssertEqual(asked, Array(0..<150))
+        let written = try Data(contentsOf: url)
+        let text = String(decoding: written, as: UTF8.self)
+        XCTAssertTrue(text.contains("/Count 150 /Kids [3 0 R 6 0 R"))
+        XCTAssertTrue(text.hasSuffix("%%EOF\n"))
+        let small = [sample, sample]
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("two-" + UUID().uuidString + ".pdf")
+        defer { try? FileManager.default.removeItem(at: file) }
+        try ScanPdf.write(count: 2, to: file) { small[$0] }
+        XCTAssertEqual(try Data(contentsOf: file), ScanPdf.make(small))
+    }
+
     private func page(width: Int, height: Int, dpi: Int, gray: Bool, shade: UInt8) throws -> ScanPage {
         let image = RgbaImage.filled(width: width, height: height, r: shade, g: shade, b: shade)
         let jpeg = try XCTUnwrap(JpegEncoder.encode(image, gray: gray))
