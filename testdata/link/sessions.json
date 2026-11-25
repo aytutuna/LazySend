@@ -1,0 +1,467 @@
+{
+  "about": "Live sessions between a phone and a host, each a list of steps. begin posts a file (hash: its sha256 is sent; hashOfOther: the sha256 of other bytes); put sends bytes from..to of the content, and a to past the end sends more than the file has; putAll sends the rest in chunks; drop starts a chunk of declared bytes at offset, sends only sent of them and hangs up; settle waits for the host to stop writing and checks its offset lies between the two numbers; resume sends the rest from that offset; putError expects the answer status and code (and offset); stateError the same for asking the state; restart stops the host and starts it again on the same folders. post sends a text or a link, expectReceived lists what the host got, oldest first. queue puts a text or a link in the host's outbox for the phone, poll reads the outbox (no waiting) and ack acknowledges the item at index of the last poll. content is mod251 with a size, or large (large-file.json). readers, when present, limits a case to those code bases.",
+  "cases": [
+    {
+      "name": "a file in chunks in order",
+      "steps": [
+        {
+          "op": "begin",
+          "name": "movie.mp4",
+          "content": {
+            "pattern": "mod251",
+            "size": 500000
+          },
+          "hash": true,
+          "expect": {
+            "offset": 0,
+            "done": false
+          }
+        },
+        {
+          "op": "put",
+          "from": 0,
+          "to": 200000,
+          "expect": {
+            "offset": 200000,
+            "done": false
+          }
+        },
+        {
+          "op": "state",
+          "expect": {
+            "offset": 200000,
+            "done": false
+          }
+        },
+        {
+          "op": "put",
+          "from": 200000,
+          "to": 500000,
+          "expect": {
+            "offset": 500000,
+            "done": true
+          }
+        },
+        {
+          "op": "expectFile",
+          "name": "movie.mp4",
+          "content": {
+            "pattern": "mod251",
+            "size": 500000
+          }
+        }
+      ]
+    },
+    {
+      "name": "a large file in chunks",
+      "steps": [
+        {
+          "op": "begin",
+          "name": "large.bin",
+          "content": "large",
+          "hash": true,
+          "expect": {
+            "offset": 0,
+            "done": false
+          }
+        },
+        {
+          "op": "putAll",
+          "chunk": 8388608,
+          "expect": {
+            "done": true
+          }
+        },
+        {
+          "op": "expectFile",
+          "name": "large.bin",
+          "content": "large"
+        }
+      ]
+    },
+    {
+      "name": "a drop in the middle of a chunk and a resume from where the host stopped",
+      "steps": [
+        {
+          "op": "begin",
+          "name": "drop.bin",
+          "content": {
+            "pattern": "mod251",
+            "size": 500000
+          },
+          "hash": true,
+          "expect": {
+            "offset": 0,
+            "done": false
+          }
+        },
+        {
+          "op": "put",
+          "from": 0,
+          "to": 100000,
+          "expect": {
+            "offset": 100000,
+            "done": false
+          }
+        },
+        {
+          "op": "drop",
+          "offset": 100000,
+          "declared": 200000,
+          "sent": 60000
+        },
+        {
+          "op": "settle",
+          "between": [
+            100000,
+            160000
+          ]
+        },
+        {
+          "op": "state",
+          "expect": {
+            "done": false
+          }
+        },
+        {
+          "op": "resume",
+          "expect": {
+            "done": true
+          }
+        },
+        {
+          "op": "expectFile",
+          "name": "drop.bin",
+          "content": {
+            "pattern": "mod251",
+            "size": 500000
+          }
+        }
+      ]
+    },
+    {
+      "name": "a wrong offset is answered with the right one",
+      "steps": [
+        {
+          "op": "begin",
+          "name": "offset.bin",
+          "content": {
+            "pattern": "mod251",
+            "size": 20000
+          },
+          "hash": true,
+          "expect": {
+            "offset": 0,
+            "done": false
+          }
+        },
+        {
+          "op": "put",
+          "from": 0,
+          "to": 5000,
+          "expect": {
+            "offset": 5000,
+            "done": false
+          }
+        },
+        {
+          "op": "putError",
+          "from": 1000,
+          "to": 6000,
+          "status": 409,
+          "code": "offsetMismatch",
+          "offset": 5000
+        },
+        {
+          "op": "put",
+          "from": 5000,
+          "to": 20000,
+          "expect": {
+            "offset": 20000,
+            "done": true
+          }
+        },
+        {
+          "op": "expectFile",
+          "name": "offset.bin",
+          "content": {
+            "pattern": "mod251",
+            "size": 20000
+          }
+        }
+      ]
+    },
+    {
+      "name": "a file that does not match its fingerprint is thrown away",
+      "steps": [
+        {
+          "op": "begin",
+          "name": "bad.bin",
+          "content": {
+            "pattern": "mod251",
+            "size": 5000
+          },
+          "hashOfOther": true,
+          "expect": {
+            "offset": 0,
+            "done": false
+          }
+        },
+        {
+          "op": "putError",
+          "from": 0,
+          "to": 5000,
+          "status": 422,
+          "code": "hashMismatch"
+        },
+        {
+          "op": "stateError",
+          "status": 404,
+          "code": "notFound"
+        },
+        {
+          "op": "expectNoFile",
+          "name": "bad.bin"
+        }
+      ]
+    },
+    {
+      "name": "a chunk past the end is refused",
+      "steps": [
+        {
+          "op": "begin",
+          "name": "end.bin",
+          "content": {
+            "pattern": "mod251",
+            "size": 1000
+          },
+          "hash": true,
+          "expect": {
+            "offset": 0,
+            "done": false
+          }
+        },
+        {
+          "op": "putError",
+          "from": 0,
+          "to": 1001,
+          "status": 400,
+          "code": "badRequest"
+        },
+        {
+          "op": "put",
+          "from": 0,
+          "to": 1000,
+          "expect": {
+            "offset": 1000,
+            "done": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "a resume after the host restarts",
+      "readers": [
+        "csharp",
+        "swift"
+      ],
+      "steps": [
+        {
+          "op": "begin",
+          "name": "restart.bin",
+          "content": {
+            "pattern": "mod251",
+            "size": 300000
+          },
+          "hash": true,
+          "expect": {
+            "offset": 0,
+            "done": false
+          }
+        },
+        {
+          "op": "put",
+          "from": 0,
+          "to": 100000,
+          "expect": {
+            "offset": 100000,
+            "done": false
+          }
+        },
+        {
+          "op": "restart"
+        },
+        {
+          "op": "state",
+          "expect": {
+            "offset": 100000,
+            "done": false
+          }
+        },
+        {
+          "op": "put",
+          "from": 100000,
+          "to": 300000,
+          "expect": {
+            "offset": 300000,
+            "done": true
+          }
+        },
+        {
+          "op": "expectFile",
+          "name": "restart.bin",
+          "content": {
+            "pattern": "mod251",
+            "size": 300000
+          }
+        }
+      ]
+    },
+    {
+      "name": "an empty file is done at once",
+      "steps": [
+        {
+          "op": "begin",
+          "name": "empty.txt",
+          "content": {
+            "pattern": "mod251",
+            "size": 0
+          },
+          "hash": true,
+          "expect": {
+            "offset": 0,
+            "done": true
+          }
+        },
+        {
+          "op": "expectFile",
+          "name": "empty.txt",
+          "content": {
+            "pattern": "mod251",
+            "size": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "messages arrive in the order they were sent",
+      "steps": [
+        {
+          "op": "post",
+          "kind": "text",
+          "text": "one"
+        },
+        {
+          "op": "post",
+          "kind": "link",
+          "url": "https://alazy.app/a"
+        },
+        {
+          "op": "post",
+          "kind": "text",
+          "text": "three"
+        },
+        {
+          "op": "expectReceived",
+          "items": [
+            [
+              "text",
+              "one"
+            ],
+            [
+              "link",
+              "https://alazy.app/a"
+            ],
+            [
+              "text",
+              "three"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "what waits for the phone is listed in order and leaves when acknowledged",
+      "steps": [
+        {
+          "op": "queue",
+          "kind": "text",
+          "text": "first"
+        },
+        {
+          "op": "queue",
+          "kind": "link",
+          "url": "https://alazy.app/b"
+        },
+        {
+          "op": "queue",
+          "kind": "text",
+          "text": "third"
+        },
+        {
+          "op": "poll",
+          "items": [
+            [
+              "text",
+              "first"
+            ],
+            [
+              "link",
+              "https://alazy.app/b"
+            ],
+            [
+              "text",
+              "third"
+            ]
+          ]
+        },
+        {
+          "op": "poll",
+          "items": [
+            [
+              "text",
+              "first"
+            ],
+            [
+              "link",
+              "https://alazy.app/b"
+            ],
+            [
+              "text",
+              "third"
+            ]
+          ]
+        },
+        {
+          "op": "ack",
+          "index": 0
+        },
+        {
+          "op": "poll",
+          "items": [
+            [
+              "link",
+              "https://alazy.app/b"
+            ],
+            [
+              "text",
+              "third"
+            ]
+          ]
+        },
+        {
+          "op": "ack",
+          "index": 0
+        },
+        {
+          "op": "ack",
+          "index": 0
+        },
+        {
+          "op": "poll",
+          "items": []
+        }
+      ]
+    }
+  ]
+}

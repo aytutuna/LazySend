@@ -1,0 +1,456 @@
+{
+  "about": "The 8-character code a person types to pair without a camera. normalize: typed text and the canonical code, or null when it is not 8 characters of the alphabet. redeem: a pairing session opened at second 0 with the token bytes 16 to 31 and a lifetime of 300 seconds; each attempt presents a token at a second from a peer address. $token is the session's token, $shortCode its short code, $shortCodeTyped its short code in lower case with a dash in the middle. A null token is nothing presented.",
+  "alphabet": "0123456789ABCDEFGHJKMNPQRSTVWXYZ",
+  "lifetimeSeconds": 300,
+  "maxFailedPerPeer": 5,
+  "maxFailedTotal": 25,
+  "tokenBytes": [
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31
+  ],
+  "normalize": [
+    {
+      "typed": "7KQ2M9XD",
+      "canonical": "7KQ2M9XD"
+    },
+    {
+      "typed": "7kq2m9xd",
+      "canonical": "7KQ2M9XD"
+    },
+    {
+      "typed": "7kq2-m9xd",
+      "canonical": "7KQ2M9XD"
+    },
+    {
+      "typed": "7KQ2 M9XD",
+      "canonical": "7KQ2M9XD"
+    },
+    {
+      "typed": " 7KQ2 M9XD ",
+      "canonical": "7KQ2M9XD"
+    },
+    {
+      "typed": "7K-Q2-M9-XD",
+      "canonical": "7KQ2M9XD"
+    },
+    {
+      "typed": "7KQ2M9XD---",
+      "canonical": "7KQ2M9XD"
+    },
+    {
+      "typed": "00000000",
+      "canonical": "00000000"
+    },
+    {
+      "typed": "7KQ2M9X",
+      "canonical": null
+    },
+    {
+      "typed": "7KQ2M9XDA",
+      "canonical": null
+    },
+    {
+      "typed": "7KQ2M9XI",
+      "canonical": null
+    },
+    {
+      "typed": "7KQ2M9XL",
+      "canonical": null
+    },
+    {
+      "typed": "7KQ2M9XO",
+      "canonical": null
+    },
+    {
+      "typed": "7KQ2M9XU",
+      "canonical": null
+    },
+    {
+      "typed": "7KQ2M9XÐ",
+      "canonical": null
+    },
+    {
+      "typed": "7KQ2_M9XD",
+      "canonical": null
+    },
+    {
+      "typed": "7KQ2\tM9XD",
+      "canonical": null
+    },
+    {
+      "typed": "",
+      "canonical": null
+    },
+    {
+      "typed": "----",
+      "canonical": null
+    },
+    {
+      "typed": null,
+      "canonical": null
+    },
+    {
+      "typed": "7KQ2M9XD                              ",
+      "canonical": null
+    },
+    {
+      "typed": "EBESExQVFhcYGRobHB0eHw",
+      "canonical": null
+    }
+  ],
+  "redeem": [
+    {
+      "name": "the token is accepted once",
+      "attempts": [
+        {
+          "token": "$token",
+          "at": 1,
+          "peer": "10.0.0.1",
+          "expect": "accepted"
+        },
+        {
+          "token": "$token",
+          "at": 2,
+          "peer": "10.0.0.1",
+          "expect": "alreadyUsed"
+        }
+      ]
+    },
+    {
+      "name": "the short code is accepted once",
+      "attempts": [
+        {
+          "token": "$shortCode",
+          "at": 1,
+          "peer": "10.0.0.1",
+          "expect": "accepted"
+        },
+        {
+          "token": "$shortCode",
+          "at": 2,
+          "peer": "10.0.0.1",
+          "expect": "alreadyUsed"
+        }
+      ]
+    },
+    {
+      "name": "the short code typed in lower case with a dash",
+      "attempts": [
+        {
+          "token": "$shortCodeTyped",
+          "at": 1,
+          "peer": "10.0.0.1",
+          "expect": "accepted"
+        }
+      ]
+    },
+    {
+      "name": "the token then the short code",
+      "attempts": [
+        {
+          "token": "$token",
+          "at": 1,
+          "peer": "10.0.0.1",
+          "expect": "accepted"
+        },
+        {
+          "token": "$shortCode",
+          "at": 2,
+          "peer": "10.0.0.1",
+          "expect": "alreadyUsed"
+        }
+      ]
+    },
+    {
+      "name": "wrong things are refused and the right one still works",
+      "attempts": [
+        {
+          "token": "",
+          "at": 1,
+          "peer": "10.0.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "hello",
+          "at": 2,
+          "peer": "10.0.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "AAAAAAAAAAAAAAAAAAAAAA",
+          "at": 3,
+          "peer": "10.0.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": null,
+          "at": 4,
+          "peer": "10.0.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "$token",
+          "at": 6,
+          "peer": "10.0.0.1",
+          "expect": "accepted"
+        }
+      ]
+    },
+    {
+      "name": "five wrong ones from one peer lock that peer out, not the others",
+      "attempts": [
+        {
+          "token": "ZZZZZZZZ",
+          "at": 1,
+          "peer": "10.0.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 2,
+          "peer": "10.0.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 3,
+          "peer": "10.0.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 4,
+          "peer": "10.0.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 5,
+          "peer": "10.0.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "$token",
+          "at": 10,
+          "peer": "10.0.0.1",
+          "expect": "closed"
+        },
+        {
+          "token": "$token",
+          "at": 11,
+          "peer": "10.9.9.9",
+          "expect": "accepted"
+        }
+      ]
+    },
+    {
+      "name": "twenty-five wrong ones from many peers close the session",
+      "attempts": [
+        {
+          "token": "ZZZZZZZZ",
+          "at": 0,
+          "peer": "10.1.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 1,
+          "peer": "10.1.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 2,
+          "peer": "10.1.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 3,
+          "peer": "10.1.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 4,
+          "peer": "10.1.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 5,
+          "peer": "10.2.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 6,
+          "peer": "10.2.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 7,
+          "peer": "10.2.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 8,
+          "peer": "10.2.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 9,
+          "peer": "10.2.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 10,
+          "peer": "10.3.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 11,
+          "peer": "10.3.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 12,
+          "peer": "10.3.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 13,
+          "peer": "10.3.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 14,
+          "peer": "10.3.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 15,
+          "peer": "10.4.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 16,
+          "peer": "10.4.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 17,
+          "peer": "10.4.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 18,
+          "peer": "10.4.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 19,
+          "peer": "10.4.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 20,
+          "peer": "10.5.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 21,
+          "peer": "10.5.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 22,
+          "peer": "10.5.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 23,
+          "peer": "10.5.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 24,
+          "peer": "10.5.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "$token",
+          "at": 100,
+          "peer": "10.99.0.1",
+          "expect": "closed"
+        }
+      ]
+    },
+    {
+      "name": "the session expires after five minutes",
+      "attempts": [
+        {
+          "token": "ZZZZZZZZ",
+          "at": 299,
+          "peer": "10.0.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "$token",
+          "at": 300,
+          "peer": "10.0.0.1",
+          "expect": "expired"
+        },
+        {
+          "token": "$token",
+          "at": 301,
+          "peer": "10.0.0.1",
+          "expect": "expired"
+        }
+      ]
+    },
+    {
+      "name": "the right token just before the end",
+      "attempts": [
+        {
+          "token": "$token",
+          "at": 299,
+          "peer": "10.0.0.1",
+          "expect": "accepted"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "about": "A file too large to commit, made in the test: byte i is i modulo 251. Send it in chunks of chunkBytes and check what arrives has the sha256.",
+  "size": 33554432,
+  "pattern": "mod251",
+  "chunkBytes": 8388608,
+  "sha256": "1cbd22e11bc209926b1e050d644779ba4105d7a023109c3b78bb35edf5c7c292"
+}

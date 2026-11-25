@@ -1,0 +1,327 @@
+{
+  "about": "What a desktop's QR code carries (lazysend://pair?...) and what a reader must make of it. result is ok, notPairingCode, newerVersion or damaged. For ok, pairing holds what is read; checkCode is the six digits the two screens show, from the first 4 bytes of the fingerprint, spaced 3 and 3. The fingerprint is the bytes 0 to 31, the token the bytes 16 to 31.",
+  "cases": [
+    {
+      "name": "a full code",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "ok",
+      "pairing": {
+        "desktopId": "desktop-0001",
+        "name": "Aytu's PC",
+        "fingerprint": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "addresses": [
+          "192.168.1.5",
+          "10.0.0.2"
+        ],
+        "port": 52734,
+        "token": "EBESExQVFhcYGRobHB0eHw",
+        "checkCode": "066 051"
+      }
+    },
+    {
+      "name": "no address list",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&p=52734&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "ok",
+      "pairing": {
+        "desktopId": "desktop-0001",
+        "name": "Aytu's PC",
+        "fingerprint": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "addresses": [],
+        "port": 52734,
+        "token": "EBESExQVFhcYGRobHB0eHw",
+        "checkCode": "066 051"
+      }
+    },
+    {
+      "name": "an empty address list",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=&p=52734&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "ok",
+      "pairing": {
+        "desktopId": "desktop-0001",
+        "name": "Aytu's PC",
+        "fingerprint": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "addresses": [],
+        "port": 52734,
+        "token": "EBESExQVFhcYGRobHB0eHw",
+        "checkCode": "066 051"
+      }
+    },
+    {
+      "name": "an IPv6 address with a zone",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=fe80%3A%3A1%25en0,192.168.1.5&p=52734&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "ok",
+      "pairing": {
+        "desktopId": "desktop-0001",
+        "name": "Aytu's PC",
+        "fingerprint": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "addresses": [
+          "fe80::1%en0",
+          "192.168.1.5"
+        ],
+        "port": 52734,
+        "token": "EBESExQVFhcYGRobHB0eHw",
+        "checkCode": "066 051"
+      }
+    },
+    {
+      "name": "a name with non-ASCII letters",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=B%C3%BCro-PC%20%E6%97%A5%E6%9C%AC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "ok",
+      "pairing": {
+        "desktopId": "desktop-0001",
+        "name": "Büro-PC 日本",
+        "fingerprint": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "addresses": [
+          "192.168.1.5",
+          "10.0.0.2"
+        ],
+        "port": 52734,
+        "token": "EBESExQVFhcYGRobHB0eHw",
+        "checkCode": "066 051"
+      }
+    },
+    {
+      "name": "the lowest port",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=1&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "ok",
+      "pairing": {
+        "desktopId": "desktop-0001",
+        "name": "Aytu's PC",
+        "fingerprint": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "addresses": [
+          "192.168.1.5",
+          "10.0.0.2"
+        ],
+        "port": 1,
+        "token": "EBESExQVFhcYGRobHB0eHw",
+        "checkCode": "066 051"
+      }
+    },
+    {
+      "name": "the highest port",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=65535&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "ok",
+      "pairing": {
+        "desktopId": "desktop-0001",
+        "name": "Aytu's PC",
+        "fingerprint": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "addresses": [
+          "192.168.1.5",
+          "10.0.0.2"
+        ],
+        "port": 65535,
+        "token": "EBESExQVFhcYGRobHB0eHw",
+        "checkCode": "066 051"
+      }
+    },
+    {
+      "name": "unknown parameters are ignored",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw&x=1&flag",
+      "result": "ok",
+      "pairing": {
+        "desktopId": "desktop-0001",
+        "name": "Aytu's PC",
+        "fingerprint": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "addresses": [
+          "192.168.1.5",
+          "10.0.0.2"
+        ],
+        "port": 52734,
+        "token": "EBESExQVFhcYGRobHB0eHw",
+        "checkCode": "066 051"
+      }
+    },
+    {
+      "name": "the scheme and host in capitals",
+      "uri": "LAZYSEND://PAIR?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "ok",
+      "pairing": {
+        "desktopId": "desktop-0001",
+        "name": "Aytu's PC",
+        "fingerprint": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "addresses": [
+          "192.168.1.5",
+          "10.0.0.2"
+        ],
+        "port": 52734,
+        "token": "EBESExQVFhcYGRobHB0eHw",
+        "checkCode": "066 051"
+      }
+    },
+    {
+      "name": "a web address",
+      "uri": "https://alazy.app/send/",
+      "result": "notPairingCode"
+    },
+    {
+      "name": "another app scheme",
+      "uri": "otpauth://totp/x?secret=ABC",
+      "result": "notPairingCode"
+    },
+    {
+      "name": "plain text",
+      "uri": "hello",
+      "result": "notPairingCode"
+    },
+    {
+      "name": "empty",
+      "uri": "",
+      "result": "notPairingCode"
+    },
+    {
+      "name": "a newer protocol version",
+      "uri": "lazysend://pair?v=2&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "newerVersion"
+    },
+    {
+      "name": "a newer version with other parts missing",
+      "uri": "lazysend://pair?v=3&z=1",
+      "result": "newerVersion"
+    },
+    {
+      "name": "version zero",
+      "uri": "lazysend://pair?v=0&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "damaged"
+    },
+    {
+      "name": "no version",
+      "uri": "lazysend://pair?id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "damaged"
+    },
+    {
+      "name": "an empty version",
+      "uri": "lazysend://pair?v=&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "damaged"
+    },
+    {
+      "name": "a version in letters",
+      "uri": "lazysend://pair?v=x&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "damaged"
+    },
+    {
+      "name": "the wrong host after the scheme",
+      "uri": "lazysend://send?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "damaged"
+    },
+    {
+      "name": "no id",
+      "uri": "lazysend://pair?v=1&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "damaged"
+    },
+    {
+      "name": "no name",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "damaged"
+    },
+    {
+      "name": "no fingerprint",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "damaged"
+    },
+    {
+      "name": "no port",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "damaged"
+    },
+    {
+      "name": "no token",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=52734",
+      "result": "damaged"
+    },
+    {
+      "name": "a fingerprint of 31 bytes",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHg&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "damaged"
+    },
+    {
+      "name": "a fingerprint of 33 bytes",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8A&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "damaged"
+    },
+    {
+      "name": "a fingerprint with padding",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "damaged"
+    },
+    {
+      "name": "a fingerprint that is not base64url",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "damaged"
+    },
+    {
+      "name": "a token of 15 bytes",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0e",
+      "result": "damaged"
+    },
+    {
+      "name": "a token of 17 bytes",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHwA",
+      "result": "damaged"
+    },
+    {
+      "name": "port zero",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=0&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "damaged"
+    },
+    {
+      "name": "port 65536",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=65536&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "damaged"
+    },
+    {
+      "name": "a port in letters",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=http&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "damaged"
+    },
+    {
+      "name": "an empty port",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "damaged"
+    },
+    {
+      "name": "a repeated parameter",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw&p=52735",
+      "result": "damaged"
+    },
+    {
+      "name": "a parameter with no name",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw&=1",
+      "result": "damaged"
+    },
+    {
+      "name": "a bad percent escape",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw&q=%G1",
+      "result": "damaged"
+    },
+    {
+      "name": "a percent escape cut short",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw&q=%4",
+      "result": "damaged"
+    },
+    {
+      "name": "a space in the code",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p= 52734&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "damaged"
+    },
+    {
+      "name": "a newline in the code",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw\n&x=1",
+      "result": "damaged"
+    },
+    {
+      "name": "a letter outside ASCII, not escaped",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytü%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw",
+      "result": "damaged"
+    },
+    {
+      "name": "a fragment",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw#x",
+      "result": "damaged"
+    },
+    {
+      "name": "longer than 2048 bytes",
+      "uri": "lazysend://pair?v=1&id=desktop-0001&n=Aytu%27s%20PC&fp=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&a=192.168.1.5,10.0.0.2&p=52734&t=EBESExQVFhcYGRobHB0eHw&pad=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "result": "damaged"
+    }
+  ]
+}

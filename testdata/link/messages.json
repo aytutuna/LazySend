@@ -1,0 +1,331 @@
+{
+  "about": "Bodies the link sends and receives. Each reader decodes json as its own type and compares the fields in expect (null means the field is absent). OutboxReply is flattened: ids, kinds and more of the list, and the first text, first clip, second url and third name and size. Unknown fields are ignored. Bodies in invalid must not decode.",
+  "errorCodes": [
+    "unauthorized",
+    "pairingClosed",
+    "tokenInvalid",
+    "tokenExpired",
+    "tokenUsed",
+    "declined",
+    "tooManyDevices",
+    "tooLarge",
+    "rateLimited",
+    "notFound",
+    "methodNotAllowed",
+    "badRequest",
+    "lengthRequired",
+    "busy",
+    "offsetMismatch",
+    "hashMismatch",
+    "diskFull",
+    "rangeNotSatisfiable",
+    "changed",
+    "serverError"
+  ],
+  "cases": [
+    {
+      "name": "a pairing request",
+      "type": "PairRequest",
+      "json": {
+        "token": "EBESExQVFhcYGRobHB0eHw",
+        "phoneId": "phone-0001-xyz",
+        "phoneName": "Aytu's iPhone",
+        "platform": "ios",
+        "appVersion": "1.0.3"
+      },
+      "expect": {
+        "token": "EBESExQVFhcYGRobHB0eHw",
+        "phoneId": "phone-0001-xyz",
+        "phoneName": "Aytu's iPhone",
+        "platform": "ios",
+        "appVersion": "1.0.3"
+      }
+    },
+    {
+      "name": "a pairing answer",
+      "type": "PairResponse",
+      "json": {
+        "protocolVersion": 1,
+        "desktopId": "desktop-0001",
+        "desktopName": "Office PC",
+        "deviceSecret": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      },
+      "expect": {
+        "protocolVersion": 1,
+        "desktopId": "desktop-0001",
+        "desktopName": "Office PC",
+        "deviceSecret": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      }
+    },
+    {
+      "name": "hello",
+      "type": "Hello",
+      "json": {
+        "protocolVersion": 1,
+        "desktopId": "desktop-0001",
+        "desktopName": "Office PC",
+        "maxChunkBytes": 8388608,
+        "addresses": [
+          "192.168.1.5",
+          "fe80::1"
+        ]
+      },
+      "expect": {
+        "protocolVersion": 1,
+        "desktopId": "desktop-0001",
+        "desktopName": "Office PC",
+        "maxChunkBytes": 8388608,
+        "addresses": [
+          "192.168.1.5",
+          "fe80::1"
+        ]
+      }
+    },
+    {
+      "name": "hello with a field a later version adds",
+      "type": "Hello",
+      "json": {
+        "protocolVersion": 1,
+        "desktopId": "desktop-0001",
+        "desktopName": "Office PC",
+        "maxChunkBytes": 65536,
+        "addresses": [],
+        "later": "x"
+      },
+      "expect": {
+        "protocolVersion": 1,
+        "desktopId": "desktop-0001",
+        "desktopName": "Office PC",
+        "maxChunkBytes": 65536,
+        "addresses": []
+      }
+    },
+    {
+      "name": "a text item",
+      "type": "ItemRequest",
+      "json": {
+        "kind": "text",
+        "text": "meeting at 5",
+        "sendId": "AAECAwQFBgcICQoLDA0ODw",
+        "clip": true
+      },
+      "expect": {
+        "kind": "text",
+        "text": "meeting at 5",
+        "sendId": "AAECAwQFBgcICQoLDA0ODw",
+        "clip": true,
+        "url": null,
+        "name": null,
+        "size": null,
+        "sha256": null
+      }
+    },
+    {
+      "name": "a link item",
+      "type": "ItemRequest",
+      "json": {
+        "kind": "link",
+        "url": "https://alazy.app/send/?a=b&c=d"
+      },
+      "expect": {
+        "kind": "link",
+        "url": "https://alazy.app/send/?a=b&c=d",
+        "text": null,
+        "clip": null
+      }
+    },
+    {
+      "name": "a file item",
+      "type": "ItemRequest",
+      "json": {
+        "kind": "file",
+        "name": "movie.mp4",
+        "size": 33554432,
+        "mime": "video/mp4",
+        "modified": "2026-03-14T12:00:00Z",
+        "sourceId": "asset-1",
+        "sha256": "abababababababababababababababababababababababababababababababab"
+      },
+      "expect": {
+        "kind": "file",
+        "name": "movie.mp4",
+        "size": 33554432,
+        "mime": "video/mp4",
+        "sourceId": "asset-1",
+        "sha256": "abababababababababababababababababababababababababababababababab",
+        "text": null,
+        "url": null
+      }
+    },
+    {
+      "name": "text with every kind of escape",
+      "type": "ItemRequest",
+      "json": {
+        "kind": "text",
+        "text": "line one\nline two\t\"quoted\" \\ ü 日 😀"
+      },
+      "expect": {
+        "kind": "text",
+        "text": "line one\nline two\t\"quoted\" \\ ü 日 😀"
+      }
+    },
+    {
+      "name": "the state of a file in progress",
+      "type": "ItemState",
+      "json": {
+        "id": "item-0001-abcd",
+        "offset": 100000,
+        "done": false
+      },
+      "expect": {
+        "id": "item-0001-abcd",
+        "offset": 100000,
+        "done": false,
+        "duplicate": null
+      }
+    },
+    {
+      "name": "the state of a duplicate",
+      "type": "ItemState",
+      "json": {
+        "id": "item-0002-abcd",
+        "offset": 5,
+        "done": true,
+        "duplicate": true
+      },
+      "expect": {
+        "id": "item-0002-abcd",
+        "offset": 5,
+        "done": true,
+        "duplicate": true
+      }
+    },
+    {
+      "name": "an offset past 2^31",
+      "type": "ItemState",
+      "json": {
+        "id": "item-0003-abcd",
+        "offset": 5368709120,
+        "done": false
+      },
+      "expect": {
+        "id": "item-0003-abcd",
+        "offset": 5368709120,
+        "done": false
+      }
+    },
+    {
+      "name": "an outbox with a text, a link and a file",
+      "type": "OutboxReply",
+      "json": {
+        "items": [
+          {
+            "id": "out-0001-abcd",
+            "kind": "text",
+            "text": "one",
+            "clip": true
+          },
+          {
+            "id": "out-0002-abcd",
+            "kind": "link",
+            "url": "https://alazy.app/"
+          },
+          {
+            "id": "out-0003-abcd",
+            "kind": "file",
+            "name": "a.pdf",
+            "size": 10,
+            "mime": "application/pdf",
+            "sourceId": "s1",
+            "taken": "2026-03-14T12:00:00Z"
+          }
+        ],
+        "more": true
+      },
+      "expect": {
+        "ids": [
+          "out-0001-abcd",
+          "out-0002-abcd",
+          "out-0003-abcd"
+        ],
+        "kinds": [
+          "text",
+          "link",
+          "file"
+        ],
+        "more": true,
+        "firstText": "one",
+        "firstClip": true,
+        "secondUrl": "https://alazy.app/",
+        "thirdName": "a.pdf",
+        "thirdSize": 10
+      }
+    },
+    {
+      "name": "an empty outbox",
+      "type": "OutboxReply",
+      "json": {
+        "items": []
+      },
+      "expect": {
+        "ids": [],
+        "kinds": [],
+        "more": false
+      }
+    },
+    {
+      "name": "an error with an offset",
+      "type": "ApiError",
+      "json": {
+        "error": "offsetMismatch",
+        "message": "The file is not at that offset here.",
+        "offset": 5000
+      },
+      "expect": {
+        "error": "offsetMismatch",
+        "message": "The file is not at that offset here.",
+        "offset": 5000
+      }
+    },
+    {
+      "name": "an error without an offset",
+      "type": "ApiError",
+      "json": {
+        "error": "tokenExpired",
+        "message": "This pairing code has expired."
+      },
+      "expect": {
+        "error": "tokenExpired",
+        "message": "This pairing code has expired.",
+        "offset": null
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "not JSON",
+      "type": "ItemState",
+      "body": "hello"
+    },
+    {
+      "name": "cut short",
+      "type": "ItemState",
+      "body": "{\"id\":\"item-0001-abcd\",\"offset\":10"
+    },
+    {
+      "name": "an empty body",
+      "type": "PairResponse",
+      "body": ""
+    },
+    {
+      "name": "the offset as a list",
+      "type": "ItemState",
+      "body": "{\"id\":\"item-0001-abcd\",\"offset\":[10],\"done\":false}"
+    },
+    {
+      "name": "a list instead of an object",
+      "type": "PairResponse",
+      "body": "[1,2]"
+    }
+  ]
+}

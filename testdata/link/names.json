@@ -1,0 +1,103 @@
+{
+  "about": "What a computer or phone must do with names it did not choose. cleanFileName: each name must come out non-empty, at most 240 UTF-8 bytes, well-formed, without a path separator or colon or control character, and without a dot or space at its end. keep means the extension is kept; exact is the whole result. validIds and invalidIds: what may be a device id or item id (8 to 64 of letters, digits, - and _).",
+  "maxFileNameBytes": 240,
+  "cleanFileName": [
+    {
+      "name": "../../etc/passwd"
+    },
+    {
+      "name": "..\\..\\evil:name?.txt"
+    },
+    {
+      "name": "C:\\Windows\\win.ini"
+    },
+    {
+      "name": "a/b/c.txt"
+    },
+    {
+      "name": "bell\u0007.txt"
+    },
+    {
+      "name": "nul\u0000byte.txt"
+    },
+    {
+      "name": "c1control.txt"
+    },
+    {
+      "name": "trailing dots..."
+    },
+    {
+      "name": "trailing space.txt  "
+    },
+    {
+      "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.png",
+      "keep": ".png"
+    },
+    {
+      "name": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀.jpg",
+      "keep": ".jpg"
+    },
+    {
+      "name": "日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日.txt",
+      "keep": ".txt"
+    },
+    {
+      "name": "report.pdf",
+      "exact": "report.pdf"
+    },
+    {
+      "name": "photo (2).jpg",
+      "exact": "photo (2).jpg"
+    },
+    {
+      "name": "日本語 ü.txt",
+      "exact": "日本語 ü.txt"
+    },
+    {
+      "name": "",
+      "exact": "file"
+    },
+    {
+      "name": "   ",
+      "exact": "file"
+    },
+    {
+      "name": ".",
+      "exact": "file"
+    },
+    {
+      "name": "..",
+      "exact": "file"
+    },
+    {
+      "name": "...",
+      "exact": "file"
+    },
+    {
+      "name": null,
+      "exact": "file"
+    }
+  ],
+  "validIds": [
+    "abcdefgh",
+    "ABCDEFGH",
+    "12345678",
+    "a-b_c-d_",
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "desktop-0001",
+    "phone-0001-xyz"
+  ],
+  "invalidIds": [
+    "",
+    "abcdefg",
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "abc defgh",
+    "abc/defgh",
+    "abc\\defgh",
+    "abcdefg.",
+    "..abcdef",
+    "abcdefgü",
+    "abcdefg\n",
+    "abc:defgh"
+  ]
+}
