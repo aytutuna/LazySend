@@ -32,6 +32,15 @@ class PairingCodeTest {
     }
 
     @Test
+    fun anOpenAddressIsNotAPairingCodeAndNamesNoFile() {
+        for (address in listOf("lazysend:open?file=%2Fsdcard%2Fa.jpg", "lazysend://open?file=%2Fsdcard%2Fa.jpg")) {
+            val e = assertThrows(PairingCodeException::class.java) { PairingCode.parse(address) }
+            assertEquals(PairingCodeProblem.Damaged, e.problem)
+        }
+        assertEquals(52734, PairingCode.parse(code()).port)
+    }
+
+    @Test
     fun refusesOtherCodes() {
         val e = assertThrows(PairingCodeException::class.java) { PairingCode.parse("https://example.com") }
         assertEquals(PairingCodeProblem.NotPairingCode, e.problem)
