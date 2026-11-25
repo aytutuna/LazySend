@@ -20,6 +20,8 @@ data class OutgoingSend(
     val at: Long,
     /** Kept across attempts, so the PC knows a repeat for the file it already has. */
     val sendId: String,
+    /** The computer refused it for good (not a 401, a timeout or a rate limit); only the person's Send again tries it again. */
+    val refused: Boolean = false,
 )
 
 /** The unfinished sends to PCs and their copies: `list.json` and one file per send in a folder the system never clears. */
@@ -52,6 +54,13 @@ class Outgoing(private val folder: File) {
             copy.delete()
             throw e
         }
+    }
+
+    @Synchronized
+    fun update(id: String, change: (OutgoingSend) -> OutgoingSend) {
+        val before = sends
+        sends = sends.map { if (it.id == id) change(it) else it }
+        if (sends != before) save()
     }
 
     @Synchronized

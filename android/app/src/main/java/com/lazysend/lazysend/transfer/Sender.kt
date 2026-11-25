@@ -33,6 +33,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+/** What a row says when the person stopped it. */
+const val STOPPED = "Stopped"
+
 /** The most a note can hold; a larger text goes as a file. */
 const val MAX_NOTE_BYTES = 1024 * 1024
 
@@ -141,17 +144,20 @@ class Sender(
     /** Uploads what [stage] kept; the same for a row that is sent again. */
     suspend fun sendStaged(id: String) {
         val send = outgoing.get(id) ?: return failGone(id)
+        outgoing.update(id) { it.copy(refused = false) }
         exclusive(alongside = send.clip) { upload(send) }
     }
 
-    /** Sends everything that is still waiting. */
+    /** Sends what is waiting for a computer to be back. A row the person stopped, or one the computer refused for good, waits for their Send again. */
     suspend fun resumePending() {
         for (send in outgoing.pending.toList()) {
-            if (timeline.get(send.id) == null) {
+            val row = timeline.get(send.id)
+            if (row == null) {
                 outgoing.remove(send.id)
                 continue
             }
-            if (send.id !in uploading) sendStaged(send.id)
+            if (send.refused || row.detail == STOPPED || send.id in uploading) continue
+            sendStaged(send.id)
         }
     }
 
@@ -220,11 +226,15 @@ class Sender(
             outgoing.remove(id)
             timeline.update(id) { it.copy(state = EntryState.Done, bytes = send.size) }
         } catch (e: CancellationException) {
-            timeline.update(id) { it.copy(state = EntryState.Paused) }
+            timeline.update(id) { it.copy(state = EntryState.Paused, detail = STOPPED) }
             throw e
         } catch (e: LinkException) {
-            if (e.status == 401 && sentTo != null) forgottenBy(sentTo, id)
-            else timeline.update(id) { it.copy(state = EntryState.Failed, detail = e.message.orEmpty()) }
+            if (e.status == 401 && sentTo != null) {
+                forgottenBy(sentTo, id)
+            } else {
+                if (e.status in 400..499 && e.status != 408 && e.status != 429) outgoing.update(id) { it.copy(refused = true) }
+                timeline.update(id) { it.copy(state = EntryState.Failed, detail = e.message.orEmpty()) }
+            }
         } catch (e: Exception) {
             // A file that cannot be read, a PC that cannot be reached and a refusal all end this one attempt, not the app; the copy stays.
             timeline.update(id) { it.copy(state = EntryState.Failed, detail = e.message.orEmpty()) }
@@ -343,7 +353,7 @@ class Sender(
                 )
             }
         } catch (e: CancellationException) {
-            timeline.update(id) { it.copy(state = EntryState.Paused, detail = "Stopped") }
+            timeline.update(id) { it.copy(state = EntryState.Paused, detail = STOPPED) }
             throw e
         } catch (e: Exception) {
             failGallery(id, e.message ?: "Could not read the photos.")

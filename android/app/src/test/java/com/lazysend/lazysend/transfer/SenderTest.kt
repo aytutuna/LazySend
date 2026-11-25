@@ -108,6 +108,38 @@ class SenderTest {
     }
 
     @Test
+    fun aSendTheComputerRefusedForGoodWaitsForTheirSendAgain() = runBlocking<Unit> {
+        val file = File(dir, "big.bin").also { it.writeBytes(ByteArray(400) { b -> b.toByte() }) }
+        pc.chunkErrors += 413 to "tooLarge"
+        val sender = sender()
+        sender.sendFiles(paired, listOf(Uri.fromFile(file)))
+        val id = timeline.entries.value.single().id
+        assertTrue(sender.outgoing.get(id)!!.refused)
+
+        sender.resumePending()
+
+        assertEquals(EntryState.Failed, timeline.get(id)!!.state)
+        assertEquals(0, pc.received.size())
+        sender.sendStaged(id)
+        assertEquals(EntryState.Done, timeline.get(id)!!.state)
+    }
+
+    @Test
+    fun aRowThePersonStoppedIsNotRestartedByItself() = runBlocking<Unit> {
+        val file = File(dir, "doc.bin").also { it.writeBytes(ByteArray(400)) }
+        pc.chunkErrors += 500 to "serverError"
+        val sender = sender()
+        sender.sendFiles(paired, listOf(Uri.fromFile(file)))
+        val id = timeline.entries.value.single().id
+        timeline.update(id) { it.copy(state = EntryState.Paused, detail = STOPPED) }
+
+        sender.resumePending()
+
+        assertEquals(EntryState.Paused, timeline.get(id)!!.state)
+        assertEquals(0, pc.received.size())
+    }
+
+    @Test
     fun aKeptSendGoesOnAfterTheAppStartedAgain() = runBlocking<Unit> {
         val content = ByteArray(500) { b -> (b * 3).toByte() }
         val file = File(dir, "doc.pdf").also { it.writeBytes(content) }
