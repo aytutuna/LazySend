@@ -129,6 +129,8 @@ public final class GuestService: @unchecked Sendable {
     /// certificate's fingerprint, so the connection is pinned from the start. The host's user is asked to allow it.
     public func pair(_ code: PairingCode) async throws -> PairedPc {
         try checkRoom(for: code.desktopId)
+        pauseWatching(code.desktopId)
+        defer { resumeWatching(code.desktopId) }
         let pc = try await Pairing.pair(code, phoneName: guestName, appVersion: appVersion, platform: "mac", connector: connector, store: hosts)
         paired(pc)
         return pc
@@ -139,6 +141,8 @@ public final class GuestService: @unchecked Sendable {
     /// answers yes.
     public func pair(host: NearbyHost, code: String, confirm: (String) async -> Bool) async throws -> PairedPc {
         try checkRoom(for: host.id)
+        pauseWatching(host.id)
+        defer { resumeWatching(host.id) }
         let pc = try await Pairing.pair(code: code, with: host, phoneName: guestName, appVersion: appVersion, platform: "mac",
                                         confirm: confirm, connector: connector, store: hosts)
         paired(pc)
@@ -149,6 +153,19 @@ public final class GuestService: @unchecked Sendable {
         if hosts.get(id) == nil && hosts.pcs.count >= GuestService.maxHosts {
             throw PairingError.refused("Too many computers are paired. Remove one first.")
         }
+    }
+
+    // The host replaces the secret as it answers a pairing. A watcher still polling with the old one would be refused in that
+    // moment and take the computer off the list, so it stops first and starts again with whatever secret is kept after.
+    private func pauseWatching(_ id: String) {
+        lock.lock()
+        let task = watchers.removeValue(forKey: id)
+        lock.unlock()
+        task?.cancel()
+    }
+
+    private func resumeWatching(_ id: String) {
+        if hosts.get(id) != nil { watch(id) }
     }
 
     // Pairing again replaces the secret, so what was watching with the old one starts over with the new.

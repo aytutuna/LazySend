@@ -290,6 +290,21 @@ final class GuestServiceTests: XCTestCase {
         XCTAssertNotNil(fixture.hosts.secret(for: second.id))
     }
 
+    func testPairingAgainOneHundredTimesNeverDropsTheHost() async throws {
+        let first = try await pairGuest()
+        fixture.guest.start()
+        let reachable = await waitUntil { fixture.guest.isReachable(first.id) }
+        XCTAssertTrue(reachable)
+        for round in 1...100 {
+            let again = try await pairGuest()
+            XCTAssertEqual(fixture.hosts.pcs.count, 1, "round \(round)")
+            XCTAssertNotNil(fixture.hosts.secret(for: again.id), "round \(round)")
+            XCTAssertTrue(fixture.forgotten.all.isEmpty, "round \(round)")
+        }
+        let watching = await waitUntil { fixture.guest.isReachable(first.id) }
+        XCTAssertTrue(watching)
+    }
+
     func testAnUnusableReceiveFolderLeavesTheItemQueuedUntilItWorks() async throws {
         _ = try await pairGuest()
         let blocker = harness.root.appendingPathComponent("not-a-folder")
