@@ -17,6 +17,13 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
+      - name: No notes file in the repo
+        shell: bash
+        run: |
+          if git ls-files | grep -q 'CONTRACTS.md' || git grep -q 'CONTRACTS.md' -- . ':!.github'; then
+            echo "CONTRACTS.md is a local note: it is not tracked and no text names it"
+            exit 1
+          fi
       - name: Test
         run: dotnet test windows\LazySend.sln
 
