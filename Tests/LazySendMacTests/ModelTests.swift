@@ -368,12 +368,11 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(fixture.service.outbox.pending(phone.id).map(\.name), ["opened.txt"])
     }
 
-    func testTheHandOffAddressNamesAbsoluteFiles() {
-        let url = URL(string: "lazysend:open?file=%2Ftmp%2Fa%20b.txt&file=%2Ftmp%2Fc.txt&file=relative.txt")!
-        XCTAssertEqual(HandOff.files(in: url).map(\.path), ["/tmp/a b.txt", "/tmp/c.txt"])
-        XCTAssertEqual(HandOff.files(in: URL(string: "lazysend://open?file=%2Ftmp%2Fd.txt")!).map(\.path), ["/tmp/d.txt"])
-        XCTAssertTrue(HandOff.files(in: URL(string: "lazysend://pair?v=1&file=%2Ftmp%2Fe.txt")!).isEmpty)
-        XCTAssertTrue(HandOff.files(in: URL(string: "https://example.com/open?file=%2Ftmp%2Ff.txt")!).isEmpty)
+    func testAnOpenAddressSendsNothing() async throws {
+        let phone = try await fixture.pair()
+        model.open([URL(string: "lazysend:open?file=%2Ftmp%2Fa.txt")!, URL(string: "lazysend://open?file=%2Ftmp%2Fb.txt")!,
+                    URL(string: "lazysend://pair?v=1&file=%2Ftmp%2Fc.txt")!])
+        XCTAssertTrue(fixture.service.outbox.pending(phone.id).isEmpty)
     }
 
     func testTheApprovalPromptWaitsForTheUsersAnswer() async throws {

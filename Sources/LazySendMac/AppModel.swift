@@ -542,16 +542,9 @@ public final class AppModel: ObservableObject {
         return false
     }
 
-    /// Files from Open With, the Dock icon or a `lazysend:open?file=` address.
+    /// Files from Open With or the Dock icon. Other addresses (lazysend: is for pairing links) name nothing to send.
     public func open(_ urls: [URL]) {
-        var files: [URL] = []
-        for url in urls {
-            if url.isFileURL {
-                files.append(url)
-            } else {
-                files += HandOff.files(in: url)
-            }
-        }
+        let files = urls.filter(\.isFileURL)
         guard !files.isEmpty else { return }
         if target() != nil { sendFiles(files) }
     }
@@ -870,17 +863,6 @@ final class FileLocator: @unchecked Sendable {
             url.stopAccessingSecurityScopedResource()
             scopes[id] = nil
         }
-    }
-}
-
-/// `lazysend:open?file=<path>`, the `file` parameter repeated for each absolute path (CONTRACTS.md).
-enum HandOff {
-    static func files(in url: URL) -> [URL] {
-        guard url.scheme?.lowercased() == "lazysend",
-              let parts = URLComponents(url: url, resolvingAgainstBaseURL: false), parts.path.lowercased() == "open" || parts.host?.lowercased() == "open"
-        else { return [] }
-        return (parts.queryItems ?? []).filter { $0.name == "file" }.compactMap(\.value).filter { $0.hasPrefix("/") }
-            .map { URL(fileURLWithPath: $0) }
     }
 }
 
