@@ -530,6 +530,35 @@ public class GuestSendTests
     }
 
     [Fact]
+    public async Task ADamagedPendingListIsKeptAsideAndStartUpGoesOn()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "lazysend-pending-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            string unreadable = Path.Combine(folder, "a.json");
+            await File.WriteAllTextAsync(unreadable, "{ this is not json");
+            string unusable = Path.Combine(folder, "b.json");
+            JsonFile.Save(unusable, new PendingFile { Sends = [new PendingSend("host", "send", "", 5, DateTimeOffset.UtcNow, "ab"), new PendingSend("host", "good", "C:/x/y.bin", 5, DateTimeOffset.UtcNow, "ab")] });
+
+            var first = new PendingSends(unreadable);
+            var second = new PendingSends(unusable);
+
+            Assert.True(first.Damaged);
+            Assert.Empty(first.Sends);
+            Assert.True(File.Exists(unreadable + ".bad"));
+            Assert.True(second.Damaged);
+            Assert.Equal(["good"], second.Sends.Select(s => s.SendId));
+            Assert.True(File.Exists(unusable + ".bad"));
+            Assert.False(new PendingSends(Path.Combine(folder, "none.json")).Damaged);
+        }
+        finally
+        {
+            Directory.Delete(folder, true);
+        }
+    }
+
+    [Fact]
     public async Task RestartedGuestStillListsTheFileOfAnUnfinishedSend()
     {
         await using var h = new Harness();

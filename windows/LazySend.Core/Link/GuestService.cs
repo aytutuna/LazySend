@@ -65,6 +65,9 @@ public sealed class GuestService : IDisposable
     /// <summary>The files of sends that are not finished, so nothing that still needs one deletes it.</summary>
     public IReadOnlyList<string> WaitingPaths => [.. _pending.Sends.Select(s => s.Path)];
 
+    /// <summary>The saved list of unfinished sends could not be read, or held entries that cannot be sent; it was kept aside.</summary>
+    public bool PendingListDamaged => _pending.Damaged;
+
     public bool IsReachable(string hostId)
     {
         lock (_gate) return _reachable.Contains(hostId);

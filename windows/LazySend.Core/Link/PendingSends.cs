@@ -18,8 +18,30 @@ public sealed class PendingSends
     public PendingSends(string path)
     {
         _path = path;
+        bool existed = File.Exists(path);
         _file = JsonFile.Load<PendingFile>(path);
+        // A file that did not parse was moved aside by Load; one that parsed with entries that cannot be sent (no computer,
+        // no path) is copied aside and those entries are left out, so start-up never meets them.
+        var usable = _file.Sends.Where(s => s is not null && !string.IsNullOrWhiteSpace(s.HostId) && !string.IsNullOrWhiteSpace(s.SendId)
+                                            && !string.IsNullOrWhiteSpace(s.Path)).ToList();
+        Damaged = (existed && !File.Exists(path)) || usable.Count != _file.Sends.Count;
+        if (usable.Count != _file.Sends.Count)
+        {
+            try
+            {
+                File.Copy(path, path + ".bad", overwrite: true);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // The damaged entries are still left out.
+            }
+            _file.Sends = usable;
+            Save();
+        }
     }
+
+    /// <summary>The saved list could not be read or held entries that cannot be sent; it is kept aside as pending.json.bad.</summary>
+    public bool Damaged { get; }
 
     public IReadOnlyList<PendingSend> Sends
     {

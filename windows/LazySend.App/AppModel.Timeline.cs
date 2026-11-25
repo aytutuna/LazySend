@@ -355,6 +355,23 @@ public sealed partial class AppModel
     internal static string SentStatus(TimelineItem row, bool phoneStillPaired) =>
         row.Cancelling || !phoneStillPaired ? "Cancelled" : "Delivered";
 
+    public void RemoveRow(TimelineItem row)
+    {
+        if (row.CanRemove) Timeline.Remove(row);
+    }
+
+    /// <summary>The list of unfinished sends to computers could not be read: say so in a failed row that can be removed.</summary>
+    internal void ShowDamagedPending()
+    {
+        var row = new TimelineItem(TimelineKind.Text, true, "", "", DateTimeOffset.UtcNow)
+        {
+            Heading = "Unfinished sends could not be read",
+            CanRemove = true,
+        };
+        row.Detail = $"Files that were still waiting for a computer will not go on by themselves. The list was kept as pending.json.bad, {Stamp(row.Time)}";
+        Push(row);
+    }
+
     public void Cancel(TimelineItem row)
     {
         if (row is { CanCancel: true, SendStop: { } stop })

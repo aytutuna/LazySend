@@ -269,6 +269,11 @@ public partial class MainWindow : Window
         if (ItemOf(sender) is { } item) _model.StopImport(item);
     }
 
+    private void RemoveItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (ItemOf(sender) is { CanRemove: true } item) _model.RemoveRow(item);
+    }
+
     private void CancelItem_Click(object sender, RoutedEventArgs e)
     {
         if (ItemOf(sender) is { } item) _model.Cancel(item);

@@ -21,6 +21,7 @@ public sealed partial class AppModel
         Guest.ReachabilityChanged += (_, _) => _ui.BeginInvoke(UpdateLastSeen);
         Guest.Hosts.Changed += (_, _) => _ui.BeginInvoke(RefreshPhones);
         Guest.SendResumed += (_, resumed) => _ui.BeginInvoke(() => ShowResumed(resumed));
+        if (Guest.PendingListDamaged) ShowDamagedPending();
         Guest.Start();
     }
 

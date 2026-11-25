@@ -101,6 +101,15 @@ public sealed class TimelineItem : INotifyPropertyChanged
         set => Set(ref _canCancel, value);
     }
 
+    private bool _canRemove;
+
+    /// <summary>A row that only tells something, such as an unreadable list of unfinished sends, and can be taken away.</summary>
+    public bool CanRemove
+    {
+        get => _canRemove;
+        set => Set(ref _canRemove, value);
+    }
+
     public string? Body => Kind is TimelineKind.Text or TimelineKind.Link
         ? Text is { Length: > 1200 } whole ? whole[..1200] + "…" : Text
         : null;

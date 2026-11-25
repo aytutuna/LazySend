@@ -149,6 +149,8 @@
                                                 Visibility="{Binding CanStop, Converter={StaticResource BoolToVisibility}}" />
                                         <Button Content="Cancel" ui:Icon.Glyph="&#xE711;" Style="{StaticResource SubtleButtonStyle}" Click="CancelItem_Click"
                                                 Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisibility}}" />
+                                        <Button Content="Remove" ui:Icon.Glyph="&#xE74D;" Style="{StaticResource SubtleButtonStyle}" Click="RemoveItem_Click"
+                                                Visibility="{Binding CanRemove, Converter={StaticResource BoolToVisibility}}" />
                                     </StackPanel>
                                 </Grid>
                             </Border>
