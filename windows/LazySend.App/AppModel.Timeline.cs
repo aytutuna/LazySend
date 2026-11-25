@@ -86,7 +86,7 @@ public sealed partial class AppModel
             foreach (var waiting in Service.Outbox.Pending(phone.Id)) AddWaiting(waiting, phone.Name);
         }
         ClipboardFiles.Cleanup(System.IO.Path.Combine(Paths.State, "clipboard"),
-                               Service.Devices.Devices.SelectMany(d => Service.Outbox.Pending(d.Id)).Select(i => i.Path).OfType<string>());
+                               Service.Devices.Devices.SelectMany(d => Service.Outbox.Pending(d.Id)).Select(i => i.Path).OfType<string>().Concat(Guest.WaitingPaths));
         _tick = new DispatcherTimer(DispatcherPriority.Background, _ui) { Interval = TimeSpan.FromSeconds(2) };
         _tick.Tick += (_, _) =>
         {

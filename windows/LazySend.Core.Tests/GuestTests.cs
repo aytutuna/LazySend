@@ -502,6 +502,20 @@ public class GuestSendTests
     }
 
     [Fact]
+    public async Task RestartedGuestStillListsTheFileOfAnUnfinishedSend()
+    {
+        await using var h = new Harness();
+        var before = new GuestRig(h);
+        var host = await before.PairAsync();
+        var (send, _, _) = await LeaveHalfSentAsync(h, before, host);
+        before.Dispose();
+
+        using var guest = new GuestRig(h, before.GuestId);
+
+        Assert.Equal([send.Path], guest.Service.WaitingPaths);
+    }
+
+    [Fact]
     public async Task WaitStopsWhenCancelledAndDropForgetsTheEntry()
     {
         await using var h = new Harness();

@@ -62,6 +62,9 @@ public sealed class GuestService : IDisposable
     /// <summary>A file left unfinished by an earlier run of the app is carrying on; <see cref="ResumedSend.Run"/> does it.</summary>
     public event EventHandler<ResumedSend>? SendResumed;
 
+    /// <summary>The files of sends that are not finished, so nothing that still needs one deletes it.</summary>
+    public IReadOnlyList<string> WaitingPaths => [.. _pending.Sends.Select(s => s.Path)];
+
     public bool IsReachable(string hostId)
     {
         lock (_gate) return _reachable.Contains(hostId);
