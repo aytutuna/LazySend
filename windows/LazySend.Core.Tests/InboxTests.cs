@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Net;
 using LazySend.Core;
 
@@ -86,6 +87,49 @@ public class InboxTests
         var again = await phone.BeginFileAsync("a.jpg", content, sourceId: "asset-1");
 
         Assert.True(again.Done);
+    }
+}
+
+public class ReinstalledPhoneTests
+{
+    private static async Task<ItemState> SendAsync(Harness h, string phoneId, byte[] content, string sourceId)
+    {
+        using var phone = await h.PairAsync("Test Pixel", phoneId);
+        var state = await phone.BeginFileAsync("IMG_0012.jpg", content, sourceId: sourceId, modified: h.Now);
+        if (!state.Done)
+        {
+            using var response = await phone.PutChunkAsync(state.Id, 0, content);
+            response.EnsureSuccessStatusCode();
+        }
+        return state;
+    }
+
+    [Fact]
+    public async Task ALibraryFileAlreadyOnTheComputerIsNotSavedAgainAfterAReinstall()
+    {
+        await using var h = new Harness();
+        var content = RandomNumberGenerator.GetBytes(500);
+        await SendAsync(h, Protocol.NewId(), content, "7:500:1");
+
+        var again = await SendAsync(h, Protocol.NewId(), content, "9:500:1");
+
+        Assert.True(again.Done);
+        Assert.True(again.Duplicate);
+        string month = Path.Combine(h.ReceivedRoot, "Test Pixel", "Gallery", h.Now.ToLocalTime().ToString("yyyy-MM"));
+        Assert.Equal(["IMG_0012.jpg"], Directory.GetFiles(month).Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public async Task AnotherPhotoWithTheSameNameAndSizeIsSavedAsASecondFile()
+    {
+        await using var h = new Harness();
+        await SendAsync(h, Protocol.NewId(), RandomNumberGenerator.GetBytes(500), "7:500:1");
+
+        var other = await SendAsync(h, Protocol.NewId(), RandomNumberGenerator.GetBytes(500), "8:500:1");
+
+        Assert.False(other.Done);
+        string month = Path.Combine(h.ReceivedRoot, "Test Pixel", "Gallery", h.Now.ToLocalTime().ToString("yyyy-MM"));
+        Assert.Equal(["IMG_0012 (2).jpg", "IMG_0012.jpg"], Directory.GetFiles(month).Select(Path.GetFileName).Order());
     }
 }
 

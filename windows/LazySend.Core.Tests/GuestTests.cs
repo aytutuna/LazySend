@@ -797,6 +797,26 @@ public class GuestReceiveTests
     }
 
     [Fact]
+    public async Task LibraryFileAlreadyInTheMonthFolderIsOnlyNotedWhenTheHostOffersItUnderANewId()
+    {
+        await using var h = new Harness();
+        using var guest = new GuestRig(h);
+        var host = await guest.PairAsync();
+        string source = Path.Combine(h.Root, "clip.mov");
+        await File.WriteAllBytesAsync(source, RandomNumberGenerator.GetBytes(5_000));
+        h.Service.Outbox.QueueFile(guest.GuestId, source, sourceId: "asset-2");
+        using var client = await guest.Service.Connector.ConnectAsync(host.Id, CancellationToken.None);
+        await guest.Service.Receiver.CollectAsync(client, host.Id, 0, CancellationToken.None);
+        h.Service.Outbox.QueueFile(guest.GuestId, source, sourceId: "asset-9");
+
+        await guest.Service.Receiver.CollectAsync(client, host.Id, 0, CancellationToken.None);
+
+        string month = Path.Combine(guest.Paths.DefaultReceiveRoot, "Test PC", "Gallery", DateTimeOffset.Now.ToString("yyyy-MM"));
+        Assert.Equal(["clip.mov"], Directory.GetFiles(month).Select(Path.GetFileName));
+        Assert.Empty(h.Service.Outbox.Pending(guest.GuestId));
+    }
+
+    [Fact]
     public async Task AssetReceivedBeforeIsOnlyAcknowledgedWhenQueuedAgain()
     {
         await using var h = new Harness();

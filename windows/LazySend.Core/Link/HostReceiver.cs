@@ -61,6 +61,11 @@ public sealed class HostReceiver(HostStore hosts, ReceivedHistory history, SendS
                 case ItemKind.File:
                     if (WasFinished(host.Id, item.Id) || (GalleryIndex.IsValidSourceId(item.SourceId) && received.Contains(host.Id, item.SourceId))) break;
                     bool gallery = GalleryIndex.IsValidSourceId(item.SourceId);
+                    if (gallery && item.Size is { } listed && FileNames.HasCopy(FolderOf(DirectoryOf(host), item, DateTimeOffset.UtcNow), FileNames.Clean(item.Name), listed, null))
+                    {
+                        received.Add(host.Id, item.SourceId!);
+                        break;
+                    }
                     if (gallery) GalleryBusy(host.Id, 1);
                     try
                     {

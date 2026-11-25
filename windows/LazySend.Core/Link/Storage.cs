@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -124,6 +125,33 @@ public static class FileNames
         if (stem.Length > 0 && char.IsHighSurrogate(stem[^1])) stem = stem[..^1];
         stem = stem.TrimEnd('.', ' ');
         return (stem.Length == 0 ? fallback : stem) + extension;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="directory"/> already holds this file under <c>name</c>, <c>name (2)</c>… with the same size and,
+    /// when <paramref name="sha256"/> is given, the same content. A library file that is already there is noted, not saved twice.
+    /// </summary>
+    public static bool HasCopy(string directory, string name, long size, string? sha256)
+    {
+        string extension = Path.GetExtension(name);
+        string stem = name[..^extension.Length];
+        string candidate = name;
+        for (int n = 2; File.Exists(Path.Combine(directory, candidate)); candidate = $"{stem} ({n++}){extension}")
+        {
+            string path = Path.Combine(directory, candidate);
+            try
+            {
+                if (new FileInfo(path).Length != size) continue;
+                if (sha256 is null) return true;
+                using var stream = File.OpenRead(path);
+                if (Convert.ToHexStringLower(SHA256.HashData(stream)) == sha256) return true;
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // Unreadable: treated as not the same file.
+            }
+        }
+        return false;
     }
 
     /// <summary>The first of <c>name</c>, <c>name (2)</c>, <c>name (3)</c>… that does not exist in <paramref name="directory"/>.</summary>

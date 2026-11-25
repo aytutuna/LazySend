@@ -118,6 +118,12 @@ public sealed class Inbox
         DateTimeOffset? modified = request.Modified is { Year: >= 1980 and <= 2100 } m ? m : null;
         string folder = Path.Combine(_receiveRoot(), FileNames.Clean(device.Name, "Phone"));
         if (request.SourceId is not null) folder = Path.Combine(folder, "Gallery", (modified ?? now).ToLocalTime().ToString("yyyy-MM", CultureInfo.InvariantCulture));
+        // A phone that lost its record of what it sent (a reinstall) offers its library again; what is already here is only noted.
+        if (request.SourceId is { } listed && FileNames.HasCopy(folder, FileNames.Clean(request.Name), size, sha256))
+        {
+            BestEffort(() => _index.Add(device.Id, listed));
+            return new ItemState("", size, true, Duplicate: true);
+        }
         if (_freeSpace(folder) - size < Protocol.MinFreeBytes) throw new InboxException(507, LinkError.DiskFull);
         var file = new IncomingFile
         {
