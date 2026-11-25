@@ -342,7 +342,10 @@ final class TransferLinkTests: XCTestCase {
         var other = content
         other[0] = other[0] &+ 1
         try await phone.upload("IMG_0012.jpg", other, sourceId: "asset-other")
-        XCTAssertEqual(files(in: phoneFolder.appendingPathComponent("Gallery")).count, 2)
+        let gallery = phoneFolder.appendingPathComponent("Gallery")
+        let month = try XCTUnwrap(files(in: gallery).first)
+        XCTAssertEqual(files(in: gallery).count, 1)
+        XCTAssertEqual(files(in: gallery.appendingPathComponent(month)), ["IMG_0012 (2).jpg", "IMG_0012.jpg"])
     }
 
     func testTheSameAssetInProgressIsNotStartedTwice() async throws {
