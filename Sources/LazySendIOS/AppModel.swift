@@ -44,7 +44,7 @@ private struct Job {
     let work: @MainActor () async -> Void
 }
 
-private enum Sent {
+enum Sent {
     case done
     /// Not delivered and worth another try later.
     case waiting
@@ -97,6 +97,7 @@ final class AppModel: ObservableObject {
     private var pump: Task<Void, Never>?
     private var alongside: [String: Task<Void, Never>] = [:]
     private var current: String?
+    private var currentTask: Task<Void, Never>?
     private var queued: Set<String> = []
     private var resuming: Set<String> = []
     private var held: Set<String> = []
@@ -373,7 +374,7 @@ final class AppModel: ObservableObject {
     /// which carries the milliseconds when another send already has the plain one, so the row can be found by it.
     /// Throws when the file cannot be written or the device is gone, so the caller can say so.
     func sendCameraPhoto(_ photo: Data, ext: String = "jpg", to target: Target) async throws -> String {
-        let name = try await sendMade(photo, named: { ClipName.photo(milliseconds: $0, ext: ext) }, clip: true, to: target)
+        let name = try await sendMade({ try photo.write(to: $0) }, named: { ClipName.photo(milliseconds: $0, ext: ext) }, clip: true, to: target)
         if savesCameraToPhotos { addToPhotos(photo) }
         return name
     }
@@ -383,32 +384,51 @@ final class AppModel: ObservableObject {
     func sendScan(_ pages: [ScanPage], to target: Target) async throws -> String {
         guard let first = pages.first else { throw CancellationError() }
         if pages.count == 1 {
-            return try await sendMade(first.jpeg, named: { ClipName.scan(milliseconds: $0, ext: "jpg") }, clip: true, to: target)
+            return try await sendMade({ try first.jpeg.write(to: $0) }, named: { ClipName.scan(milliseconds: $0, ext: "jpg") }, clip: true, to: target)
         }
-        let pdf = await Task.detached { ScanPdf.make(pages) }.value
-        return try await sendMade(pdf, named: { ClipName.scan(milliseconds: $0, ext: "pdf") }, clip: nil, to: target)
+        // The PDF is written to its file a page at a time, so a long scan is not built in memory as well.
+        return try await sendMade({ url in try ScanPdf.write(count: pages.count, to: url) { pages[$0] } },
+                                  named: { ClipName.scan(milliseconds: $0, ext: "pdf") }, clip: nil, to: target)
     }
 
-    private func sendMade(_ data: Data, named: (Bool) -> String, clip: Bool?, to target: Target) async throws -> String {
+    private func sendMade(_ write: @escaping @Sendable (URL) throws -> Void, named: (Bool) -> String, clip: Bool?, to target: Target) async throws -> String {
         let plain = named(false)
         let name = timeline.entries.contains { $0.direction == .sent && $0.title == plain } ? named(true) : plain
+        if let pc = pcs.first(where: { $0.id == target.id }), HostedPhones.id(ofTarget: target.id) == nil {
+            try await keep(write, named: name, clip: clip, for: pc)
+            return name
+        }
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("lazysend-photo-" + UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let file = folder.appendingPathComponent(name)
         do {
-            try await Task.detached { try data.write(to: file) }.value
-            if let phone = HostedPhones.id(ofTarget: target.id) {
-                try await host.sendFiles([file], to: phone, clip: clip)
-            } else if let pc = pcs.first(where: { $0.id == target.id }) {
-                sendFiles([file], to: pc, clip: clip)
-            } else {
-                throw HostSendError.notPaired
-            }
+            try await Task.detached { try write(file) }.value
+            guard let phone = HostedPhones.id(ofTarget: target.id) else { throw HostSendError.notPaired }
+            try await host.sendFiles([file], to: phone, clip: clip)
         } catch {
             try? FileManager.default.removeItem(at: folder)
             throw error
         }
         return name
+    }
+
+    // The shot or the scan goes straight into the folder a send keeps its copy in, and its row is saved with it, before the
+    // caller lets go of the pages or the shutter: waiting behind a long upload in a temporary folder the system may empty is how it was lost.
+    private func keep(_ write: @escaping @Sendable (URL) throws -> Void, named name: String, clip: Bool?, for pc: PairedPc) async throws {
+        let id = "out-" + UUID().uuidString
+        let folder = outgoing.appendingPathComponent(id, isDirectory: true)
+        let file = folder.appendingPathComponent(name)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try await Task.detached { try write(file) }.value
+        } catch {
+            try? FileManager.default.removeItem(at: folder)
+            throw error
+        }
+        drainShareQueue()
+        timeline.add(TimelineEntry(id: id, direction: .sent, kind: .file, pcName: pc.name, title: name, pcId: pc.id, localFile: id + "/" + name,
+                                   sendId: newSendId(), clip: clip))
+        start(id, clip: clip) { await self.sendStaged(file, to: pc, entryId: id, resumeItemId: nil, clip: clip, at: Date()) }
     }
 
     // The library's id is kept so the gallery sync does not send the photo again.
@@ -427,7 +447,7 @@ final class AppModel: ObservableObject {
         drainShareQueue()
         let id = "out-" + UUID().uuidString
         timeline.add(TimelineEntry(id: id, direction: .sent, kind: request.kind == "link" ? .link : .text, pcName: pc.name,
-                                   title: request.url ?? request.text ?? "", clip: clip))
+                                   title: request.url ?? request.text ?? "", pcId: pc.id, sendId: request.sendId, clip: clip))
         start(id, clip: clip) { _ = await self.post(request, to: pc, entryId: id, at: at) }
     }
 
@@ -467,8 +487,10 @@ final class AppModel: ObservableObject {
 
     func resumeSend(_ entryId: String) {
         held.remove(entryId)
-        guard let entry = timeline.get(entryId), entry.direction == .sent, entry.kind == .file, !resuming.contains(entryId),
-              entry.state == .paused || entry.state == .failed, let local = entry.localFile else { return }
+        guard let entry = timeline.get(entryId), entry.direction == .sent, !resuming.contains(entryId),
+              entry.state == .paused || entry.state == .failed else { return }
+        if entry.kind == .text || entry.kind == .link { return resumeNote(entry) }
+        guard entry.kind == .file, let local = entry.localFile else { return }
         let file = outgoing.appendingPathComponent(local)
         guard FileManager.default.fileExists(atPath: file.path) else {
             discardStaged(entryId)
@@ -489,6 +511,27 @@ final class AppModel: ObservableObject {
         enqueue(entryId) {
             await self.sendStaged(file, to: pc, entryId: entryId, resumeItemId: itemId, clip: nil)
             self.resuming.remove(entryId)
+        }
+    }
+
+    // A text that did not get through is sent again from its row, with the id it had, so a first try that did land is not stored twice.
+    private func resumeNote(_ entry: TimelineEntry) {
+        guard let pcId = entry.pcId, var request = try? ItemRequest.note(entry.title, clip: nil) else { return }
+        guard let pc = store.get(pcId) else {
+            finish(entry.id, .failed, String(localized: "\(entry.pcName) was removed."))
+            return
+        }
+        request.sendId = entry.sendId ?? newSendId()
+        resuming.insert(entry.id)
+        timeline.update(entry.id) {
+            $0.state = .active
+            $0.detail = ""
+            $0.sendId = request.sendId
+        }
+        let sent = request
+        enqueue(entry.id) {
+            _ = await self.post(sent, to: pc, entryId: entry.id)
+            self.resuming.remove(entry.id)
         }
     }
 
@@ -643,6 +686,20 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Stops one row: the upload running now, a clip beside the queue, or a job still waiting its turn. The others go on.
+    func stopSending(_ entryId: String) {
+        held.insert(entryId)
+        if let running = alongside[entryId] {
+            running.cancel()
+        } else if current == entryId {
+            currentTask?.cancel()
+        } else if let index = jobs.firstIndex(where: { $0.entryId == entryId }) {
+            jobs.remove(at: index)
+            resuming.remove(entryId)
+            finish(entryId, .paused)
+        }
+    }
+
     func stopSending() {
         held.formUnion(jobs.map(\.entryId))
         held.formUnion(alongside.keys)
@@ -688,7 +745,12 @@ final class AppModel: ObservableObject {
                     if job.entryId.hasPrefix("share-") { self.queued.remove(String(job.entryId.dropFirst("share-".count))) }
                 } else {
                     self.current = job.entryId
-                    await job.work()
+                    // Each job runs in a task of its own so one row can be stopped; stopping them all, or the system ending the
+                    // grace period, cancels this loop and through it the job.
+                    let running = Task { await job.work() }
+                    self.currentTask = running
+                    await withTaskCancellationHandler { await running.value } onCancel: { running.cancel() }
+                    self.currentTask = nil
                     self.current = nil
                 }
             }
@@ -765,7 +827,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func failed(_ error: Error, pc: PairedPc, entryId: String) -> Sent {
+    func failed(_ error: Error, pc: PairedPc, entryId: String) -> Sent {
         finish(entryId, .failed, error.localizedDescription)
         guard let link = error as? LinkError else { return .failed }
         if link.status == 401 {
@@ -818,7 +880,13 @@ final class AppModel: ObservableObject {
             self?.timeline.update(entryId) { $0.itemId = id }
             self?.timeline.save()
         }
-        if outcome != .waiting { discardStaged(entryId) }
+        settle(outcome, entryId: entryId)
+    }
+
+    /// Only a delivered file loses its copy. A refusal (disk full, a damaged file, a server error) leaves it for Resume: for a
+    /// camera shot or a scan it is the only one there is. Resume throws the copy away itself when the computer or the file is gone.
+    func settle(_ outcome: Sent, entryId: String) {
+        if outcome == .done { discardStaged(entryId) }
     }
 
     private func discardStaged(_ entryId: String) {

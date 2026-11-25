@@ -132,6 +132,95 @@ final class AppModelTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: source.path))
     }
 
+    func testAFileTheComputerRefusedKeepsItsCopyForResume() async throws {
+        let (model, pc) = try pairedModel()
+        model.sendFiles([try pickedFile(model)], to: pc)
+        await model.waitForSends()
+        let id = try XCTUnwrap(model.timeline.entries.first).id
+        let refusals: [(Int, String)] = [(507, "diskFull"), (422, "hashMismatch"), (500, "serverError"), (400, "badRequest")]
+        for (status, code) in refusals {
+            let error = LinkError.refused(status: status, code: code, message: "refused", offset: nil)
+            let outcome = model.failed(error, pc: pc, entryId: id)
+            model.settle(outcome, entryId: id)
+            let entry = try XCTUnwrap(model.timeline.get(id))
+            XCTAssertEqual(entry.state, .failed, code)
+            let kept = try XCTUnwrap(copy(model, entry), code)
+            XCTAssertEqual(try Data(contentsOf: kept), Data("hello".utf8), code)
+        }
+        model.settle(.done, entryId: id)
+        XCTAssertNil(model.timeline.get(id)?.localFile)
+    }
+
+    func testAShotIsKeptWithItsRowBeforeAnythingIsQueued() async throws {
+        let (model, pc) = try pairedModel()
+        let target = AppModel.Target(id: pc.id, name: pc.name, phone: false)
+        let name = try await model.sendCameraPhoto(Data([0xFF, 0xD8, 0xFF]), to: target)
+        let entry = try XCTUnwrap(model.timeline.entries.first { $0.title == name })
+        XCTAssertEqual(entry.pcId, pc.id)
+        let kept = try XCTUnwrap(copy(model, entry))
+        XCTAssertEqual(try Data(contentsOf: kept), Data([0xFF, 0xD8, 0xFF]))
+        await model.waitForSends()
+        let after = try XCTUnwrap(model.timeline.get(entry.id))
+        XCTAssertEqual(after.state, .failed)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(copy(model, after)).path))
+    }
+
+    func testAFailedTextCanBeSentAgainWithTheSameId() async throws {
+        let (model, pc) = try pairedModel()
+        try model.sendNote("see you at five", to: pc)
+        await model.waitForSends()
+        let first = try XCTUnwrap(model.timeline.entries.first)
+        XCTAssertEqual(first.state, .failed)
+        XCTAssertEqual(first.pcId, pc.id)
+        let sendId = try XCTUnwrap(first.sendId)
+
+        model.resumeSend(first.id)
+
+        XCTAssertEqual(model.timeline.get(first.id)?.state, .active)
+        await model.waitForSends()
+        let again = try XCTUnwrap(model.timeline.get(first.id))
+        XCTAssertEqual(again.state, .failed)
+        XCTAssertEqual(again.sendId, sendId)
+        XCTAssertEqual(again.title, "see you at five")
+    }
+
+    func testStopActsOnItsOwnRowAndTheOthersGoOn() async throws {
+        let (model, _) = try pairedModel()
+        var firstStopped = false
+        var secondRan = false
+        model.enqueue("one") {
+            do { try await Task.sleep(nanoseconds: 60_000_000_000) } catch { firstStopped = true }
+        }
+        model.enqueue("two") { secondRan = true }
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        model.stopSending("one")
+        await model.waitForSends()
+
+        XCTAssertTrue(firstStopped)
+        XCTAssertTrue(secondRan)
+    }
+
+    func testStoppingAJobThatIsStillWaitingLeavesTheRunningOneAlone() async throws {
+        let (model, _) = try pairedModel()
+        var release: CheckedContinuation<Void, Never>?
+        var finishedFirst = false
+        var secondRan = false
+        model.enqueue("one") {
+            await withCheckedContinuation { release = $0 }
+            finishedFirst = true
+        }
+        model.enqueue("two") { secondRan = true }
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        model.stopSending("two")
+        release?.resume()
+        await model.waitForSends()
+
+        XCTAssertTrue(finishedFirst)
+        XCTAssertFalse(secondRan)
+    }
+
     func testResumeSendsTheKeptCopyAgain() async throws {
         let (model, pc) = try pairedModel()
         model.sendFiles([try pickedFile(model)], to: pc)

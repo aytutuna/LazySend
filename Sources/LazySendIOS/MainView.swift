@@ -331,7 +331,11 @@ struct EntryRow: View {
                 Button("Open") { openFile(name) }
             }
             if entry.kind == .file, sent, entry.state == .active {
-                Button("Stop") { model.stopSending() }
+                Button("Stop") { model.stopSending(entry.id) }
+            }
+            if entry.kind == .text || entry.kind == .link, sent, entry.pcId != nil, entry.state == .paused || entry.state == .failed {
+                Button("Resume") { model.resumeSend(entry.id) }
+                    .accessibilityIdentifier("entry.note.resume")
             }
             if entry.kind == .file, sent, entry.localFile != nil, entry.state == .paused || entry.state == .failed {
                 Button("Resume") { model.resumeSend(entry.id) }
