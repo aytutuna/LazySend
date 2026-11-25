@@ -1,17 +1,28 @@
 package com.lazysend.lazysend.scan
 
 import java.io.ByteArrayOutputStream
+import java.io.OutputStream
 import java.util.Locale
 
 /** Writes a scan's pages as one PDF: each page's JPEG is embedded as it is, on a page the size it prints at (`ScanPage.dpi`). */
 object ScanPdf {
     fun make(pages: List<ScanPage>): ByteArray {
         val out = ByteArrayOutputStream()
-        val offsets = ArrayList<Int>()
+        write(out, pages.size) { pages[it] }
+        return out.toByteArray()
+    }
+
+    /**
+     * Writes [count] pages to [sink] as one PDF, asking [page] for each one just when it is written, so a long scan holds no more
+     * than the page in hand besides what the caller keeps.
+     */
+    fun write(sink: OutputStream, count: Int, page: (Int) -> ScanPage) {
+        val out = CountingOutputStream(sink)
+        val offsets = ArrayList<Long>()
 
         fun add(text: String) = out.write(text.toByteArray(Charsets.ISO_8859_1))
         fun begin(number: Int) {
-            offsets.add(out.size())
+            offsets.add(out.written)
             add("$number 0 obj\n")
         }
 
@@ -22,12 +33,13 @@ object ScanPdf {
         begin(1)
         add("<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
         begin(2)
-        val kids = pages.indices.joinToString(" ") { "${3 + 3 * it} 0 R" }
-        add("<< /Type /Pages /Count ${pages.size} /Kids [$kids] >>\nendobj\n")
-        for ((i, page) in pages.withIndex()) {
+        val kids = (0 until count).joinToString(" ") { "${3 + 3 * it} 0 R" }
+        add("<< /Type /Pages /Count $count /Kids [$kids] >>\nendobj\n")
+        for (i in 0 until count) {
+            val scanned = page(i)
             val first = 3 + 3 * i
-            val w = page.width.toDouble() * 72 / page.dpi
-            val h = page.height.toDouble() * 72 / page.dpi
+            val w = scanned.width.toDouble() * 72 / scanned.dpi
+            val h = scanned.height.toDouble() * 72 / scanned.dpi
             val size = "${points(w)} ${points(h)}"
             begin(first)
             add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 $size] /Resources << /XObject << /Im0 ${first + 2} 0 R >> >> /Contents ${first + 1} 0 R >>\nendobj\n")
@@ -36,16 +48,33 @@ object ScanPdf {
             add("<< /Length ${content.length} >>\nstream\n${content}endstream\nendobj\n")
             begin(first + 2)
             // The encoder writes three components even for a gray page, so the color space comes from the JPEG itself.
-            val space = if (jpegComponents(page.jpeg) == 1) "/DeviceGray" else "/DeviceRGB"
-            add("<< /Type /XObject /Subtype /Image /Width ${page.width} /Height ${page.height} /ColorSpace $space /BitsPerComponent 8 /Filter /DCTDecode /Length ${page.jpeg.size} >>\nstream\n")
-            out.write(page.jpeg)
+            val space = if (jpegComponents(scanned.jpeg) == 1) "/DeviceGray" else "/DeviceRGB"
+            add("<< /Type /XObject /Subtype /Image /Width ${scanned.width} /Height ${scanned.height} /ColorSpace $space /BitsPerComponent 8 /Filter /DCTDecode /Length ${scanned.jpeg.size} >>\nstream\n")
+            out.write(scanned.jpeg)
             add("\nendstream\nendobj\n")
         }
-        val table = out.size()
+        val table = out.written
         add("xref\n0 ${offsets.size + 1}\n0000000000 65535 f \n")
         for (offset in offsets) add(String.format(Locale.US, "%010d 00000 n \n", offset))
         add("trailer\n<< /Size ${offsets.size + 1} /Root 1 0 R >>\nstartxref\n$table\n%%EOF\n")
-        return out.toByteArray()
+        out.flush()
+    }
+
+    private class CountingOutputStream(private val sink: OutputStream) : OutputStream() {
+        var written = 0L
+            private set
+
+        override fun write(b: Int) {
+            sink.write(b)
+            written++
+        }
+
+        override fun write(b: ByteArray, off: Int, len: Int) {
+            sink.write(b, off, len)
+            written += len
+        }
+
+        override fun flush() = sink.flush()
     }
 
     private fun points(value: Double): String = String.format(Locale.US, "%.2f", value)

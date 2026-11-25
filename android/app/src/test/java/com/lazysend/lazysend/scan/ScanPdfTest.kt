@@ -36,6 +36,34 @@ class ScanPdfTest {
     }
 
     @Test
+    fun aLongScanIsWrittenPageByPageToAFileAndIsTheSameAsTheOneBuiltInMemory() {
+        val sample = pages[0]
+        val asked = mutableListOf<Int>()
+        val file = java.io.File.createTempFile("scan", ".pdf")
+        try {
+            // Each page is made when it is asked for and dropped after: 150 pages of 400 KB never exist together.
+            file.outputStream().buffered().use { out ->
+                ScanPdf.write(out, 150) { i ->
+                    asked += i
+                    sample.copy(jpeg = ByteArray(400_000) { b -> (b + i).toByte() })
+                }
+            }
+
+            assertEquals((0 until 150).toList(), asked)
+            val s = text(file.readBytes())
+            assertTrue(s.contains("/Count 150 /Kids [3 0 R 6 0 R"))
+            assertTrue(s.contains("452 0 obj"))
+            assertTrue(s.endsWith("%%EOF\n"))
+            val startxref = s.substringAfterLast("startxref\n").substringBefore("\n").toInt()
+            assertTrue(s.substring(startxref).startsWith("xref\n0 453\n"))
+        } finally {
+            file.delete()
+        }
+        val streamed = java.io.ByteArrayOutputStream().also { out -> ScanPdf.write(out, pages.size) { pages[it] } }.toByteArray()
+        assertEquals(text(ScanPdf.make(pages)), text(streamed))
+    }
+
+    @Test
     fun everyPageIsOnePdfPageTheSizeItPrintsAt() {
         val data = ScanPdf.make(pages)
         val s = text(data)
