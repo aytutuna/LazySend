@@ -19,13 +19,26 @@ private func loadFile(_ file: String) throws -> Json {
     return try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? Json)
 }
 
-private func list(_ json: Json, _ key: String) -> [Json] { (json[key] as? [Json]) ?? [] }
+private struct DataError: Error, CustomStringConvertible {
+    var description: String
+}
+
+private func list(_ json: Json, _ key: String) throws -> [Json] {
+    guard let items = json[key] as? [Json], !items.isEmpty else { throw DataError(description: "\(key) is missing, empty or not a list of objects") }
+    return items
+}
 
 private func string(_ json: Json, _ key: String) -> String? { json[key] as? String }
 
-private func int(_ value: Any?) -> Int { (value as? NSNumber)?.intValue ?? 0 }
+private func int(_ value: Any?) throws -> Int {
+    guard let number = value as? NSNumber, !isBool(number) else { throw DataError(description: "\(String(describing: value)) is not a number") }
+    return number.intValue
+}
 
-private func int64(_ value: Any?) -> Int64 { (value as? NSNumber)?.int64Value ?? 0 }
+private func int64(_ value: Any?) throws -> Int64 {
+    guard let number = value as? NSNumber, !isBool(number) else { throw DataError(description: "\(String(describing: value)) is not a number") }
+    return number.int64Value
+}
 
 private func pattern(_ from: Int64, _ to: Int64) -> Data {
     Data([UInt8](unsafeUninitializedCapacity: Int(to - from)) { buffer, count in
@@ -62,7 +75,7 @@ private func same(_ expected: Any, _ actual: Any?) -> Bool {
 
 final class SharedLinkDataTests: XCTestCase {
     func testPairingCodesAreReadAsTheDataSays() throws {
-        for c in list(try loadFile("pairing-uris.json"), "cases") {
+        for c in try list(try loadFile("pairing-uris.json"), "cases") {
             let name = string(c, "name")!
             let result = string(c, "result")!
             let uri = string(c, "uri")!
@@ -73,7 +86,7 @@ final class SharedLinkDataTests: XCTestCase {
                 XCTAssertEqual(read.desktopId, string(p, "desktopId"), name)
                 XCTAssertEqual(read.name, string(p, "name"), name)
                 XCTAssertEqual(read.fingerprint, string(p, "fingerprint"), name)
-                XCTAssertEqual(read.port, int(p["port"]), name)
+                XCTAssertEqual(read.port, try int(p["port"]), name)
                 XCTAssertEqual(read.token, string(p, "token"), name)
                 XCTAssertEqual(read.addresses, p["addresses"] as? [String], name)
                 XCTAssertEqual(read.checkCode, string(p, "checkCode"), name)
@@ -85,7 +98,7 @@ final class SharedLinkDataTests: XCTestCase {
     }
 
     func testCheckCodesMatch() throws {
-        for c in list(try loadFile("check-codes.json"), "cases") {
+        for c in try list(try loadFile("check-codes.json"), "cases") {
             let fingerprint = Data((c["fingerprint"] as! [NSNumber]).map { UInt8($0.intValue) })
             XCTAssertEqual(SpkiFingerprint.checkCode(fingerprint), string(c, "checkCode"))
             XCTAssertEqual(SpkiFingerprint.matchCode(fingerprint, shortCode: string(c, "shortCode")!), string(c, "matchCode"))
@@ -95,16 +108,16 @@ final class SharedLinkDataTests: XCTestCase {
     func testShortCodesAreReadAndRedeemedAsTheDataSays() throws {
         let data = try loadFile("short-codes.json")
         XCTAssertEqual(String(ShortCode.alphabet), string(data, "alphabet"))
-        for n in list(data, "normalize") {
+        for n in try list(data, "normalize") {
             let typed = n["typed"] as? String
             XCTAssertEqual(ShortCode.normalize(typed), n["canonical"] as? String, "normalize \(typed ?? "nothing")")
         }
         let token = Data((data["tokenBytes"] as! [NSNumber]).map { UInt8($0.intValue) })
         let opened = Date(timeIntervalSince1970: 1_800_000_000)
-        for r in list(data, "redeem") {
+        for r in try list(data, "redeem") {
             let session = PairingSession(opened: opened, token: token)
             let typed = session.shortCode.prefix(4).lowercased() + "-" + session.shortCode.suffix(4).lowercased()
-            for (step, a) in list(r, "attempts").enumerated() {
+            for (step, a) in try list(r, "attempts").enumerated() {
                 let presented: String?
                 switch a["token"] as? String {
                 case "$token": presented = session.token
@@ -113,7 +126,8 @@ final class SharedLinkDataTests: XCTestCase {
                 case let other: presented = other
                 }
                 let peer = string(a, "peer")!.split(separator: ".").map { UInt8($0)! }
-                let got = session.redeem(presented, now: opened.addingTimeInterval(Double(int(a["at"]))), peer: peer)
+                let at = try int(a["at"])
+                let got = session.redeem(presented, now: opened.addingTimeInterval(Double(at)), peer: peer)
                 XCTAssertEqual(String(describing: got).lowercased(), string(a, "expect")!.lowercased(),
                                "\(string(r, "name")!), attempt \(step + 1)")
             }
@@ -156,7 +170,7 @@ final class SharedLinkDataTests: XCTestCase {
 
     func testMessagesAreReadAsTheDataSays() throws {
         let data = try loadFile("messages.json")
-        for c in list(data, "cases") {
+        for c in try list(data, "cases") {
             let name = string(c, "name")!
             let body = try JSONSerialization.data(withJSONObject: c["json"]!)
             let read: [String: Any?]
@@ -170,15 +184,25 @@ final class SharedLinkDataTests: XCTestCase {
                 XCTAssertTrue(read.keys.contains(key) && same(value, read[key] ?? nil), "\(name): \(key) is \(String(describing: read[key] ?? nil)), expected \(value)")
             }
         }
-        for c in list(data, "invalid") {
+        for c in try list(data, "invalid") {
             XCTAssertThrowsError(try fields(string(c, "type")!, Data(string(c, "body")!.utf8)), "\(string(c, "name")!): read although it is not valid")
         }
     }
 
+    func testErrorCodesAreTheOnesInTheData() throws {
+        let codes = [
+            LazySendServer.Failure.unauthorized, .pairingClosed, .tokenInvalid, .tokenExpired, .tokenUsed, .declined, .tooManyDevices, .tooLarge,
+            .rateLimited, .notFound, .methodNotAllowed, .badRequest, .lengthRequired, .busy, .offsetMismatch(1), .hashMismatch,
+            .diskFull, .rangeNotSatisfiable, .changed, .serverError,
+        ].map(\.error)
+        let wanted = try XCTUnwrap(try loadFile("messages.json")["errorCodes"] as? [String])
+        XCTAssertEqual(codes.sorted(), wanted.sorted())
+    }
+
     func testNamesAndIdsAreMadeSafeAsTheDataSays() throws {
         let data = try loadFile("names.json")
-        let maxBytes = int(data["maxFileNameBytes"])
-        for c in list(data, "cleanFileName") {
+        let maxBytes = try int(data["maxFileNameBytes"])
+        for c in try list(data, "cleanFileName") {
             let name = c["name"] as? String
             let clean = FileNames.clean(name)
             let label = "\"\(name ?? "nothing")\" became \"\(clean)\""
@@ -194,7 +218,7 @@ final class SharedLinkDataTests: XCTestCase {
 
     func testLargeFileIsDescribedByItsSizeAndFingerprint() throws {
         let data = try loadFile("large-file.json")
-        let size = int64(data["size"])
+        let size = try int64(data["size"])
         var sha = SHA256()
         var at: Int64 = 0
         while at < size {
@@ -208,13 +232,13 @@ final class SharedLinkDataTests: XCTestCase {
     func testSessionsRunAsTheDataSays() async throws {
         let data = try loadFile("sessions.json")
         let large = try loadFile("large-file.json")
-        for c in list(data, "cases") {
+        for c in try list(data, "cases") {
             if let readers = c["readers"] as? [String], !readers.contains("swift") { continue }
             let harness = try await Harness()
             do {
                 let phone = try await harness.pair()
                 let session = Session(harness: harness, phone: phone, large: large)
-                for (step, s) in list(c, "steps").enumerated() {
+                for (step, s) in try list(c, "steps").enumerated() {
                     do {
                         try await session.run(s)
                     } catch {
@@ -250,7 +274,10 @@ final class SharedLinkDataTests: XCTestCase {
         }
 
         func check(_ expect: Json, _ state: ItemState) throws {
-            if let o = expect["offset"], int64(o) != state.offset { throw Failure("offset is \(state.offset), expected \(int64(o))") }
+            if let o = expect["offset"] {
+                let wanted = try int64(o)
+                if wanted != state.offset { throw Failure("offset is \(state.offset), expected \(wanted)") }
+            }
             if let d = expect["done"], (d as? Bool) != state.done { throw Failure("done is \(state.done)") }
         }
 
@@ -258,10 +285,14 @@ final class SharedLinkDataTests: XCTestCase {
             do {
                 try await block()
             } catch let error as LinkError {
-                if error.status != int(s["status"]) || error.code != string(s, "code") {
+                let status = try int(s["status"])
+                if error.status != status || error.code != string(s, "code") {
                     throw Failure("answered \(String(describing: error.status)) \(error.code ?? "")")
                 }
-                if let o = s["offset"], error.offset != int64(o) { throw Failure("offset is \(String(describing: error.offset))") }
+                if let o = s["offset"] {
+                    let wanted = try int64(o)
+                    if error.offset != wanted { throw Failure("offset is \(String(describing: error.offset))") }
+                }
                 return
             }
             throw Failure("expected \(string(s, "code")!)")
@@ -277,7 +308,7 @@ final class SharedLinkDataTests: XCTestCase {
             switch string(s, "op")! {
             case "begin":
                 let content = s["content"]!
-                size = (content as? String) != nil ? int64(large["size"]) : int64((content as! Json)["size"])
+                size = try int64((content as? String) != nil ? large["size"] : (content as! Json)["size"])
                 let hash: String?
                 if s["hash"] != nil {
                     hash = (content as? String) != nil ? string(large, "sha256") : sha(pattern(0, size))
@@ -291,11 +322,13 @@ final class SharedLinkDataTests: XCTestCase {
                 offset = state.offset
                 try check(s["expect"] as! Json, state)
             case "put":
-                let state = try await put(int64(s["from"]), int64(s["to"]))
+                let from = try int64(s["from"])
+                let to = try int64(s["to"])
+                let state = try await put(from, to)
                 offset = state.offset
                 try check(s["expect"] as! Json, state)
             case "putAll":
-                let chunk = int64(s["chunk"])
+                let chunk = try int64(s["chunk"])
                 var last: ItemState?
                 while offset < size {
                     last = try await put(offset, min(size, offset + chunk))
@@ -303,10 +336,14 @@ final class SharedLinkDataTests: XCTestCase {
                 }
                 try check(s["expect"] as! Json, last!)
             case "putError":
-                try await expectRefused(s) { _ = try await put(int64(s["from"]), int64(s["to"])) }
+                let from = try int64(s["from"])
+                let to = try int64(s["to"])
+                try await expectRefused(s) { _ = try await put(from, to) }
             case "drop":
-                let at = int64(s["offset"])
-                _ = try await phone.partialChunk(id, offset: at, declared: int(s["declared"]), sent: pattern(at, at + int64(s["sent"])), hangUp: true)
+                let at = try int64(s["offset"])
+                let declared = try int(s["declared"])
+                let sent = try int64(s["sent"])
+                _ = try await phone.partialChunk(id, offset: at, declared: declared, sent: pattern(at, at + sent), hangUp: true)
             case "settle":
                 var last: Int64 = -1
                 for _ in 0..<100 {
@@ -329,7 +366,8 @@ final class SharedLinkDataTests: XCTestCase {
             case "expectFile":
                 let bytes = try Data(contentsOf: folder.appendingPathComponent(string(s, "name")!))
                 if let content = s["content"] as? Json {
-                    if bytes != pattern(0, int64(content["size"])) { throw Failure("the file is not what was sent") }
+                    let expected = pattern(0, try int64(content["size"]))
+                    if bytes != expected { throw Failure("the file is not what was sent") }
                 } else if sha(bytes) != string(large, "sha256") {
                     throw Failure("the file is not what was sent")
                 }
@@ -356,7 +394,7 @@ final class SharedLinkDataTests: XCTestCase {
                 let want = (s["items"] as! [[String]])
                 if got != want { throw Failure("listed \(got), expected \(want)") }
             case "ack":
-                let index = int(s["index"])
+                let index = try int(s["index"])
                 try await phone.client.acknowledge(polled[index])
                 polled.remove(at: index)
             default:
