@@ -34,6 +34,9 @@ jobs:
         working-directory: android
     steps:
       - uses: actions/checkout@v7
+      - name: Link test data matches its pin
+        working-directory: .
+        run: bash scripts/link_testdata.sh check
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
