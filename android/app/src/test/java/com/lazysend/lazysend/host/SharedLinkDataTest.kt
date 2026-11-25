@@ -90,6 +90,7 @@ class SharedLinkDataTest {
     fun shortCodesAreReadAndRedeemedAsTheDataSays() {
         val data = load("short-codes.json")
         val failures = ArrayList<String>()
+        if (data.str("alphabet") != "0123456789ABCDEFGHJKMNPQRSTVWXYZ") failures.add("the alphabet differs")
         for (n in data.array("normalize").map { it.jsonObject }) {
             val typed = n.str("typed")
             if (PairingSession.normalizeShortCode(typed) != n.str("canonical")) failures.add("normalize \"$typed\": expected ${n.str("canonical")}")
@@ -143,7 +144,7 @@ class SharedLinkDataTest {
         "ApiError" -> LinkJson.decodeFromString<ApiError>(body).let {
             mapOf("error" to it.error, "message" to it.message, "offset" to it.offset)
         }
-        else -> throw IllegalArgumentException(type)
+        else -> throw AssertionError("unknown type $type")
     }
 
     private fun matches(expected: JsonElement, actual: Any?): Boolean = when {
@@ -175,10 +176,18 @@ class SharedLinkDataTest {
                 fields(c.str("type")!!, c.str("body")!!)
                 failures.add("${c.str("name")}: read although it is not valid")
             } catch (e: kotlinx.serialization.SerializationException) {
-            } catch (e: IllegalArgumentException) {
             }
         }
         noFailures(failures)
+    }
+
+    @Test
+    fun errorCodesAreTheOnesInTheData() {
+        val named = HostError.Companion::class.java.methods
+            .filter { it.returnType == HostError::class.java && it.parameterCount == 0 }
+            .map { (it.invoke(HostError.Companion) as HostError).code } + HostError.offsetMismatch(1).code
+        val wanted = load("messages.json").array("errorCodes").map { it.text()!! }
+        assertEquals(wanted.sorted(), named.sorted())
     }
 
     @Test
@@ -361,7 +370,7 @@ class SharedLinkDataTest {
                     runBlocking { client.acknowledge(polled[index]) }
                     polled.removeAt(index)
                 }
-                else -> throw IllegalArgumentException(op)
+                else -> throw AssertionError("unknown step $op")
             }
         }
     }
