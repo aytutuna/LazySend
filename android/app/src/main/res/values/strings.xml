@@ -123,6 +123,9 @@
     <string name="flash_on">Flash on</string>
     <string name="save_camera_photos">Save camera photos to the gallery</string>
     <string name="target_gone">That device is not paired any more.</string>
+    <string name="copy_failed">The file could not be kept for sending.</string>
+    <string name="send_again">Send again</string>
+    <string name="note_too_long">That is more than the 1 MB a note can hold. Send it as a file instead.</string>
     <string name="clip_hint">Paste here to put it on %1$s\'s clipboard.</string>
     <string name="clip_type_hint">Type something to copy on %1$s</string>
     <string name="clip_pair_title">Pair a device to send what you copy.</string>

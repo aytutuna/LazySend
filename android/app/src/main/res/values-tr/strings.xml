@@ -123,6 +123,9 @@
     <string name="flash_on">Flaş açık</string>
     <string name="save_camera_photos">Kamera fotoğraflarını galeriye kaydet</string>
     <string name="target_gone">Bu cihaz artık eşleşmiş değil.</string>
+    <string name="copy_failed">Dosya gönderim için saklanamadı.</string>
+    <string name="send_again">Yeniden gönder</string>
+    <string name="note_too_long">Bir not en çok 1 MB olabilir. Dosya olarak gönderin.</string>
     <string name="clip_hint">%1$s cihazının panosuna koymak için buraya yapıştırın.</string>
     <string name="clip_type_hint">%1$s cihazında kopyalanacak bir şey yazın</string>
     <string name="clip_pair_title">Kopyaladıklarınızı göndermek için bir cihaz eşleştirin.</string>

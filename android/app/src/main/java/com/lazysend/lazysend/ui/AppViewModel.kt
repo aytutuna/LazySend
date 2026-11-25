@@ -20,7 +20,9 @@ import com.lazysend.lazysend.host.Guest
 import com.lazysend.lazysend.link.LinkException
 import com.lazysend.lazysend.link.PairingCode
 import com.lazysend.lazysend.link.PairingCodeException
+import com.lazysend.lazysend.transfer.galleryPcOf
 import com.lazysend.lazysend.transfer.Pasted
+import com.lazysend.lazysend.transfer.noteTooLong
 import com.lazysend.lazysend.transfer.PhotoFormat
 import com.lazysend.lazysend.transfer.convertPhoto
 import com.lazysend.lazysend.transfer.convertedName
@@ -228,8 +230,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Sends text to the selected device's clipboard; a lone address goes as a link. */
-    fun sendClipText(text: String, at: Long = System.currentTimeMillis()) {
+    fun sendClipText(text: String, at: Long = System.currentTimeMillis()): Boolean {
         val context = getApplication<Application>()
+        if (noteTooLong(text)) {
+            clipProblem.value = context.getString(R.string.note_too_long)
+            return false
+        }
         val guest = selectedGuest()
         val pc = selectedPc()
         when {
@@ -237,10 +243,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             pc != null -> SendService.sendText(context, pc.id, text, clip = true, at = at)
             else -> {
                 clipProblem.value = context.getString(R.string.target_gone)
-                return
+                return false
             }
         }
         clipProblem.value = null
+        return true
     }
 
     private class TooBig : IOException()
@@ -263,7 +270,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return dir
     }
 
-    private fun sendClipped(file: File, problem: MutableStateFlow<String?>, at: Long): Boolean {
+    private suspend fun sendClipped(file: File, problem: MutableStateFlow<String?>, at: Long): Boolean {
         try {
             handOver(file, clip = true, at)
         } catch (e: Exception) {
@@ -273,15 +280,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
-    // The file goes through the provider so the sending service reads its name and size like any picked file.
-    private fun handOver(file: File, clip: Boolean, at: Long) {
+    // The file goes through the provider so it is read like any picked file. For a computer it is copied into the sender's own
+    // folder before this returns, so a scan's pages or a shot can be let go as soon as the call does.
+    private suspend fun handOver(file: File, clip: Boolean, at: Long) {
         val context = getApplication<Application>()
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
         val guest = selectedGuest()
         val pc = selectedPc()
         when {
             guest != null -> SendService.queueFiles(context, guest.id, listOf(uri), clip = clip)
-            pc != null -> SendService.sendFiles(context, pc.id, listOf(uri), clip = clip, at = at)
+            pc != null -> {
+                val kept = graph.sender.stage(pc, uri, clip, at) ?: throw IOException(context.getString(R.string.copy_failed))
+                SendService.sendStaged(context, listOf(kept.id))
+            }
             else -> throw IOException(context.getString(R.string.target_gone))
         }
     }
@@ -294,7 +305,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun sendScan(pages: List<ScanPage>): String = withContext(Dispatchers.IO) {
         val at = System.currentTimeMillis()
         val single = pages.size == 1
-        val bytes = if (single) pages[0].jpeg else withContext(Dispatchers.Default) { ScanPdf.make(pages) }
         val dir = cacheFolder("scan")
         val sent = graph.timeline.entries.value
         val name = scanName(at, if (single) "jpg" else "pdf") { name ->
@@ -302,7 +312,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         val file = File(dir, name)
         try {
-            file.writeBytes(bytes)
+            if (single) file.writeBytes(pages[0].jpeg)
+            else file.outputStream().buffered().use { out -> ScanPdf.write(out, pages.size) { pages[it] } }
             handOver(file, clip = single, at)
         } catch (e: Exception) {
             file.delete()
@@ -339,6 +350,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun stopFeed() {
         selectedGuest()?.let { graph.host.core.feed.stop(it.id) }
     }
+
+    /** Sends what was kept because it did not get through, now and each time a computer with such a send comes within reach. */
+    suspend fun resendKept() {
+        val context = getApplication<Application>()
+        graph.connector.current.map { it.keys }.distinctUntilChanged().collect { reachable ->
+            if (graph.sender.outgoing.pending.any { it.pcId in reachable }) SendService.sendPending(context)
+        }
+    }
+
+    /** Sends one row again, to the computer it was meant for whichever is selected. */
+    fun resend(id: String) = SendService.sendStaged(getApplication(), listOf(id))
+
+    /** Sends the whole library again to the computer a library row belongs to, not the one selected now. */
+    fun resumeGallery(entryId: String) = SendService.syncGallery(getApplication(), galleryPcOf(entryId))
 
     fun openReceive() = graph.host.open()
 

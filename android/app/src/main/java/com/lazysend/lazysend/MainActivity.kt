@@ -74,6 +74,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 model.resumeHosting()
+                launch { model.resendKept() }
                 model.keepHosting.collect { if (it) SendService.keepHosting(this@MainActivity) }
             }
         }
@@ -239,6 +240,9 @@ class MainActivity : ComponentActivity() {
                                     } else {
                                         model.selectedPc()?.let { SendService.syncGallery(this@MainActivity, it.id) }
                                     }
+                                },
+                                onResume = { entry ->
+                                    if (entry.kind == EntryKind.Gallery) model.resumeGallery(entry.id) else model.resend(entry.id)
                                 },
                                 onFeed = {
                                     if (photoAccess(this@MainActivity) == PhotoAccess.None) {

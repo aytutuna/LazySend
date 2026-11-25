@@ -67,6 +67,7 @@ class MainActions(
     val onFormat: (PhotoFormat) -> Unit = {},
     val onSelect: (String) -> Unit = {},
     val onGallery: () -> Unit = {},
+    val onResume: (TimelineEntry) -> Unit = {},
     val onFeed: () -> Unit = {},
     val onStopFeed: () -> Unit = {},
     val onStop: () -> Unit = {},
@@ -238,8 +239,11 @@ internal fun Entry(entry: TimelineEntry, actions: MainActions) {
                 if (entry.kind == EntryKind.Gallery) {
                     if (entry.state == EntryState.Active) TextButton(onClick = actions.onStop) { Text(stringResource(R.string.stop)) }
                     if (entry.state == EntryState.Paused || entry.state == EntryState.Failed) {
-                        TextButton(onClick = actions.onGallery) { Text(stringResource(R.string.resume)) }
+                        TextButton(onClick = { actions.onResume(entry) }) { Text(stringResource(R.string.resume)) }
                     }
+                }
+                if (sent && entry.kind == EntryKind.File && (entry.state == EntryState.Paused || entry.state == EntryState.Failed)) {
+                    TextButton(onClick = { actions.onResume(entry) }) { Text(stringResource(R.string.send_again)) }
                 }
                 if (entry.kind == EntryKind.Text || entry.kind == EntryKind.Link) {
                     TextButton(onClick = { actions.onCopy(entry.title) }) { Text(stringResource(R.string.copy)) }

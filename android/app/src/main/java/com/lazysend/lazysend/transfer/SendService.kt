@@ -12,6 +12,8 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.lazysend.lazysend.AppGraph
 import com.lazysend.lazysend.LazySendApp
+import java.io.File
+import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -66,9 +68,11 @@ class SendService : Service() {
                 gate.launch { for (uri in uris(intent)) graph.sender.sendFiles(pc, listOf(prepared(uri, format)), clip, at) }
             }
             ACTION_GALLERY -> if (pc != null) gate.launch { graph.sender.syncGallery(pc) }
-            ACTION_TEXT -> if (pc != null) intent.getStringExtra(EXTRA_TEXT)?.let { text -> gate.launch { graph.sender.sendText(pc, text, intent.getBooleanExtra(EXTRA_CLIP, false), intent.getLongExtra(EXTRA_AT, System.currentTimeMillis())) } }
+            ACTION_STAGED -> intent.getStringArrayExtra(EXTRA_IDS)?.let { ids -> gate.launch { ids.forEach { graph.sender.sendStaged(it) } } }
+            ACTION_PENDING -> gate.launch { graph.sender.resumePending() }
+            ACTION_TEXT -> if (pc != null) textOf(intent)?.let { text -> gate.launch { graph.sender.sendText(pc, text, intent.getBooleanExtra(EXTRA_CLIP, false), intent.getLongExtra(EXTRA_AT, System.currentTimeMillis())) } }
             ACTION_QUEUE -> intent.getStringExtra(EXTRA_GUEST)?.let(graph.host.core.guests::get)?.let { guest ->
-                val text = intent.getStringExtra(EXTRA_TEXT)
+                val text = textOf(intent)
                 val clip = intent.getBooleanExtra(EXTRA_CLIP, false)
                 val format = format(intent)
                 gate.launch {
@@ -108,6 +112,11 @@ class SendService : Service() {
         stopSelf()
     }
 
+    // A long text came by a file: an intent that carries over a few hundred kilobytes is refused by the system.
+    private fun textOf(intent: Intent): String? = intent.getStringExtra(EXTRA_TEXT) ?: intent.getStringExtra(EXTRA_TEXT_FILE)?.let { path ->
+        File(path).let { file -> runCatching { file.readText() }.getOrNull().also { file.delete() } }
+    }
+
     private fun format(intent: Intent) = intent.getStringExtra(EXTRA_FORMAT)?.let(PhotoFormat::valueOf)
 
     private fun preparedNow(uri: Uri, format: PhotoFormat?) = if (format == null) uri else preparedForSend(this, uri, format)
@@ -131,13 +140,18 @@ class SendService : Service() {
         private const val ACTION_FILES = "com.lazysend.lazysend.SEND_FILES"
         private const val ACTION_GALLERY = "com.lazysend.lazysend.SEND_GALLERY"
         private const val ACTION_TEXT = "com.lazysend.lazysend.SEND_TEXT"
+        private const val ACTION_STAGED = "com.lazysend.lazysend.SEND_STAGED"
+        private const val ACTION_PENDING = "com.lazysend.lazysend.SEND_PENDING"
         private const val ACTION_QUEUE = "com.lazysend.lazysend.QUEUE"
         private const val ACTION_HOST = "com.lazysend.lazysend.HOST"
         private const val ACTION_STOP = "com.lazysend.lazysend.STOP"
         private const val ACTION_STOP_HOST = "com.lazysend.lazysend.STOP_HOST"
         private const val EXTRA_PC = "pc"
+        private const val EXTRA_IDS = "ids"
         private const val EXTRA_GUEST = "guest"
         private const val EXTRA_TEXT = "text"
+        private const val EXTRA_TEXT_FILE = "textFile"
+        private const val INLINE_TEXT_CHARS = 50_000
         private const val EXTRA_CLIP = "clip"
         private const val EXTRA_AT = "at"
         private const val EXTRA_FORMAT = "format"
@@ -151,10 +165,21 @@ class SendService : Service() {
             ContextCompat.startForegroundService(context, intent)
         }
 
-        fun sendText(context: Context, pcId: String, text: String, clip: Boolean = false, at: Long = System.currentTimeMillis()) {
+        /** Uploads files the sender has already copied into its own folder, by the id of their rows. */
+        fun sendStaged(context: Context, ids: List<String>) {
             ContextCompat.startForegroundService(
-                context, Intent(context, SendService::class.java).setAction(ACTION_TEXT).putExtra(EXTRA_PC, pcId).putExtra(EXTRA_TEXT, text).putExtra(EXTRA_CLIP, clip).putExtra(EXTRA_AT, at),
+                context, Intent(context, SendService::class.java).setAction(ACTION_STAGED).putExtra(EXTRA_IDS, ids.toTypedArray()),
             )
+        }
+
+        /** Sends everything that was kept because it did not get through. */
+        fun sendPending(context: Context) {
+            ContextCompat.startForegroundService(context, Intent(context, SendService::class.java).setAction(ACTION_PENDING))
+        }
+
+        fun sendText(context: Context, pcId: String, text: String, clip: Boolean = false, at: Long = System.currentTimeMillis()) {
+            val intent = Intent(context, SendService::class.java).setAction(ACTION_TEXT).putExtra(EXTRA_PC, pcId).putExtra(EXTRA_CLIP, clip).putExtra(EXTRA_AT, at)
+            ContextCompat.startForegroundService(context, withText(context, intent, text))
         }
 
         /** Queues what was picked or shared for a guest of this phone; it is copied here, so the source can go away. */
@@ -167,9 +192,8 @@ class SendService : Service() {
         }
 
         fun queueText(context: Context, guestId: String, text: String, clip: Boolean = false) {
-            ContextCompat.startForegroundService(
-                context, Intent(context, SendService::class.java).setAction(ACTION_QUEUE).putExtra(EXTRA_GUEST, guestId).putExtra(EXTRA_TEXT, text).putExtra(EXTRA_CLIP, clip),
-            )
+            val intent = Intent(context, SendService::class.java).setAction(ACTION_QUEUE).putExtra(EXTRA_GUEST, guestId).putExtra(EXTRA_CLIP, clip)
+            ContextCompat.startForegroundService(context, withText(context, intent, text))
         }
 
         /** Keeps the host running with the screen off; called while the app is in front. */
@@ -185,6 +209,13 @@ class SendService : Service() {
 
         fun stop(context: Context) {
             context.startService(Intent(context, SendService::class.java).setAction(ACTION_STOP))
+        }
+
+        private fun withText(context: Context, intent: Intent, text: String): Intent {
+            if (text.length <= INLINE_TEXT_CHARS) return intent.putExtra(EXTRA_TEXT, text)
+            val file = File(File(context.cacheDir, "notes").also { it.mkdirs() }, UUID.randomUUID().toString())
+            file.writeText(text)
+            return intent.putExtra(EXTRA_TEXT_FILE, file.path)
         }
 
         private fun clip(uris: List<Uri>) = ClipData.newRawUri(null, uris.first()).also { clip -> uris.drop(1).forEach { clip.addItem(ClipData.Item(it)) } }

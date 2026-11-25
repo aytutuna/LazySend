@@ -35,7 +35,7 @@ fun ClipboardScreen(
     entries: List<TimelineEntry>,
     problem: String?,
     onPaste: () -> Unit,
-    onSendText: (String) -> Unit,
+    onSendText: (String) -> Boolean,
     onPair: () -> Unit,
     actions: MainActions,
 ) {
@@ -66,9 +66,11 @@ fun ClipboardScreen(
                             )
                             Button(
                                 onClick = {
-                                    onSendText(draft)
-                                    draft = ""
-                                    keyboard?.hide()
+                                    // Kept when it was not taken, so a text that is too long is not lost with the box.
+                                    if (onSendText(draft)) {
+                                        draft = ""
+                                        keyboard?.hide()
+                                    }
                                 },
                                 enabled = draft.isNotBlank(),
                             ) { Text(stringResource(R.string.send)) }

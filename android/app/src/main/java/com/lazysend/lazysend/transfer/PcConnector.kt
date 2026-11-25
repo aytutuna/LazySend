@@ -137,6 +137,14 @@ class PcConnector(
 
     fun lost(pcId: String) = links.update { it - pcId }
 
+    fun pc(id: String): Pc? = pcs.get(id)
+
+    /** The PC answered that it does not know this phone any more: it is dropped here, as when the person removes it. */
+    fun forgotten(pc: Pc) {
+        pcs.remove(pc.id)
+        lost(pc.id)
+    }
+
     private suspend fun attempt(pc: Pc, pin: ByteArray, host: String): Reach? {
         val client = LinkClient(Endpoint(host, pc.port), pin, Credentials(pcs.phoneId, pc.secret), http)
         val hello: Hello = try {
