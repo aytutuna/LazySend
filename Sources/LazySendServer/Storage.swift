@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// Where the app keeps its files. Everything but the received files lives under `root`.
@@ -146,6 +147,30 @@ public enum FileNames {
         while stem.utf8.count + ext.utf8.count > maxBytes { stem.removeLast() }
         while stem.hasSuffix(".") || stem.hasSuffix(" ") { stem.removeLast() }
         return (stem.isEmpty ? fallback : stem) + ext
+    }
+
+    /// Whether `directory` already holds this file, as `name`, `name (2)` and so on, with the same size and, when `sha256` is
+    /// given, the same content. A library file that is already there is noted, not saved twice.
+    static func hasCopy(in directory: URL, name: String, size: Int64, sha256: String?) -> Bool {
+        let ns = name as NSString
+        let ext = ns.pathExtension.isEmpty ? "" : "." + ns.pathExtension
+        let stem = ext.isEmpty ? name : ns.deletingPathExtension
+        let fm = FileManager.default
+        var candidate = name
+        var n = 2
+        while fm.fileExists(atPath: directory.appendingPathComponent(candidate).path) {
+            let url = directory.appendingPathComponent(candidate)
+            if let length = (try? fm.attributesOfItem(atPath: url.path))?[.size] as? NSNumber, length.int64Value == size {
+                guard let wanted = sha256 else { return true }
+                if let data = try? Data(contentsOf: url, options: .mappedIfSafe),
+                   SHA256.hash(data: data).map({ String(format: "%02x", $0) }).joined() == wanted {
+                    return true
+                }
+            }
+            candidate = "\(stem) (\(n))\(ext)"
+            n += 1
+        }
+        return false
     }
 
     /// The first of `name`, `name (2)`, `name (3)`... that does not exist in `directory`.

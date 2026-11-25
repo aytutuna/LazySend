@@ -559,6 +559,24 @@ final class GuestServiceTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: hostFolder.appendingPathComponent(item.id + ".part").path))
     }
 
+    func testAGalleryFileAlreadyInTheMonthFolderIsDoneUnderANewId() async throws {
+        let pc = try await pairGuest()
+        let receiver = GuestReceiver(hostId: pc.id, guest: fixture.guest)
+        let item = OutboxEntry(id: "item-0003-abcdef", kind: "file", name: "IMG_1.jpg", size: 3, sourceId: "asset-1#photo",
+                               taken: "2021-03-15T12:00:00Z")
+        try await finish(item, Data([1, 2, 3]), with: receiver)
+        let again = OutboxEntry(id: "item-0004-abcdef", kind: "file", name: "IMG_1.jpg", size: 3, sourceId: "asset-9#photo",
+                                taken: "2021-03-15T12:00:00Z")
+        let other = OutboxEntry(id: "item-0005-abcdef", kind: "file", name: "IMG_1.jpg", size: 4, sourceId: "asset-8#photo",
+                                taken: "2021-03-15T12:00:00Z")
+
+        let doneAgain = await receiver.isDone(again)
+        let doneOther = await receiver.isDone(other)
+
+        XCTAssertTrue(doneAgain)
+        XCTAssertFalse(doneOther)
+    }
+
     func testAGalleryFileWithoutADateIsFiledByTheDayItArrived() async throws {
         let pc = try await pairGuest()
         let receiver = GuestReceiver(hostId: pc.id, guest: fixture.guest)

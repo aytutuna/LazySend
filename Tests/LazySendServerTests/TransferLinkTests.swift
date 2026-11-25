@@ -331,6 +331,22 @@ final class TransferLinkTests: XCTestCase {
         XCTAssertEqual(files(in: phoneFolder.appendingPathComponent("Gallery")).count, 1)
     }
 
+    func testAnAssetOfferedUnderANewIdIsNotSavedAgainButAnotherPhotoIs() async throws {
+        let content = bytes(100)
+        try await phone.upload("IMG_0012.jpg", content, sourceId: "asset-old")
+
+        let again = try await phone.beginFile("IMG_0012.jpg", content, sourceId: "asset-new")
+        XCTAssertTrue(again.done)
+        XCTAssertEqual(again.duplicate, true)
+
+        var other = content
+        other[0] = other[0] &+ 1
+        let different = try await phone.beginFile("IMG_0012.jpg", other, sourceId: "asset-other")
+        XCTAssertFalse(different.done)
+        _ = try await phone.put(different.id, offset: 0, other)
+        XCTAssertEqual(files(in: phoneFolder.appendingPathComponent("Gallery")).count, 2)
+    }
+
     func testTheSameAssetInProgressIsNotStartedTwice() async throws {
         let content = bytes(5000)
         let first = try await phone.beginFile("p.jpg", content, sourceId: "asset-p")

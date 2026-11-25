@@ -43,7 +43,16 @@ final class GuestReceiver: OutboxHandler, @unchecked Sendable {
     }
 
     func isDone(_ item: OutboxEntry) async -> Bool {
-        if let source = item.gallerySource, let gallery = guest?.gallery { return gallery.contains(hostId, source) }
+        if let source = item.gallerySource, let gallery = guest?.gallery {
+            if gallery.contains(hostId, source) { return true }
+            // The host offers its library under new ids (a reinstall): a file already in the month folder is only noted.
+            if let size = item.size, let folder = try? directory(),
+               FileNames.hasCopy(in: item.galleryFolder(in: folder) ?? folder, name: FileNames.clean(item.name), size: size, sha256: nil) {
+                gallery.add(hostId, source)
+                return true
+            }
+            return false
+        }
         if item.kind == "file" {
             lock.lock()
             defer { lock.unlock() }

@@ -167,6 +167,11 @@ public final class Inbox: @unchecked Sendable {
             folder = folder.appendingPathComponent("Gallery", isDirectory: true)
                 .appendingPathComponent(Inbox.month(modified ?? now), isDirectory: true)
         }
+        // A phone that lost its record of what it sent (a reinstall, new ids) offers its library again; what is here is only noted.
+        if let source = request.sourceId, FileNames.hasCopy(in: folder, name: FileNames.clean(request.name), size: size, sha256: sha256) {
+            index.add(device.id, source)
+            return (ItemState(id: "", offset: size, done: true, duplicate: true), false)
+        }
         if freeSpace(folder) - size < Limits.minFree { throw Refusal(status: 507, failure: .diskFull) }
         let file = IncomingFile()
         file.id = newId()
