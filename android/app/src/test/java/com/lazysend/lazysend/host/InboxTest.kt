@@ -1,6 +1,7 @@
 package com.lazysend.lazysend.host
 
 import com.lazysend.lazysend.link.ItemRequest
+import com.lazysend.lazysend.link.ItemState
 import com.lazysend.lazysend.transfer.MemFiles
 import java.io.ByteArrayInputStream
 import java.io.File
@@ -63,6 +64,35 @@ class InboxTest {
         assertEquals("a_b.bin", files.names[uri])
         assertEquals("Pixel 8", files.folders[uri])
         assertTrue(put(begun.id, 4000, data.copyOfRange(4000, 10_000)).done)
+    }
+
+    private fun library(guest: Guest, name: String, data: ByteArray, source: String): ItemState {
+        val begun = inbox.begin(guest, ItemRequest("file", name = name, size = data.size.toLong(), sha256 = sha(data), sourceId = source, modified = "2026-03-09T12:00:00Z"))
+        if (!begun.done) inbox.write(guest.id, begun.id, 0, data.size.toLong(), body(data)) {}
+        return begun
+    }
+
+    @Test
+    fun aLibraryFileAlreadySavedIsOnlyNotedWhenAReinstalledPhoneOffersItAgain() {
+        val data = ByteArray(500) { (it % 97).toByte() }
+        library(guest, "IMG_0012.jpg", data, "external:image:7:500:1")
+
+        val again = library(Guest("phone-0002", "Pixel 8", "android", "1", "", 0, 0), "IMG_0012.jpg", data, "external:image:9:500:1")
+
+        assertTrue(again.done)
+        assertEquals(true, again.duplicate)
+        assertEquals(1, files.finished.size)
+        assertTrue(index.contains("phone-0002", "external:image:9:500:1"))
+    }
+
+    @Test
+    fun anotherPhotoWithTheSameNameAndSizeIsSavedAsWell() {
+        library(guest, "IMG_0012.jpg", ByteArray(500) { 1 }, "external:image:7:500:1")
+
+        val other = library(Guest("phone-0002", "Pixel 8", "android", "1", "", 0, 0), "IMG_0012.jpg", ByteArray(500) { 2 }, "external:image:8:500:2")
+
+        assertFalse(other.done)
+        assertEquals(2, files.finished.size)
     }
 
     @Test

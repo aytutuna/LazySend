@@ -104,6 +104,11 @@ class Inbox(
         val modified = parseModified(request.modified)
         var folder = cleanFileName(guest.name, "Phone")
         if (sourceId != null) folder += "/Gallery/" + MONTH.format(Instant.ofEpochMilli(modified ?: now))
+        // A phone that lost its record of what it sent (a reinstall) offers its library again; what is already here is only noted.
+        if (sourceId != null && files.hasCopy(cleanFileName(request.name), request.mime, folder, size, sha256)) {
+            runCatching { index.add(guest.id, sourceId) }
+            return duplicate
+        }
         if (freeSpace() - size < MIN_FREE_BYTES) throw HostError.diskFull
         val file = IncomingFile(
             newId(), guest.id, guest.name, cleanFileName(request.name), size, request.mime, modified, sourceId, sha256, folder,

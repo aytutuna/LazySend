@@ -157,6 +157,10 @@ class Receiver(
         val size = item.size ?: 0
         val taken = parseModified(item.taken)
         val folder = cleanFileName(pc.name, "Computer") + "/Gallery/" + MONTH.format(Instant.ofEpochMilli(taken ?: clock()))
+        if (files.hasCopy(name, item.mime, folder, size, null)) {
+            gallery.add(pc.id, source)
+            return
+        }
         var part = galleryParts.get(key)?.let(files::existing) ?: files.create(name, item.mime, folder)
         if (part.size > size) {
             files.discard(part.uri)

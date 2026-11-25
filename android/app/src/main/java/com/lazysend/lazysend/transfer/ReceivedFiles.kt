@@ -30,6 +30,19 @@ interface ReceivedFiles {
     fun discard(uri: String)
 
     fun read(uri: String): InputStream
+
+    /**
+     * Whether [folder] already holds this file, finished, under [name] or "name (2)" and so on, with the same [size] and, when
+     * [sha256] is given, the same content. A library file that is already there is noted, not saved twice.
+     */
+    fun hasCopy(name: String, mime: String?, folder: String, size: Long, sha256: String?): Boolean
+}
+
+/** [candidate] is [name], or [name] with " (2)", " (3)"... before its extension, as a saved repeat is called. */
+fun isCopyName(candidate: String, name: String): Boolean {
+    if (candidate == name) return true
+    val dot = name.lastIndexOf('.').takeIf { it > 0 } ?: name.length
+    return Regex(Regex.escape(name.substring(0, dot)) + " \\(\\d+\\)" + Regex.escape(name.substring(dot))).matches(candidate)
 }
 
 /**
@@ -95,13 +108,58 @@ class MediaFiles(private val context: Context) : ReceivedFiles {
     override fun read(uri: String): InputStream =
         if (uri.startsWith("file:")) File(Uri.parse(uri).path!!).inputStream() else context.contentResolver.openInputStream(Uri.parse(uri))!!
 
+    override fun hasCopy(name: String, mime: String?, folder: String, size: Long, sha256: String?): Boolean {
+        val sameContent = { open: () -> InputStream -> sha256 == null || open().use { sha256Of(it) } == sha256 }
+        if (Build.VERSION.SDK_INT < 29) {
+            val directory = legacyDirectory(mime, folder)
+            return directory.listFiles().orEmpty().any { it.isFile && it.length() == size && isCopyName(it.name, name) && sameContent { it.inputStream() } }
+        }
+        val (collection, base) = mediaStoreFor(mime ?: "application/octet-stream")
+        val path = listOf(base, RECEIVED_FOLDER, folder).filter { it.isNotEmpty() }.joinToString("/") + "/"
+        val columns = arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME)
+        context.contentResolver.query(
+            collection, columns, "${MediaStore.MediaColumns.RELATIVE_PATH} = ? AND ${MediaStore.MediaColumns.SIZE} = ?", arrayOf(path, size.toString()), null,
+        )?.use { cursor ->
+            while (cursor.moveToNext()) {
+                if (!isCopyName(cursor.getString(1) ?: continue, name)) continue
+                val uri = android.content.ContentUris.withAppendedId(collection, cursor.getLong(0))
+                if (sameContent { context.contentResolver.openInputStream(uri) ?: throw java.io.IOException("Cannot open $uri") }) return true
+            }
+        }
+        return false
+    }
+
+    private fun sha256Of(input: InputStream): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        val buffer = ByteArray(128 * 1024)
+        while (true) {
+            val n = input.read(buffer)
+            if (n < 0) break
+            digest.update(buffer, 0, n)
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun mediaStoreFor(type: String) = when {
+        type.startsWith("image/") -> MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY) to Environment.DIRECTORY_PICTURES
+        type.startsWith("video/") -> MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY) to Environment.DIRECTORY_MOVIES
+        else -> MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY) to Environment.DIRECTORY_DOWNLOADS
+    }
+
+    @Suppress("DEPRECATION")
+    private fun legacyDirectory(mime: String?, folder: String): File {
+        val base = when {
+            mime?.startsWith("image/") == true -> Environment.DIRECTORY_PICTURES
+            mime?.startsWith("video/") == true -> Environment.DIRECTORY_MOVIES
+            else -> Environment.DIRECTORY_DOWNLOADS
+        }
+        val root = File(Environment.getExternalStoragePublicDirectory(base), RECEIVED_FOLDER)
+        return if (folder.isEmpty()) root else File(root, folder)
+    }
+
     private fun createInMediaStore(name: String, mime: String?, folder: String): ReceivedFiles.Part {
         val type = mime ?: "application/octet-stream"
-        val (collection, base) = when {
-            type.startsWith("image/") -> MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY) to Environment.DIRECTORY_PICTURES
-            type.startsWith("video/") -> MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY) to Environment.DIRECTORY_MOVIES
-            else -> MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY) to Environment.DIRECTORY_DOWNLOADS
-        }
+        val (collection, base) = mediaStoreFor(type)
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, name)
             put(MediaStore.MediaColumns.MIME_TYPE, type)
@@ -122,13 +180,7 @@ class MediaFiles(private val context: Context) : ReceivedFiles {
     @Suppress("DEPRECATION")
     private fun createLegacy(name: String, mime: String?, folder: String): ReceivedFiles.Part {
         // The same public folders the media store gives on Android 10 and later.
-        val base = when {
-            mime?.startsWith("image/") == true -> Environment.DIRECTORY_PICTURES
-            mime?.startsWith("video/") == true -> Environment.DIRECTORY_MOVIES
-            else -> Environment.DIRECTORY_DOWNLOADS
-        }
-        val root = File(Environment.getExternalStoragePublicDirectory(base), RECEIVED_FOLDER)
-        val directory = (if (folder.isEmpty()) root else File(root, folder)).also { it.mkdirs() }
+        val directory = legacyDirectory(mime, folder).also { it.mkdirs() }
         val file = File(directory, "$name.${java.util.UUID.randomUUID().toString().take(8)}.part")
         file.delete()
         file.createNewFile()

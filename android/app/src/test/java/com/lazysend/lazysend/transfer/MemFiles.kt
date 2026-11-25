@@ -56,5 +56,12 @@ class MemFiles(private val writeDelayMs: Long = 20) : ReceivedFiles {
     override fun read(uri: String): InputStream = ByteArrayInputStream(data[uri]!!.toByteArray())
 
     @Synchronized
+    override fun hasCopy(name: String, mime: String?, folder: String, size: Long, sha256: String?): Boolean =
+        data.entries.any { (uri, bytes) ->
+            uri in finished && folders[uri] == folder && isCopyName(names[uri]!!, name) && bytes.size().toLong() == size &&
+                (sha256 == null || java.security.MessageDigest.getInstance("SHA-256").digest(bytes.toByteArray()).joinToString("") { "%02x".format(it) } == sha256)
+        }
+
+    @Synchronized
     fun bytes(uri: String): ByteArray = data[uri]!!.toByteArray()
 }

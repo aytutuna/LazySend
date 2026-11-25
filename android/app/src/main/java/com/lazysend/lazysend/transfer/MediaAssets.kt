@@ -8,6 +8,12 @@ import android.provider.MediaStore
 
 data class Asset(val sourceId: String, val uri: Uri, val name: String, val size: Long, val mime: String, val modifiedMs: Long)
 
+/**
+ * A row number is all the media store promises, and it can be handed out again for another photo, so the id says the size and the
+ * date the file was added too: a new photo on an old number is not taken for the old one.
+ */
+fun libraryId(volume: String, kind: String, rowId: Long, size: Long, addedSeconds: Long) = "$volume:$kind:$rowId:$size:$addedSeconds"
+
 /** The photos and videos this app may read, newest first. With partial access (Android 14) only the ones the user allowed show up. */
 open class MediaAssets(private val context: Context) {
     open fun list(): List<Asset> {
@@ -26,6 +32,7 @@ open class MediaAssets(private val context: Context) {
             MediaStore.MediaColumns.MIME_TYPE,
             MediaStore.MediaColumns.DATE_MODIFIED,
             MediaStore.MediaColumns.DATE_TAKEN,
+            MediaStore.MediaColumns.DATE_ADDED,
         )
         val found = mutableListOf<Asset>()
         // What came from the PC is saved in a Lazy Send folder and must not go back.
@@ -39,7 +46,7 @@ open class MediaAssets(private val context: Context) {
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(0)
                 found += Asset(
-                    sourceId = "$volume:$kind:$id",
+                    sourceId = libraryId(volume, kind, id, cursor.getLong(2), cursor.getLong(6)),
                     uri = ContentUris.withAppendedId(collection, id),
                     name = cursor.getString(1) ?: "$kind-$id",
                     size = cursor.getLong(2),
