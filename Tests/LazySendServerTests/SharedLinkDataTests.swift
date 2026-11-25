@@ -8,7 +8,7 @@ import XCTest
 
 private typealias Json = [String: Any]
 
-private func load(_ file: String) throws -> Json {
+private func loadFile(_ file: String) throws -> Json {
     var folder = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
     while !FileManager.default.fileExists(atPath: folder.appendingPathComponent("testdata/link/\(file)").path) {
         let parent = folder.deletingLastPathComponent()
@@ -34,6 +34,15 @@ private func pattern(_ from: Int64, _ to: Int64) -> Data {
     })
 }
 
+private func hasSeparatorOrControl(_ text: String) -> Bool {
+    for scalar in text.unicodeScalars {
+        let value = scalar.value
+        if value < 0x20 || (0x7F...0x9F).contains(value) { return true }
+        if value == 0x2F || value == 0x5C || value == 0x3A { return true }
+    }
+    return false
+}
+
 private func isBool(_ value: Any) -> Bool {
     guard let number = value as? NSNumber else { return false }
     return CFGetTypeID(number) == CFBooleanGetTypeID()
@@ -53,7 +62,7 @@ private func same(_ expected: Any, _ actual: Any?) -> Bool {
 
 final class SharedLinkDataTests: XCTestCase {
     func testPairingCodesAreReadAsTheDataSays() throws {
-        for c in list(try load("pairing-uris.json"), "cases") {
+        for c in list(try loadFile("pairing-uris.json"), "cases") {
             let name = string(c, "name")!
             let result = string(c, "result")!
             let uri = string(c, "uri")!
@@ -76,7 +85,7 @@ final class SharedLinkDataTests: XCTestCase {
     }
 
     func testCheckCodesMatch() throws {
-        for c in list(try load("check-codes.json"), "cases") {
+        for c in list(try loadFile("check-codes.json"), "cases") {
             let fingerprint = Data((c["fingerprint"] as! [NSNumber]).map { UInt8($0.intValue) })
             XCTAssertEqual(SpkiFingerprint.checkCode(fingerprint), string(c, "checkCode"))
             XCTAssertEqual(SpkiFingerprint.matchCode(fingerprint, shortCode: string(c, "shortCode")!), string(c, "matchCode"))
@@ -84,7 +93,7 @@ final class SharedLinkDataTests: XCTestCase {
     }
 
     func testShortCodesAreReadAndRedeemedAsTheDataSays() throws {
-        let data = try load("short-codes.json")
+        let data = try loadFile("short-codes.json")
         XCTAssertEqual(String(ShortCode.alphabet), string(data, "alphabet"))
         for n in list(data, "normalize") {
             let typed = n["typed"] as? String
@@ -146,7 +155,7 @@ final class SharedLinkDataTests: XCTestCase {
     }
 
     func testMessagesAreReadAsTheDataSays() throws {
-        let data = try load("messages.json")
+        let data = try loadFile("messages.json")
         for c in list(data, "cases") {
             let name = string(c, "name")!
             let body = try JSONSerialization.data(withJSONObject: c["json"]!)
@@ -167,15 +176,14 @@ final class SharedLinkDataTests: XCTestCase {
     }
 
     func testNamesAndIdsAreMadeSafeAsTheDataSays() throws {
-        let data = try load("names.json")
+        let data = try loadFile("names.json")
         let maxBytes = int(data["maxFileNameBytes"])
         for c in list(data, "cleanFileName") {
             let name = c["name"] as? String
             let clean = FileNames.clean(name)
             let label = "\"\(name ?? "nothing")\" became \"\(clean)\""
             XCTAssertTrue(!clean.isEmpty && clean.utf8.count <= maxBytes, "\(label): empty or too long")
-            XCTAssertFalse(clean.unicodeScalars.contains { $0 == "/" || $0 == "\\" || $0 == ":" || $0.value < 0x20 || (0x7F...0x9F).contains($0.value) },
-                           "\(label): a separator or control character is left")
+            XCTAssertFalse(hasSeparatorOrControl(clean), "\(label): a separator or control character is left")
             XCTAssertFalse(clean.hasSuffix(".") || clean.hasSuffix(" "), "\(label): ends with a dot or space")
             if let keep = string(c, "keep") { XCTAssertTrue(clean.hasSuffix(keep), "\(label): lost \(keep)") }
             if let exact = string(c, "exact") { XCTAssertEqual(clean, exact, label) }
@@ -185,7 +193,7 @@ final class SharedLinkDataTests: XCTestCase {
     }
 
     func testLargeFileIsDescribedByItsSizeAndFingerprint() throws {
-        let data = try load("large-file.json")
+        let data = try loadFile("large-file.json")
         let size = int64(data["size"])
         var sha = SHA256()
         var at: Int64 = 0
@@ -198,8 +206,8 @@ final class SharedLinkDataTests: XCTestCase {
     }
 
     func testSessionsRunAsTheDataSays() async throws {
-        let data = try load("sessions.json")
-        let large = try load("large-file.json")
+        let data = try loadFile("sessions.json")
+        let large = try loadFile("large-file.json")
         for c in list(data, "cases") {
             if let readers = c["readers"] as? [String], !readers.contains("swift") { continue }
             let harness = try await Harness()
