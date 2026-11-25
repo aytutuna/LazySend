@@ -136,6 +136,21 @@ public sealed class GuestService : IDisposable
 
         // What was met first is the pin of the pairing itself, so the host that asks its user is the one whose digits were shown.
         using var client = new LinkClient(reached, port, fingerprint, null);
+        // The host replaces the secret as it answers; a watcher still polling with the old one would be refused and take the host off the list.
+        StopWatching(hostId);
+        try
+        {
+            return await FinishPairingAsync(client, hostId, fallbackName, addresses, port, fingerprint, reached, token, cancellation).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (Hosts.Find(hostId) is not null) Watch(hostId);
+        }
+    }
+
+    private async Task<GuestHost> FinishPairingAsync(LinkClient client, string hostId, string fallbackName, IReadOnlyList<string> addresses, int port,
+                                                     byte[] fingerprint, string reached, string token, CancellationToken cancellation)
+    {
         var answer = await client.PairAsync(token, _guestId, PairedDeviceStore.CleanName(_guestName), "windows", _appVersion, cancellation).ConfigureAwait(false);
         if (Protocol.DecodeBase64Url(answer.DeviceSecret) is not { Length: PairedDeviceStore.SecretByteCount })
         {
@@ -166,9 +181,6 @@ public sealed class GuestService : IDisposable
             await ForgetAtAsync(reached, port, fingerprint, answer.DeviceSecret).ConfigureAwait(false);
             throw;
         }
-        // Pairing again replaced the secret, so a watcher polling with the old one starts over.
-        StopWatching(host.Id);
-        Watch(host.Id);
         return host;
     }
 

@@ -502,6 +502,34 @@ public class GuestSendTests
     }
 
     [Fact]
+    public async Task PairingAgainKeepsTheHostAndKeepsWatchingWithTheNewSecret()
+    {
+        await using var h = new Harness();
+        using var guest = new GuestRig(h);
+        var host = await guest.PairAsync();
+        guest.Service.Start();
+        await Eventually(() => guest.Service.IsReachable(host.Id));
+        string oldSecret = guest.Hosts.Secret(host.Id)!;
+
+        for (int i = 0; i < 20; i++)
+        {
+            await guest.PairAsync();
+            Assert.NotNull(guest.Hosts.Find(host.Id));
+        }
+
+        Assert.NotEqual(oldSecret, guest.Hosts.Secret(host.Id));
+        await Eventually(() => guest.Service.IsReachable(host.Id));
+        await Task.Delay(500);
+        Assert.NotNull(guest.Hosts.Find(host.Id));
+    }
+
+    private static async Task Eventually(Func<bool> condition)
+    {
+        for (int i = 0; i < 100 && !condition(); i++) await Task.Delay(100);
+        Assert.True(condition());
+    }
+
+    [Fact]
     public async Task RestartedGuestStillListsTheFileOfAnUnfinishedSend()
     {
         await using var h = new Harness();
