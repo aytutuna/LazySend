@@ -42,6 +42,7 @@ import com.lazysend.lazysend.data.EntryState
 import com.lazysend.lazysend.data.TimelineEntry
 import com.lazysend.lazysend.transfer.PhotoFormat
 import com.lazysend.lazysend.transfer.formatBytes
+import com.lazysend.lazysend.transfer.isWebLink
 
 /** A PC this phone is a guest of, or a guest of this phone ([guest], with an id of its own so one device can be both). */
 data class PcRow(val id: String, val name: String, val link: String?, val guest: Boolean = false)
@@ -248,7 +249,7 @@ internal fun Entry(entry: TimelineEntry, actions: MainActions) {
                 if (entry.kind == EntryKind.Text || entry.kind == EntryKind.Link) {
                     TextButton(onClick = { actions.onCopy(entry.title) }) { Text(stringResource(R.string.copy)) }
                 }
-                if (entry.kind == EntryKind.Link || (entry.kind == EntryKind.File && !sent && entry.state == EntryState.Done)) {
+                if ((entry.kind == EntryKind.Link && isWebLink(entry.title)) || (entry.kind == EntryKind.File && !sent && entry.state == EntryState.Done)) {
                     TextButton(onClick = { actions.onOpen(entry) }) { Text(stringResource(R.string.open)) }
                 }
             }

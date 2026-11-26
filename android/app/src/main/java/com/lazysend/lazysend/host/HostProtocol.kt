@@ -122,7 +122,7 @@ fun cleanFileName(name: String?, fallback: String = "file"): String {
     val safe = StringBuilder()
     name.orEmpty().codePoints().forEach { cp ->
         val bad = cp < 0x20 || cp in 0x7F..0x9F || isBidiControl(cp) || (cp < 0x80 && "/\\:*?\"<>|".indexOf(cp.toChar()) >= 0)
-        safe.appendCodePoint(if (bad) '_'.code else cp)
+        safe.appendCodePoint(if (bad) '_'.code else if (cp in 0xD800..0xDFFF) 0xFFFD else cp)
     }
     val text = safe.toString().trim(' ', '.')
     if (text.isEmpty()) return fallback

@@ -7,6 +7,7 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -50,5 +51,10 @@ class HarmfulNamesTest {
     fun aHugeNameIsCutInOnePass() {
         val clean = cleanFileName("a".repeat(5_000_000) + ".txt")
         assertTrue(clean.endsWith(".txt") && clean.toByteArray().size <= 240)
+    }
+
+    @Test
+    fun aLoneSurrogateBecomesAReplacementCharacter() {
+        assertEquals("a�b�.txt", cleanFileName("a\uD800b\uDC00.txt"))
     }
 }

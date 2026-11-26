@@ -181,6 +181,18 @@ class HostControllerTest {
     }
 
     @Test
+    fun aLinkFromAGuestShowsAsALinkAndOnlyAWebOneIsTaken() = runBlocking {
+        val host = controller()
+        host.open()
+        waitFor { host.state.value.pairing != null }
+        val client = LinkClient(Endpoint("127.0.0.1", host.state.value.port), sha256(pair.public.encoded), pairGuest(host))
+        client.postItem(ItemRequest("link", url = "https://alazy.app/send/"))
+        assertTrue(runCatching { client.postItem(ItemRequest("link", url = "javascript:alert(1)")) }.isFailure)
+        val received = Timeline(File(root, "timeline.json")).entries.value.associate { it.title to it.kind }
+        assertEquals(mapOf("https://alazy.app/send/" to EntryKind.Link), received)
+    }
+
+    @Test
     fun pausingKeepsTheCodeGoodAndDeclinesOnlyWhatWaits() = runBlocking {
         val host = controller()
         host.open()
