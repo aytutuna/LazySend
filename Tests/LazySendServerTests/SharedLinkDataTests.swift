@@ -125,7 +125,8 @@ final class SharedLinkDataTests: XCTestCase {
                 case "$shortCodeTyped": presented = typed
                 case let other: presented = other
                 }
-                let peer = string(a, "peer")!.split(separator: ".").map { UInt8($0)! }
+                let address = string(a, "peer")!
+                let peer = address.contains(":") ? Array(address.utf8) : address.split(separator: ".").map { UInt8($0)! }
                 let at = try int(a["at"])
                 let got = session.redeem(presented, now: opened.addingTimeInterval(Double(at)), peer: peer)
                 XCTAssertEqual(String(describing: got).lowercased(), string(a, "expect")!.lowercased(),

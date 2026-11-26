@@ -258,6 +258,59 @@
       ]
     },
     {
+      "name": "a zone is part of an IPv6 peer, so five wrong ones from one zone leave another zone alone",
+      "attempts": [
+        {
+          "token": "ZZZZZZZZ",
+          "at": 1,
+          "peer": "fe80::1%12",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 2,
+          "peer": "fe80::1%12",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 3,
+          "peer": "fe80::1%12",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 4,
+          "peer": "fe80::1%12",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 5,
+          "peer": "fe80::1%12",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "$token",
+          "at": 10,
+          "peer": "fe80::1%12",
+          "expect": "closed"
+        },
+        {
+          "token": "ZZZZZZZZ",
+          "at": 11,
+          "peer": "fe80::1%13",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "$token",
+          "at": 12,
+          "peer": "fe80::1%13",
+          "expect": "accepted"
+        }
+      ]
+    },
+    {
       "name": "twenty-five wrong ones from many peers close the session",
       "attempts": [
         {
