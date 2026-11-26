@@ -1,0 +1,25 @@
+name: Upload guard
+
+# Tests the scripts that stop an upload from a commit that is not a green main.
+on:
+  push:
+    branches: [main, 'ci/**']
+    paths: ['scripts/*require_green_main*', '.github/workflows/guard.yml']
+  pull_request:
+    branches: [main]
+    paths: ['scripts/*require_green_main*', '.github/workflows/guard.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Shell script
+        shell: bash
+        run: bash scripts/test_require_green_main.sh
+      - name: PowerShell script
+        shell: pwsh
+        run: ./scripts/test_require_green_main.ps1

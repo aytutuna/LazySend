@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: testflight
@@ -35,6 +36,11 @@ jobs:
             exit 1
           fi
       - uses: actions/checkout@v7
+      # Only a commit on main whose ci.yml run passed goes to App Store Connect.
+      - name: Check the commit is a green main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/require_green_main.sh "$GITHUB_SHA"
       - name: Select Xcode 26.6
         run: sudo xcode-select -s /Applications/Xcode_26.6.app
       # The page corner model goes into the app, as in the ios job in ci.yml.

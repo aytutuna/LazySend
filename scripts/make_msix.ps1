@@ -19,6 +19,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# A package for the Store is built only from a green main. release.yml's run only checks that it packs.
+if (-not $env:GITHUB_ACTIONS) { & (Join-Path $PSScriptRoot 'require_green_main.ps1') }
 $root = Split-Path $PSScriptRoot
 $store = Join-Path $root 'store\windows'
 $props = [xml](Get-Content (Join-Path $root 'windows\Directory.Build.props'))
