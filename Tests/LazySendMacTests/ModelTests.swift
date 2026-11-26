@@ -175,8 +175,6 @@ final class ModelTests: XCTestCase {
         model.askToRemove(phone: phone.id)
         XCTAssertEqual(model.removalAsked?.id, phone.id)
         XCTAssertEqual(fixture.service.devices.devices.count, 1)
-        model.removalAsked = nil
-        model.confirmRemoval()
         XCTAssertEqual(fixture.service.devices.devices.count, 1)
     }
 
@@ -188,9 +186,10 @@ final class ModelTests: XCTestCase {
     func testConfirmingRemovesTheAskedDevice() async throws {
         let phone = try await fixture.pair()
         model.askToRemove(phone: phone.id)
-        model.confirmRemoval()
+        let row = try XCTUnwrap(model.removalAsked)
+        model.removalAsked = nil
+        model.remove(phone: row.id)
         await fixture.settle()
-        XCTAssertNil(model.removalAsked)
         XCTAssertTrue(model.phones.isEmpty)
     }
 
@@ -415,6 +414,15 @@ final class ModelTests: XCTestCase {
         model.answerApproval(false)
         let refused = await second.value
         XCTAssertFalse(refused)
+    }
+
+    func testAMadeUpPlatformIsNotShownInTheApproval() async throws {
+        let request = PairRequest(token: "x", phoneId: newId(), phoneName: "Pixel", platform: String(repeating: "x", count: 8000), appVersion: "1")
+        let answer = Task { await model.ask(request) }
+        await assertEventually { model.approval != nil }
+        XCTAssertEqual(model.approval?.platform, "")
+        model.answerApproval(false)
+        _ = await answer.value
     }
 
     func testAnApprovalThatIsCancelledDeclines() async throws {

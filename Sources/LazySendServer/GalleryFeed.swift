@@ -246,7 +246,7 @@ public final class GalleryFeed {
         guard runs[deviceId]?.done == false else { return }
         let folder = UUID().uuidString
         let directory = outgoing.appendingPathComponent(folder, isDirectory: true)
-        let file = directory.appendingPathComponent(Self.safeName(item.name))
+        let file = directory.appendingPathComponent(FileNames.clean(item.name))
         staging.insert(folder)
         defer { staging.remove(folder) }
         // A copy across volumes can take a while, so it is not done on the main actor.
@@ -311,10 +311,5 @@ public final class GalleryFeed {
     private func save() {
         JsonFile.save(Saved(runs: runs), to: stateURL)
         onChange?()
-    }
-
-    private static func safeName(_ name: String) -> String {
-        let clean = name.replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: ":", with: "_")
-        return clean.isEmpty || clean == "." || clean == ".." ? "file" : clean
     }
 }

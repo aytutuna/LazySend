@@ -277,12 +277,6 @@ public final class AppModel: ObservableObject {
         removalAsked = phones.first { $0.id == id }
     }
 
-    public func confirmRemoval() {
-        guard let row = removalAsked else { return }
-        removalAsked = nil
-        remove(phone: row.id)
-    }
-
     public func remove(phone id: String) {
         if id.hasPrefix(PhoneRow.hostPrefix), let guest = guest {
             let hostId = String(id.dropFirst(PhoneRow.hostPrefix.count))

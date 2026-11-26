@@ -160,6 +160,19 @@ final class HostModelTests: XCTestCase {
         _ = try? await answer.value
     }
 
+    func testAMadeUpPlatformIsNotShownInTheApproval() async throws {
+        await fixture.startReceiving()
+        let code = try PairingCode.parse(try XCTUnwrap(host.pairing).link)
+        let client = LinkClient(endpoint: Endpoint(host: "127.0.0.1", port: code.port), pin: code.pin)
+        let long = String(repeating: "x", count: 8000)
+        let answer = Task { try await client.pair(token: code.token, phoneId: "phone-0002", phoneName: "Pixel", appVersion: "1.0", platform: long) }
+        let asked = await fixture.until { host.approval != nil }
+        XCTAssertTrue(asked)
+        XCTAssertEqual(host.approval?.platform, "")
+        host.answerApproval(false)
+        _ = try? await answer.value
+    }
+
     func testADeclinedPhoneIsNotPaired() async throws {
         await fixture.startReceiving()
         do {

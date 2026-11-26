@@ -82,7 +82,7 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
             have = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
         } else {
             let folder = self.folder
-            let name = ReceiveHandler.unique(ReceiveHandler.safeName(item.name)) {
+            let name = ReceiveHandler.unique(FileNames.clean(item.name)) {
                 fm.fileExists(atPath: folder.appendingPathComponent($0).path) || fm.fileExists(atPath: folder.appendingPathComponent($0 + ".part").path)
             }
             part = folder.appendingPathComponent(name + ".part")
@@ -208,7 +208,7 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
         guard let part = part, let month = item.galleryFolder(in: computerFolder) else { throw CocoaError(.fileNoSuchFile) }
         let fm = FileManager.default
         try fm.createDirectory(at: month, withIntermediateDirectories: true)
-        let name = ReceiveHandler.unique(ReceiveHandler.safeName(item.name)) { fm.fileExists(atPath: month.appendingPathComponent($0).path) }
+        let name = ReceiveHandler.unique(FileNames.clean(item.name)) { fm.fileExists(atPath: month.appendingPathComponent($0).path) }
         let target = month.appendingPathComponent(name)
         try fm.moveItem(at: part, to: target)
         if let taken = item.takenDate {
@@ -319,19 +319,6 @@ final class ReceiveHandler: OutboxHandler, @unchecked Sendable {
             if let taken = taken { request?.creationDate = taken }
             if let id = request?.placeholderForCreatedAsset?.localIdentifier { saved.insert(id) }
         }, completionHandler: nil)
-    }
-
-    static func safeName(_ name: String?) -> String {
-        let forbidden = CharacterSet(charactersIn: "/\\:*?\"<>|").union(.controlCharacters)
-        let underscore: Unicode.Scalar = "_"
-        var clean = ""
-        for scalar in (name ?? "").unicodeScalars {
-            clean.unicodeScalars.append(forbidden.contains(scalar) ? underscore : scalar)
-        }
-        clean = clean.trimmingCharacters(in: .whitespacesAndNewlines)
-        if clean.hasPrefix(".") { clean = "_" + clean }
-        clean = String(clean.prefix(200))
-        return clean.isEmpty ? "file" : clean
     }
 
     static func unique(_ name: String, taken: (String) -> Bool) -> String {

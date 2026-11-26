@@ -45,8 +45,8 @@ struct MainView: View {
             model.removalAsked.map { "Remove \($0.name)?" } ?? "Remove this device?",
             isPresented: Binding(get: { model.removalAsked != nil }, set: { if !$0 { model.removalAsked = nil } }),
             presenting: model.removalAsked
-        ) { _ in
-            Button("Remove", role: .destructive) { model.confirmRemoval() }
+        ) { row in
+            Button("Remove", role: .destructive) { model.remove(phone: row.id) }
             Button("Cancel", role: .cancel) {}
         } message: { row in
             Text(row.isComputer ? "This Mac will stop sending to and receiving from this computer. Pair again to bring it back."

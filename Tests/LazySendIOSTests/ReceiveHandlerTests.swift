@@ -71,9 +71,6 @@ final class ReceiveHandlerTests: XCTestCase {
     }
 
     func testNameHelpers() {
-        XCTAssertEqual(ReceiveHandler.safeName(nil), "file")
-        XCTAssertEqual(ReceiveHandler.safeName("  "), "file")
-        XCTAssertEqual(ReceiveHandler.safeName(".hidden"), "_.hidden")
         XCTAssertEqual(ReceiveHandler.unique("a.txt") { $0 == "a.txt" || $0 == "a (2).txt" }, "a (3).txt")
         XCTAssertEqual(ReceiveHandler.unique("a") { $0 == "a" }, "a (2)")
     }
