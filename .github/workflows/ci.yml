@@ -85,13 +85,12 @@ jobs:
       # The Rust link core's bindings run on an emulator: the Keystore signer, async, a panic and 50 MB buffers.
       - name: Rust link core on an emulator
         uses: reactivecircus/android-emulator-runner@v2
-        env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
         with:
+          working-directory: .
           api-level: 34
           arch: x86_64
           target: google_apis
-          script: bash scripts/rust_link_android.sh kit
+          script: env ANDROID_NDK_HOME=$ANDROID_NDK_LATEST_HOME bash scripts/rust_link_android.sh kit
 
   macos:
     # The link code in LazySendKit and the server in LazySendServer build and are tested on the Mac; their tests run a
