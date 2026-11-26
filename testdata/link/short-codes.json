@@ -258,7 +258,7 @@
       ]
     },
     {
-      "name": "a zone is part of an IPv6 peer, so five wrong ones from one zone leave another zone alone",
+      "name": "C# and Rust: a zone is part of an IPv6 peer, so five wrong ones from one zone leave another zone alone",
       "attempts": [
         {
           "token": "ZZZZZZZZ",
