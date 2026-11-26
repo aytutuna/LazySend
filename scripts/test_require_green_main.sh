@@ -7,9 +7,10 @@ bin="$(mktemp -d)"
 trap 'rm -rf "$bin"' EXIT
 cat > "$bin/gh" <<'GH'
 #!/bin/bash
+# Answers only to the exact calls the script should make.
 case "$1" in
-  api) echo "$FAKE_STATE" ;;
-  run) echo "$FAKE_RUN" ;;
+  api) [ "$2" = "repos/x/y/compare/main...0123456789abcdef" ] && echo "$FAKE_STATE" ;;
+  run) case "$*" in *"--workflow ci.yml"*"--commit 0123456789abcdef"*) echo "$FAKE_RUN" ;; esac ;;
 esac
 GH
 chmod +x "$bin/gh"

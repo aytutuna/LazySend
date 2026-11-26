@@ -19,9 +19,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-# A package for the Store is built only from a green main. release.yml's run only checks that it packs.
-if (-not $env:GITHUB_ACTIONS) { & (Join-Path $PSScriptRoot 'require_green_main.ps1') }
 $root = Split-Path $PSScriptRoot
+# A package for the Store is built only from a green main, and only from binaries built at that commit.
+# release.yml's run only checks that it packs.
+$sha = $null
+if (-not $env:GITHUB_ACTIONS) { $sha = & (Join-Path $PSScriptRoot 'require_green_main.ps1') | Select-Object -Last 1 }
 $store = Join-Path $root 'store\windows'
 $props = [xml](Get-Content (Join-Path $root 'windows\Directory.Build.props'))
 $version = $props.Project.PropertyGroup.Version
@@ -48,6 +50,10 @@ function Invoke-Tool([string] $tool, [string[]] $arguments) {
 
 function New-Package([string] $publish, [string] $arch) {
     if (-not (Test-Path (Join-Path $publish 'LazySend.exe'))) { throw "LazySend.exe is not in $publish" }
+    if ($sha) {
+        $built = (Get-Item (Join-Path $publish 'LazySend.dll')).VersionInfo.ProductVersion
+        if (-not $built -or -not $built.EndsWith("+$sha")) { throw "$publish was not built at $($sha.Substring(0, 7)) (it says '$built'). Run dotnet publish from this checkout first." }
+    }
     $stage = Join-Path $work "stage-$arch"
     robocopy $publish $stage /E /XF *.pdb /NFL /NDL /NJH /NJS /NP | Out-Null
     if ($LASTEXITCODE -ge 8) { throw "robocopy failed with exit code $LASTEXITCODE" }

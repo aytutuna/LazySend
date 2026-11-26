@@ -38,4 +38,11 @@
     <InternalsVisibleTo Include="LazySend.App.Tests" />
   </ItemGroup>
 
+  <!-- make_msix.ps1 reads this back to check that the binaries were built from the commit it packs. -->
+  <Target Name="StampRevision" BeforeTargets="AddSourceRevisionToInformationalVersion">
+    <Exec Command="git describe --always --dirty --exclude=* --abbrev=40" ConsoleToMSBuild="true" StandardOutputImportance="low" IgnoreExitCode="true">
+      <Output PropertyName="SourceRevisionId" TaskParameter="ConsoleOutput" />
+    </Exec>
+  </Target>
+
 </Project>
