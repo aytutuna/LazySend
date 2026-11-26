@@ -123,18 +123,24 @@ public static class FileNames
         string stem = cleaned[..^extension.Length];
         if (stem.Length == 0) (stem, extension) = (cleaned, "");
         if (Encoding.UTF8.GetByteCount(extension) > 32) extension = "";
+        int budget = MaxBytes - Encoding.UTF8.GetByteCount(extension);
+        stem = Cut(stem, budget);
         // Windows reads everything before the first dot as the device name, so NUL.tar.gz is as reserved as NUL.
-        if (ReservedDeviceNames.Contains(cleaned.Split('.')[0].TrimEnd(' '), StringComparer.OrdinalIgnoreCase)) stem = "_" + stem;
-        int budget = MaxBytes - Encoding.UTF8.GetByteCount(extension), bytes = 0, length = 0;
+        // Checked after the cut, which can leave a bare device name behind spaces that were cut off.
+        if (ReservedDeviceNames.Contains((stem + extension).Split('.')[0].TrimEnd(' '), StringComparer.OrdinalIgnoreCase)) stem = Cut("_" + stem, budget);
+        return (stem.Length == 0 ? fallback : stem) + extension;
+    }
+
+    private static string Cut(string stem, int budget)
+    {
+        int bytes = 0, length = 0;
         foreach (var rune in stem.EnumerateRunes())
         {
             if (bytes + rune.Utf8SequenceLength > budget) break;
             bytes += rune.Utf8SequenceLength;
             length += rune.Utf16SequenceLength;
         }
-        stem = stem[..length];
-        stem = stem.TrimEnd('.', ' ');
-        return (stem.Length == 0 ? fallback : stem) + extension;
+        return stem[..length].TrimEnd('.', ' ');
     }
 
     /// <summary>
