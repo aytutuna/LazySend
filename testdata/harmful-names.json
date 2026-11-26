@@ -1,0 +1,127 @@
+{
+  "about": "Names a computer or phone must make safe before using them as file names. Every result must be non-empty, at most maxFileNameBytes UTF-8 bytes, well-formed, not a dot name, without a path separator, colon or control character, and without a dot or space at its end. keep means the extension is kept; exact is the whole result; device means the name is a Windows device name (the part before the first dot, ignoring trailing spaces) and Windows must not leave it as one. Only Windows checks device.",
+  "maxFileNameBytes": 240,
+  "names": [
+    {
+      "name": ".."
+    },
+    {
+      "name": "."
+    },
+    {
+      "name": "..."
+    },
+    {
+      "name": "...."
+    },
+    {
+      "name": "../.."
+    },
+    {
+      "name": " "
+    },
+    {
+      "name": "\u0000"
+    },
+    {
+      "name": "NUL",
+      "device": true
+    },
+    {
+      "name": "nul.txt",
+      "device": true
+    },
+    {
+      "name": "NUL.tar.gz",
+      "device": true
+    },
+    {
+      "name": "con.",
+      "device": true
+    },
+    {
+      "name": "CON .txt",
+      "device": true
+    },
+    {
+      "name": "Aux.tar.gz",
+      "device": true
+    },
+    {
+      "name": "prn",
+      "device": true
+    },
+    {
+      "name": "COM1",
+      "device": true
+    },
+    {
+      "name": "com9.log",
+      "device": true
+    },
+    {
+      "name": "COM¹",
+      "device": true
+    },
+    {
+      "name": "LPT².txt",
+      "device": true
+    },
+    {
+      "name": "lpt³.tar.gz",
+      "device": true
+    },
+    {
+      "name": "COM0",
+      "device": true
+    },
+    {
+      "name": "LPT0.x",
+      "device": true
+    },
+    {
+      "name": "CONIN$",
+      "device": true
+    },
+    {
+      "name": "conout$.txt",
+      "device": true
+    },
+    {
+      "name": "NUL:stream"
+    },
+    {
+      "name": "company.txt",
+      "exact": "company.txt"
+    },
+    {
+      "name": "console.log",
+      "exact": "console.log"
+    },
+    {
+      "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.png",
+      "keep": ".png"
+    },
+    {
+      "name": "日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日.txt",
+      "keep": ".txt"
+    },
+    {
+      "name": "العربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربيةالعربية.pdf",
+      "keep": ".pdf"
+    },
+    {
+      "name": "a😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀.jpg",
+      "keep": ".jpg"
+    },
+    {
+      "name": "日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日.eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    {
+      "name": "‮txt.exe"
+    }
+  ]
+}

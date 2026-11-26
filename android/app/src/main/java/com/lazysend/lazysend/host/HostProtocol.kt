@@ -122,7 +122,7 @@ fun cleanFileName(name: String?, fallback: String = "file"): String {
     val dot = text.lastIndexOf('.')
     val extension = if (dot > 0 && text.length - dot <= 16) text.substring(dot) else ""
     var stem = text.substring(0, text.length - extension.length)
-    while (stem.isNotEmpty() && (stem + extension).toByteArray().size > MAX_FILE_NAME_BYTES) stem = stem.dropLast(1)
+    while (stem.isNotEmpty() && (stem + extension).toByteArray().size > MAX_FILE_NAME_BYTES) stem = stem.substring(0, stem.offsetByCodePoints(stem.length, -1))
     return stem.trim(' ', '.').ifEmpty { fallback } + extension
 }
 

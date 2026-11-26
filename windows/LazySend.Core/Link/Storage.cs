@@ -98,7 +98,8 @@ public static class FileNames
     public const int MaxBytes = 240;
 
     private static readonly string[] ReservedDeviceNames =
-        ["CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$", .. Enumerable.Range(0, 10).Select(i => $"COM{i}"), .. Enumerable.Range(0, 10).Select(i => $"LPT{i}")];
+        ["CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$", .. Enumerable.Range(0, 10).Select(i => $"COM{i}"), .. Enumerable.Range(0, 10).Select(i => $"LPT{i}"),
+         .. "¹²³".SelectMany(d => new[] { $"COM{d}", $"LPT{d}" })];
 
     /// <summary>
     /// A name that can be created: path separators and characters Windows refuses become '_', trailing
@@ -118,8 +119,9 @@ public static class FileNames
         string extension = Path.GetExtension(cleaned);
         string stem = cleaned[..^extension.Length];
         if (stem.Length == 0) (stem, extension) = (cleaned, "");
-        if (ReservedDeviceNames.Contains(stem, StringComparer.OrdinalIgnoreCase)) stem = "_" + stem;
         if (Encoding.UTF8.GetByteCount(extension) > 32) extension = "";
+        // Windows reads everything before the first dot as the device name, so NUL.tar.gz is as reserved as NUL.
+        if (ReservedDeviceNames.Contains(cleaned.Split('.')[0].TrimEnd(' '), StringComparer.OrdinalIgnoreCase)) stem = "_" + stem;
         while (Encoding.UTF8.GetByteCount(stem) + Encoding.UTF8.GetByteCount(extension) > MaxBytes) stem = stem[..^1];
         // A cut can leave half a surrogate pair.
         if (stem.Length > 0 && char.IsHighSurrogate(stem[^1])) stem = stem[..^1];
