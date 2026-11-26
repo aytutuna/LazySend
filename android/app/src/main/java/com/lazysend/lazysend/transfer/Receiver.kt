@@ -139,7 +139,7 @@ class Receiver(
         when (item.kind) {
             "text", "link" -> {
                 val body = item.text ?: item.url ?: return
-                val kind = if (item.kind == "link") EntryKind.Link else EntryKind.Text
+                val kind = receivedKind(item.kind, body)
                 timeline.add(TimelineEntry(id, clock(), Direction.Received, kind, pc.name, body, state = EntryState.Done, clip = item.clip == true))
                 notify(id.hashCode(), pc.name, body)
                 if (item.clip == true) clipContent(kind, body, null, null)?.let { onClip(it, pc.name) }

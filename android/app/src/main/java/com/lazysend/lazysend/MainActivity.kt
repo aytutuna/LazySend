@@ -43,6 +43,7 @@ import com.lazysend.lazysend.data.EntryKind
 import com.lazysend.lazysend.data.TimelineEntry
 import com.lazysend.lazysend.scan.ScanDemo
 import com.lazysend.lazysend.transfer.SendService
+import com.lazysend.lazysend.transfer.isWebLink
 import com.lazysend.lazysend.transfer.shareableUri
 import com.lazysend.lazysend.ui.AppViewModel
 import com.lazysend.lazysend.ui.CameraScreen
@@ -318,6 +319,7 @@ class MainActivity : ComponentActivity() {
 
     private fun open(entry: TimelineEntry) {
         val intent = if (entry.kind == EntryKind.Link) {
+            if (!isWebLink(entry.title)) return
             Intent(Intent.ACTION_VIEW, Uri.parse(entry.title))
         } else {
             Intent(Intent.ACTION_VIEW).setDataAndType(shareableUri(this, Uri.parse(entry.uri ?: return)), entry.mime ?: "*/*")

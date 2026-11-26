@@ -12,6 +12,7 @@ import com.lazysend.lazysend.link.DEFAULT_PORT
 import com.lazysend.lazysend.transfer.Asset
 import com.lazysend.lazysend.transfer.ClipContent
 import com.lazysend.lazysend.transfer.clipContent
+import com.lazysend.lazysend.transfer.receivedKind
 import com.lazysend.lazysend.transfer.ReceivedFiles
 import com.lazysend.lazysend.transfer.Subnet
 import java.io.File
@@ -104,10 +105,10 @@ class HostController(
         core.router.onText = { guest, kind, text, clip ->
             val id = newId()
             timeline.add(
-                TimelineEntry(id, clock(), Direction.Received, if (kind == "link") EntryKind.Link else EntryKind.Text, guest.name, text, state = EntryState.Done, clip = clip),
+                TimelineEntry(id, clock(), Direction.Received, receivedKind(kind, text), guest.name, text, state = EntryState.Done, clip = clip),
             )
             notifyReceived(id.hashCode(), guest.name, text)
-            if (clip) clipContent(if (kind == "link") EntryKind.Link else EntryKind.Text, text, null, null)?.let { onClip(it, guest.name) }
+            if (clip) clipContent(receivedKind(kind, text), text, null, null)?.let { onClip(it, guest.name) }
         }
         core.router.onAcknowledged = { item ->
             timeline.update("out-${item.id}") { it.copy(state = EntryState.Done, detail = "", bytes = it.totalBytes) }

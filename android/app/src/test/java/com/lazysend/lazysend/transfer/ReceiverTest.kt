@@ -101,6 +101,32 @@ class ReceiverTest {
     }
 
     @Test
+    fun onlyWebAddressesArriveAsLinks() = runBlocking {
+        pc.outbox += OutboxEntry("l1", "link", url = "https://alazy.app/")
+        pc.outbox += OutboxEntry("l2", "link", url = "intent://scan#Intent;scheme=zxing;end")
+        pc.outbox += OutboxEntry("l3", "link", url = "file:///sdcard/secret.txt")
+        pc.outbox += OutboxEntry("l4", "link", url = "tel:+15550100")
+        pc.outbox += OutboxEntry("l5", "link", url = "HTTP://example.com/a?b=c")
+
+        receiver.collect(paired, pc.client(), 0)
+
+        assertEquals(EntryKind.Link, timeline.get("in-l1")!!.kind)
+        assertEquals(EntryKind.Text, timeline.get("in-l2")!!.kind)
+        assertEquals(EntryKind.Text, timeline.get("in-l3")!!.kind)
+        assertEquals(EntryKind.Text, timeline.get("in-l4")!!.kind)
+        assertEquals(EntryKind.Link, timeline.get("in-l5")!!.kind)
+    }
+
+    @Test
+    fun aWebLinkNeedsAHostAndNoSpaces() {
+        assertTrue(isWebLink("https://alazy.app"))
+        assertFalse(isWebLink("https://"))
+        assertFalse(isWebLink("https:///path"))
+        assertFalse(isWebLink("javascript:alert(1)"))
+        assertFalse(isWebLink("see https://alazy.app"))
+    }
+
+    @Test
     fun aFileCarriedOnFromAPartIsNotClipped() = runBlocking {
         pc.outboxFile = bytes(5_000)
         pc.outbox += OutboxEntry("out1", "file", name = "x.bin", size = 5_000, clip = true)

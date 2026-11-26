@@ -100,3 +100,10 @@ class Clipper(private val context: Context) {
         }
     }
 }
+
+/** Only http and https addresses get an Open button; a received "link" with any other scheme is shown as text. */
+fun isWebLink(text: String): Boolean = WEB_LINK.matches(text.trim())
+
+private val WEB_LINK = Regex("""^https?://[^\s/?#]+\S*$""", RegexOption.IGNORE_CASE)
+
+fun receivedKind(sentAs: String, body: String) = if (sentAs == "link" && isWebLink(body)) EntryKind.Link else EntryKind.Text
