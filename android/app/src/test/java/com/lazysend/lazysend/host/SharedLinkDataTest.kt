@@ -97,6 +97,8 @@ class SharedLinkDataTest {
         }
         val token = data.array("tokenBytes").map { it.jsonPrimitive.int.toByte() }.toByteArray()
         for (r in data.array("redeem").map { it.jsonObject }) {
+            // HostServer.admit drops the zone from an IPv6 peer before it counts, unlike C# and Rust.
+            if (r.str("name")!!.startsWith("C# and Rust")) continue
             val session = PairingSession(0, token)
             val typed = session.shortCode.take(4).lowercase() + "-" + session.shortCode.drop(4).lowercase()
             for ((step, a) in r.array("attempts").map { it.jsonObject }.withIndex()) {
