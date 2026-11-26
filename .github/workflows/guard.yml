@@ -13,13 +13,14 @@ permissions:
   contents: read
 
 jobs:
-  guard:
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - run: bash scripts/test_require_green_main.sh
+  powershell:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Shell script
-        shell: bash
-        run: bash scripts/test_require_green_main.sh
-      - name: PowerShell script
-        shell: pwsh
+      - shell: pwsh
         run: ./scripts/test_require_green_main.ps1
