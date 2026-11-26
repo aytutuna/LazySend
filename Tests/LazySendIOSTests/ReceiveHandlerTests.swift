@@ -56,6 +56,17 @@ final class ReceiveHandlerTests: XCTestCase {
         XCTAssertTrue(done)
     }
 
+    func testALongNameKeepsItsExtensionAndFitsTheFileSystem() async throws {
+        let (handler, timeline, _, _) = fixture()
+        _ = try await handler.prepareFile(file("item-0001", name: String(repeating: "a", count: 230) + ".pdf", size: 0))
+        _ = try await handler.prepareFile(file("item-0002", name: String(repeating: "\u{1F600}", count: 80) + ".jpg", size: 0))
+        let long = try XCTUnwrap(timeline.get("in-item-0001")?.fileName)
+        XCTAssertTrue(long.hasSuffix(".pdf.part"))
+        let emoji = try XCTUnwrap(timeline.get("in-item-0002")?.fileName)
+        XCTAssertTrue(emoji.hasSuffix(".jpg.part"))
+        XCTAssertLessThanOrEqual(emoji.utf8.count, 255)
+    }
+
     func testNamesAreMadeSafeAndUnique() async throws {
         let (handler, timeline, folder, _) = fixture()
         let first = file("item-0001", name: "bad/na:me.txt", size: 0)
