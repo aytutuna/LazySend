@@ -30,12 +30,18 @@ jobs:
         id: kit
         working-directory: .
         shell: bash
-        run: echo "sha=$(sed -n 's/^commit //p' testdata/link.pin | tr -d '\r')" >> "$GITHUB_OUTPUT"
+        run: |
+          sha=$(bash scripts/link_testdata.sh commit)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
         with:
           repository: aytutuna/LazyKit
           ref: ${{ steps.kit.outputs.sha }}
           path: kit
+      - name: LazyKit checkout carries the pinned data
+        working-directory: .
+        shell: bash
+        run: bash scripts/link_testdata.sh kit kit
       - uses: dtolnay/rust-toolchain@d5e4d57b030548f435d0befec15ff413a2c60eff # 1.100.0
       # fc32e9b is the tag v0.12.0+v0.32.0
       - name: Install uniffi-bindgen-cs
@@ -79,12 +85,18 @@ jobs:
         id: kit
         working-directory: .
         shell: bash
-        run: echo "sha=$(sed -n 's/^commit //p' testdata/link.pin | tr -d '\r')" >> "$GITHUB_OUTPUT"
+        run: |
+          sha=$(bash scripts/link_testdata.sh commit)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
         with:
           repository: aytutuna/LazyKit
           ref: ${{ steps.kit.outputs.sha }}
           path: kit
+      - name: LazyKit checkout carries the pinned data
+        working-directory: .
+        shell: bash
+        run: bash scripts/link_testdata.sh kit kit
       - uses: dtolnay/rust-toolchain@d5e4d57b030548f435d0befec15ff413a2c60eff # 1.100.0
       - run: cargo install cargo-ndk --version 4.1.2 --locked
       - run: rustup target add aarch64-linux-android x86_64-linux-android
@@ -124,12 +136,18 @@ jobs:
         id: kit
         working-directory: .
         shell: bash
-        run: echo "sha=$(sed -n 's/^commit //p' testdata/link.pin | tr -d '\r')" >> "$GITHUB_OUTPUT"
+        run: |
+          sha=$(bash scripts/link_testdata.sh commit)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
         with:
           repository: aytutuna/LazyKit
           ref: ${{ steps.kit.outputs.sha }}
           path: kit
+      - name: LazyKit checkout carries the pinned data
+        working-directory: .
+        shell: bash
+        run: bash scripts/link_testdata.sh kit kit
       - name: Rust link core through its Swift bindings
         run: bash scripts/rust_link_swift.sh kit
       - name: Test LazySendKit

@@ -3,6 +3,8 @@
 # all three code bases read it from here.
 #   link_testdata.sh check          the files match SHA256SUMS and SHA256SUMS matches the pin
 #   link_testdata.sh update <sha>   fetch that LazyKit commit, check it against its own SHA256SUMS and write the pin
+#   link_testdata.sh commit         print the pinned LazyKit commit
+#   link_testdata.sh kit <dir>      check that a LazyKit checkout carries the pinned data
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -57,8 +59,27 @@ update() {
   check
 }
 
+commit() {
+  local sha
+  sha=$(sed -n 's/^commit //p' "$pin" | tr -d '\r')
+  if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "testdata/link.pin has no 40 character commit" >&2
+    exit 1
+  fi
+  echo "$sha"
+}
+
+kit() {
+  if [ "$(sha256 "$1/testdata/link/SHA256SUMS")" != "$(sed -n 's/^sums //p' "$pin" | tr -d '\r')" ]; then
+    echo "the LazyKit checkout does not carry the data testdata/link.pin names" >&2
+    exit 1
+  fi
+}
+
 case "${1:-check}" in
   check) check ;;
+  commit) commit ;;
+  kit) kit "${2:?usage: link_testdata.sh kit <LazyKit checkout>}" ;;
   update) update "${2:?usage: link_testdata.sh update <LazyKit commit>}" ;;
-  *) echo "usage: link_testdata.sh check | update <LazyKit commit>" >&2; exit 2 ;;
+  *) echo "usage: link_testdata.sh check | commit | kit <dir> | update <LazyKit commit>" >&2; exit 2 ;;
 esac
