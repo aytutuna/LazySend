@@ -399,7 +399,7 @@ final class ModelTests: XCTestCase {
         let request = PairRequest(token: "x", phoneId: newId(), phoneName: "Pixel", platform: "android", appVersion: "1")
         let answer = Task { await model.ask(request) }
         await assertEventually { model.approval != nil }
-        XCTAssertEqual(model.approval, PairApproval(name: "Pixel", platform: "android"))
+        XCTAssertEqual(model.approval, PairApproval(name: "Pixel", platform: "Android"))
         model.answerApproval(true)
         let allowed = await answer.value
         XCTAssertTrue(allowed)
@@ -463,7 +463,7 @@ final class ModelTests: XCTestCase {
         let pairing = Task { try await client.pair(token: typed.shortCode, phoneId: newId(), phoneName: "Studio", appVersion: "1", platform: "windows") }
         await assertEventually { model.approval != nil }
         XCTAssertEqual(model.approval?.match, typed.match)
-        XCTAssertEqual(model.approval?.platform, "windows")
+        XCTAssertEqual(model.approval?.platform, "Windows")
         model.answerApproval(false)
         do {
             _ = try await pairing.value
