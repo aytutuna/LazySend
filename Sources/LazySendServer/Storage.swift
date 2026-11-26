@@ -140,17 +140,26 @@ public enum FileNames {
             let bad = scalar.value < 0x20 || (0x7F...0x9F).contains(scalar.value) || isBidiControl(scalar) || "/\\:".unicodeScalars.contains(scalar)
             text.unicodeScalars.append(bad ? "_" : scalar)
         }
-        var cleaned = text.trimmingCharacters(in: .whitespaces)
-        while cleaned.hasSuffix(".") || cleaned.hasSuffix(" ") { cleaned.removeLast() }
-        while cleaned.hasPrefix(".") { cleaned.removeFirst() }
+        var kept = Array(text.trimmingCharacters(in: .whitespaces).unicodeScalars)
+        while let last = kept.last, last == "." || last == " " { kept.removeLast() }
+        var cleaned = String(String.UnicodeScalarView(kept.drop(while: { $0 == "." })))
         if cleaned.isEmpty { cleaned = fallback }
         let ns = cleaned as NSString
         var ext = ns.pathExtension.isEmpty ? "" : "." + ns.pathExtension
         var stem = ext.isEmpty ? cleaned : ns.deletingPathExtension
         if stem.isEmpty { (stem, ext) = (cleaned, "") }
         if ext.utf8.count > 32 { ext = "" }
-        while stem.utf8.count + ext.utf8.count > maxBytes { stem.removeLast() }
-        while stem.hasSuffix(".") || stem.hasSuffix(" ") { stem.removeLast() }
+        var budget = maxBytes - ext.utf8.count
+        var cut = String.UnicodeScalarView()
+        for scalar in stem.unicodeScalars {
+            let size = scalar.value < 0x80 ? 1 : scalar.value < 0x800 ? 2 : scalar.value < 0x10000 ? 3 : 4
+            if size > budget { break }
+            budget -= size
+            cut.append(scalar)
+        }
+        var tail = Array(cut)
+        while let last = tail.last, last == "." || last == " " { tail.removeLast() }
+        stem = String(String.UnicodeScalarView(tail))
         return (stem.isEmpty ? fallback : stem) + ext
     }
 
