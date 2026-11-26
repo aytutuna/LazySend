@@ -26,14 +26,20 @@ jobs:
           fi
       - name: Test
         run: dotnet test windows\LazySend.sln
+      - name: LazyKit commit from testdata/link.pin
+        id: kit
+        working-directory: .
+        shell: bash
+        run: echo "sha=$(sed -n 's/^commit //p' testdata/link.pin | tr -d '\r')" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
         with:
           repository: aytutuna/LazyKit
-          ref: ci/rust-link
+          ref: ${{ steps.kit.outputs.sha }}
           path: kit
-      - uses: dtolnay/rust-toolchain@1.100.0
+      - uses: dtolnay/rust-toolchain@d5e4d57b030548f435d0befec15ff413a2c60eff # 1.100.0
+      # fc32e9b is the tag v0.12.0+v0.32.0
       - name: Install uniffi-bindgen-cs
-        run: cargo install uniffi-bindgen-cs --git https://github.com/NordSecurity/uniffi-bindgen-cs --tag "v0.12.0+v0.32.0" --locked
+        run: cargo install uniffi-bindgen-cs --git https://github.com/NordSecurity/uniffi-bindgen-cs --rev fc32e9bbf91ee66b0b92241f575cbce1bf5e3151 --locked
       - name: Rust link core through its C# bindings
         shell: bash
         run: bash scripts/rust_link_cs.sh kit
@@ -69,13 +75,18 @@ jobs:
         run: ./gradlew testDebugUnitTest --console=plain
         env:
           LAZYSEND_REQUIRE_CORNER_MODEL: '1'
+      - name: LazyKit commit from testdata/link.pin
+        id: kit
+        working-directory: .
+        shell: bash
+        run: echo "sha=$(sed -n 's/^commit //p' testdata/link.pin | tr -d '\r')" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
         with:
           repository: aytutuna/LazyKit
-          ref: ci/rust-link
+          ref: ${{ steps.kit.outputs.sha }}
           path: kit
-      - uses: dtolnay/rust-toolchain@1.100.0
-      - run: cargo install cargo-ndk --locked
+      - uses: dtolnay/rust-toolchain@d5e4d57b030548f435d0befec15ff413a2c60eff # 1.100.0
+      - run: cargo install cargo-ndk --version 4.1.2 --locked
       - run: rustup target add aarch64-linux-android x86_64-linux-android
       - name: Enable KVM
         working-directory: .
@@ -85,7 +96,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       # The Rust link core's bindings run on an emulator: the Keystore signer, async, a panic and 50 MB buffers.
       - name: Rust link core on an emulator
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           working-directory: .
           api-level: 34
@@ -109,10 +120,15 @@ jobs:
       # DocAligner's corner model goes into LazySendScanModel's bundle, which the scan tests read it from.
       - name: Fetch the corner model
         run: bash scripts/fetch_docaligner.sh
+      - name: LazyKit commit from testdata/link.pin
+        id: kit
+        working-directory: .
+        shell: bash
+        run: echo "sha=$(sed -n 's/^commit //p' testdata/link.pin | tr -d '\r')" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
         with:
           repository: aytutuna/LazyKit
-          ref: ci/rust-link
+          ref: ${{ steps.kit.outputs.sha }}
           path: kit
       - name: Rust link core through its Swift bindings
         run: bash scripts/rust_link_swift.sh kit
