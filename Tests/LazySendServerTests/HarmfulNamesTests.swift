@@ -38,4 +38,13 @@ final class HarmfulNamesTests: XCTestCase {
         }
         XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
     }
+
+    func testHugeNamesAreCleanedInOnePass() {
+        let start = Date()
+        XCTAssertEqual(FileNames.clean(String(repeating: ".", count: 8_000_000) + "x"), "x")
+        let flags = FileNames.clean(String(repeating: "\u{1F1E6}", count: 1_000_000) + ".txt")
+        XCTAssertLessThanOrEqual(flags.utf8.count, FileNames.maxBytes)
+        XCTAssertTrue(flags.hasSuffix(".txt"))
+        XCTAssertLessThan(Date().timeIntervalSince(start), 10)
+    }
 }
