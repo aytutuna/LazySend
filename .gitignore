@@ -9,6 +9,7 @@ windows/**/*_wpftmp.csproj
 android/.gradle/
 android/build/
 android/app/build/
+android/rustlink/build/
 android/local.properties
 android/.idea/
 *.iml
