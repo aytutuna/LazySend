@@ -156,9 +156,7 @@ public partial class PairWindow : Window
             // The prompt must be seen even when the app sits in the tray.
             if (Owner is MainWindow main) main.ShowAndActivate();
             _answer = answer;
-            string known = PairedDeviceStore.KnownPlatform(request.Platform);
-            string kind = known.Length > 0 ? $" ({known})" : "";
-            ApprovalText.Text = $"\"{PairedDeviceStore.CleanName(request.PhoneName)}\"{kind} wants to pair with this PC. Allow it only if you just scanned the code yourself and {FormatCheckCode(match)} is the code it shows too.";
+            ApprovalText.Text = PairedDeviceStore.ApprovalText(request, match);
             ApprovalCard.Visibility = Visibility.Visible;
             Activate();
         });

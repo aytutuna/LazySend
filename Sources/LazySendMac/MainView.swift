@@ -49,7 +49,7 @@ struct MainView: View {
             Button("Remove", role: .destructive) { model.confirmRemoval() }
             Button("Cancel", role: .cancel) {}
         } message: { row in
-            Text(row.computer ? "This Mac will stop sending to and receiving from this computer. Pair again to bring it back."
+            Text(row.isComputer ? "This Mac will stop sending to and receiving from this computer. Pair again to bring it back."
                               : "This phone will stop sending to and receiving from this Mac. Pair again to bring it back.")
         }
     }

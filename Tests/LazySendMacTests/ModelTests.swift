@@ -174,10 +174,15 @@ final class ModelTests: XCTestCase {
         let phone = try await fixture.pair()
         model.askToRemove(phone: phone.id)
         XCTAssertEqual(model.removalAsked?.id, phone.id)
-        XCTAssertEqual(model.phones.count, 1)
+        XCTAssertEqual(fixture.service.devices.devices.count, 1)
         model.removalAsked = nil
         model.confirmRemoval()
-        XCTAssertEqual(model.phones.count, 1)
+        XCTAssertEqual(fixture.service.devices.devices.count, 1)
+    }
+
+    func testAWindowsGuestCountsAsAComputer() {
+        XCTAssertTrue(PhoneRow(id: "a", name: "PC", platform: "windows", lastSeen: "").isComputer)
+        XCTAssertFalse(PhoneRow(id: "b", name: "Phone", platform: "ios", lastSeen: "").isComputer)
     }
 
     func testConfirmingRemovesTheAskedDevice() async throws {

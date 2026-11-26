@@ -12,6 +12,8 @@ public struct PhoneRow: Identifiable, Equatable {
     public var lastSeen: String
     /// A computer this Mac is a guest of, not a phone paired with it.
     public var computer = false
+    /// A Windows PC or another Mac that paired here as a guest is a computer too.
+    var isComputer: Bool { computer || ["Windows", "Mac"].contains(PairedDeviceStore.knownPlatform(platform)) }
     /// A computer's row id starts with this, so it cannot meet the id of the same machine paired here as a phone.
     static let hostPrefix = "host:"
 

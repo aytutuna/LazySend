@@ -291,7 +291,8 @@ final class AppModel: ObservableObject {
 
     func pair(_ code: PairingCode) async throws -> PairedPc {
         if env.pairDelay > 0 { try await Task.sleep(nanoseconds: UInt64(env.pairDelay * 1_000_000_000)) }
-        let pc = try await Pairing.pair(code, phoneName: env.phoneName, appVersion: env.appVersion, connector: connector, store: store)
+        let pc = try await Pairing.pair(code, phoneName: env.phoneName, appVersion: env.appVersion,
+                                    platform: UIDevice.current.userInterfaceIdiom == .pad ? "ipad" : "ios", connector: connector, store: store)
         refreshPcs()
         select(pc.id)
         env.notifier.ask()

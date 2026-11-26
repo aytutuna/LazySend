@@ -71,7 +71,10 @@ public class PairingTests
             Harness.Json(new PairRequest(uri.Token, phone.Id, "Phone", new string('x', 8000), "1")), authenticated: false);
 
         Assert.NotNull(asked);
-        Assert.Equal("", PairedDeviceStore.KnownPlatform(asked!.Platform));
+        string text = PairedDeviceStore.ApprovalText(asked!, "123456");
+        Assert.DoesNotContain("xxx", text);
+        Assert.DoesNotContain("(", text);
+        Assert.Contains("123 456", text);
     }
 
     [Fact]

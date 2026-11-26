@@ -183,7 +183,7 @@ public sealed class PairedDeviceStore
         return text.ToString().Trim();
     }
 
-    /// <summary>The device type as the pairing question shows it: one of four known names, or empty.</summary>
+    /// <summary>The device type as the pairing question shows it: one of the known names, or empty.</summary>
     public static string KnownPlatform(string? platform) => (platform ?? "").Trim().ToLowerInvariant() switch
     {
         "ios" or "iphone" => "iPhone",
@@ -193,4 +193,12 @@ public sealed class PairedDeviceStore
         "mac" or "macos" => "Mac",
         _ => "",
     };
+
+    /// <summary>The question the PC asks when a device wants to pair; the device's own words reach it only through the cleaned name and a known type.</summary>
+    public static string ApprovalText(PairRequest request, string match)
+    {
+        string known = KnownPlatform(request.Platform);
+        string kind = known.Length > 0 ? $" ({known})" : "";
+        return $"\"{CleanName(request.PhoneName)}\"{kind} wants to pair with this PC. Allow it only if you just scanned the code yourself and {SpkiFingerprint.Spaced(match)} is the code it shows too.";
+    }
 }
