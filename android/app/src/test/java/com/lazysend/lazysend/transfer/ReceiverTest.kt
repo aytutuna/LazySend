@@ -124,6 +124,12 @@ class ReceiverTest {
         assertFalse(isWebLink("https:///path"))
         assertFalse(isWebLink("javascript:alert(1)"))
         assertFalse(isWebLink("see https://alazy.app"))
+        assertTrue(isWebLink("https://alazy.app?x=1"))
+    }
+
+    @Test
+    fun aHugeLinkIsRefusedWithoutMatching() {
+        assertFalse(isWebLink("https://" + "a".repeat(1_000_000) + " b"))
     }
 
     @Test

@@ -9,6 +9,7 @@ import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.lazysend.lazysend.R
 import com.lazysend.lazysend.data.EntryKind
+import com.lazysend.lazysend.host.MAX_URL_LENGTH
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
@@ -102,8 +103,8 @@ class Clipper(private val context: Context) {
 }
 
 /** Only http and https addresses get an Open button; a received "link" with any other scheme is shown as text. */
-fun isWebLink(text: String): Boolean = WEB_LINK.matches(text.trim())
+fun isWebLink(text: String): Boolean = text.length <= MAX_URL_LENGTH && WEB_LINK.matches(text.trim())
 
-private val WEB_LINK = Regex("""^https?://[^\s/?#]+\S*$""", RegexOption.IGNORE_CASE)
+private val WEB_LINK = Regex("""^https?://[^\s/?#]+(?:[/?#]\S*)?$""", RegexOption.IGNORE_CASE)
 
 fun receivedKind(sentAs: String, body: String) = if (sentAs == "link" && isWebLink(body)) EntryKind.Link else EntryKind.Text
