@@ -114,16 +114,33 @@ inline fun <reified T> loadJson(file: File, empty: () -> T): T {
 
 inline fun <reified T> File.saveJson(value: T) = writeAtomically(LinkJson.encodeToString(value))
 
+// A right-to-left override makes "invoice‮fdp.exe" read as "invoiceexe.pdf".
+private fun isBidiControl(cp: Int) = cp == 0x061C || cp == 0x200E || cp == 0x200F || cp in 0x202A..0x202E || cp in 0x2066..0x2069
+
 /** A file name made safe for any file system: separators and characters some refuse become `_`, cut to 240 UTF-8 bytes keeping the extension. */
 fun cleanFileName(name: String?, fallback: String = "file"): String {
-    val text = name.orEmpty().map { if (it < ' ' || it in '\u007F'..'\u009F' || it in "/\\:*?\"<>|") '_' else it }.joinToString("").trim(' ', '.')
+    val safe = StringBuilder()
+    name.orEmpty().codePoints().forEach { cp ->
+        val bad = cp < 0x20 || cp in 0x7F..0x9F || isBidiControl(cp) || (cp < 0x80 && "/\\:*?\"<>|".indexOf(cp.toChar()) >= 0)
+        safe.appendCodePoint(if (bad) '_'.code else cp)
+    }
+    val text = safe.toString().trim(' ', '.')
     if (text.isEmpty()) return fallback
-    if (text.toByteArray().size <= MAX_FILE_NAME_BYTES) return text
     val dot = text.lastIndexOf('.')
     val extension = if (dot > 0 && text.length - dot <= 16) text.substring(dot) else ""
-    var stem = text.substring(0, text.length - extension.length)
-    while (stem.isNotEmpty() && (stem + extension).toByteArray().size > MAX_FILE_NAME_BYTES) stem = stem.substring(0, stem.offsetByCodePoints(stem.length, -1))
-    return stem.trim(' ', '.').ifEmpty { fallback } + extension
+    val budget = MAX_FILE_NAME_BYTES - extension.toByteArray().size
+    val stem = StringBuilder()
+    var bytes = 0
+    var i = 0
+    while (i < text.length - extension.length) {
+        val cp = text.codePointAt(i)
+        val size = String(Character.toChars(cp)).toByteArray().size
+        if (bytes + size > budget) break
+        bytes += size
+        stem.appendCodePoint(cp)
+        i += Character.charCount(cp)
+    }
+    return stem.toString().trim(' ', '.').ifEmpty { fallback } + extension
 }
 
 const val MAX_FILE_NAME_BYTES = 240

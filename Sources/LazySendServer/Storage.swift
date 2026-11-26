@@ -127,12 +127,17 @@ enum JsonFile {
 public enum FileNames {
     static let maxBytes = 240
 
+    // A right-to-left override makes "invoice\u{202E}fdp.exe" read as "invoiceexe.pdf".
+    private static func isBidiControl(_ scalar: Unicode.Scalar) -> Bool {
+        [0x061C, 0x200E, 0x200F].contains(scalar.value) || (0x202A...0x202E).contains(scalar.value) || (0x2066...0x2069).contains(scalar.value)
+    }
+
     /// A name that can be created: separators, ':' and control characters become '_', leading and trailing dots
     /// and spaces go, and the stem is cut so the whole is at most `maxBytes` UTF-8 bytes (room for " (2)").
     public static func clean(_ name: String?, fallback: String = "file") -> String {
         var text = ""
         for scalar in (name ?? "").unicodeScalars {
-            let bad = scalar.value < 0x20 || (0x7F...0x9F).contains(scalar.value) || "/\\:".unicodeScalars.contains(scalar)
+            let bad = scalar.value < 0x20 || (0x7F...0x9F).contains(scalar.value) || isBidiControl(scalar) || "/\\:".unicodeScalars.contains(scalar)
             text.unicodeScalars.append(bad ? "_" : scalar)
         }
         var cleaned = text.trimmingCharacters(in: .whitespaces)

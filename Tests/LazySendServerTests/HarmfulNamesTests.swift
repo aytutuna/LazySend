@@ -29,6 +29,9 @@ final class HarmfulNamesTests: XCTestCase {
             if clean.unicodeScalars.contains(where: { "/\\:".unicodeScalars.contains($0) || $0.value < 0x20 || (0x7F...0x9F).contains($0.value) }) {
                 failures.append("\(label): a separator or control character is left")
             }
+            if clean.unicodeScalars.contains(where: { [0x061C, 0x200E, 0x200F].contains($0.value) || (0x202A...0x202E).contains($0.value) || (0x2066...0x2069).contains($0.value) }) {
+                failures.append("\(label): a direction control is left")
+            }
             if clean.hasSuffix(".") || clean.hasSuffix(" ") { failures.append("\(label): ends with a dot or space") }
             if let keep = item["keep"] as? String, !clean.hasSuffix(keep) { failures.append("\(label): lost the extension") }
             if let exact = item["exact"] as? String, clean != exact { failures.append("\(label): expected \(exact)") }

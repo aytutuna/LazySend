@@ -37,11 +37,18 @@ class HarmfulNamesTest {
             if (clean.isEmpty() || clean.toByteArray().size > maxBytes) failures += "$label: empty or too long"
             if (clean.trim('.').isEmpty()) failures += "$label: only dots"
             if (clean.any { it == '/' || it == '\\' || it == ':' || it < ' ' || it in '\u007F'..'\u009F' }) failures += "$label: a separator or control character is left"
+            if (clean.any { it == '؜' || it == '‎' || it == '‏' || it in '‪'..'‮' || it in '⁦'..'⁩' }) failures += "$label: a direction control is left"
             if (clean.endsWith('.') || clean.endsWith(' ')) failures += "$label: ends with a dot or space"
             if (!wellFormed(clean)) failures += "$label: not well-formed"
             case.jsonObject["keep"]?.jsonPrimitive?.content?.let { if (!clean.endsWith(it)) failures += "$label: lost the extension" }
             case.jsonObject["exact"]?.jsonPrimitive?.content?.let { if (clean != it) failures += "$label: expected $it" }
         }
         assertTrue(failures.joinToString("\n"), failures.isEmpty())
+    }
+
+    @Test
+    fun aHugeNameIsCutInOnePass() {
+        val clean = cleanFileName("a".repeat(5_000_000) + ".txt")
+        assertTrue(clean.endsWith(".txt") && clean.toByteArray().size <= 240)
     }
 }

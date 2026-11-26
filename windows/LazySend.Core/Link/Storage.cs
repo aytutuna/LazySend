@@ -101,6 +101,9 @@ public static class FileNames
         ["CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$", .. Enumerable.Range(0, 10).Select(i => $"COM{i}"), .. Enumerable.Range(0, 10).Select(i => $"LPT{i}"),
          .. "¹²³".SelectMany(d => new[] { $"COM{d}", $"LPT{d}" })];
 
+    // A right-to-left override makes "invoice‮fdp.exe" read as "invoiceexe.pdf".
+    private static bool IsBidiControl(int value) => value is 0x061C or 0x200E or 0x200F or (>= 0x202A and <= 0x202E) or (>= 0x2066 and <= 0x2069);
+
     /// <summary>
     /// A name that can be created: path separators and characters Windows refuses become '_', trailing
     /// dots and spaces go, a device name such as NUL gets '_' in front, and the stem is cut so the whole
@@ -111,7 +114,7 @@ public static class FileNames
         var text = new StringBuilder();
         foreach (var rune in (name ?? "").EnumerateRunes())
         {
-            bool bad = rune.Value < 0x20 || rune.Value is >= 0x7F and <= 0x9F || (rune.Value < 0x80 && "<>:\"/\\|?*".Contains((char)rune.Value));
+            bool bad = rune.Value < 0x20 || rune.Value is >= 0x7F and <= 0x9F || IsBidiControl(rune.Value) || (rune.Value < 0x80 && "<>:\"/\\|?*".Contains((char)rune.Value));
             text.Append(bad ? "_" : rune.ToString());
         }
         string cleaned = text.ToString().Trim().TrimEnd('.', ' ');

@@ -43,6 +43,7 @@ public class HarmfulNamesTests
             if (clean.Length == 0 || Encoding.UTF8.GetByteCount(clean) > maxBytes) failures.Add($"{label}: empty or too long");
             if (clean.Trim('.').Length == 0) failures.Add($"{label}: only dots");
             if (clean.Any(ch => ch is '/' or '\\' or ':' || ch < 0x20 || ch is >= (char)0x7F and <= (char)0x9F)) failures.Add($"{label}: a separator or control character is left");
+            if (clean.Any(ch => ch is '؜' or '‎' or '‏' || ch is >= '‪' and <= '‮' || ch is >= '⁦' and <= '⁩')) failures.Add($"{label}: a direction control is left");
             if (clean.EndsWith('.') || clean.EndsWith(' ')) failures.Add($"{label}: ends with a dot or space");
             if (!IsWellFormed(clean)) failures.Add($"{label}: not well-formed");
             if (c.TryGetProperty("keep", out var keep) && !clean.EndsWith(keep.GetString()!)) failures.Add($"{label}: lost the extension");
