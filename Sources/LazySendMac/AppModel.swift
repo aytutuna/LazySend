@@ -78,6 +78,7 @@ public final class AppModel: ObservableObject {
     @Published public private(set) var phones: [PhoneRow] = []
     @Published public private(set) var timeline: [TimelineRow] = []
     @Published public var selectedPhoneId: String?
+    @Published public var removalAsked: PhoneRow?
     @Published public var notice: String?
     @Published public private(set) var pairing: PairingState?
     @Published public private(set) var approval: PairApproval?
@@ -268,6 +269,16 @@ public final class AppModel: ObservableObject {
         if ago < 120 { return "Connected just now" }
         if ago < 3600 { return "Seen \(Int(ago / 60)) minutes ago" }
         return "Seen " + seen.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    public func askToRemove(phone id: String) {
+        removalAsked = phones.first { $0.id == id }
+    }
+
+    public func confirmRemoval() {
+        guard let row = removalAsked else { return }
+        removalAsked = nil
+        remove(phone: row.id)
     }
 
     public func remove(phone id: String) {

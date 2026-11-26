@@ -41,6 +41,17 @@ struct MainView: View {
                 ConnectSheet(model: connecting) { model.closeConnecting() }
             }
         }
+        .confirmationDialog(
+            model.removalAsked.map { "Remove \($0.name)?" } ?? "Remove this device?",
+            isPresented: Binding(get: { model.removalAsked != nil }, set: { if !$0 { model.removalAsked = nil } }),
+            presenting: model.removalAsked
+        ) { _ in
+            Button("Remove", role: .destructive) { model.confirmRemoval() }
+            Button("Cancel", role: .cancel) {}
+        } message: { row in
+            Text(row.computer ? "This Mac will stop sending to and receiving from this computer. Pair again to bring it back."
+                              : "This phone will stop sending to and receiving from this Mac. Pair again to bring it back.")
+        }
     }
 
     private var header: some View {
@@ -139,7 +150,7 @@ private struct Sidebar: View {
                 VStack(spacing: 2) {
                     ForEach(model.phones) { phone in
                         PhoneButton(phone: phone, selected: phone.id == model.selectedPhoneId, select: { model.selectedPhoneId = phone.id },
-                                    remove: { model.remove(phone: phone.id) })
+                                    remove: { model.askToRemove(phone: phone.id) })
                     }
                 }
             }

@@ -170,6 +170,25 @@ final class ModelTests: XCTestCase {
         XCTAssertTrue(model.timeline.first?.detail.hasPrefix("Cancelled") == true)
     }
 
+    func testAskingToRemoveWaitsForTheAnswer() async throws {
+        let phone = try await fixture.pair()
+        model.askToRemove(phone: phone.id)
+        XCTAssertEqual(model.removalAsked?.id, phone.id)
+        XCTAssertEqual(model.phones.count, 1)
+        model.removalAsked = nil
+        model.confirmRemoval()
+        XCTAssertEqual(model.phones.count, 1)
+    }
+
+    func testConfirmingRemovesTheAskedDevice() async throws {
+        let phone = try await fixture.pair()
+        model.askToRemove(phone: phone.id)
+        model.confirmRemoval()
+        await fixture.settle()
+        XCTAssertNil(model.removalAsked)
+        XCTAssertTrue(model.phones.isEmpty)
+    }
+
     func testReceivedTextShowsInTheTimelineAndCanBeCopied() async throws {
         let phone = try await fixture.pair()
         model.copyReceivedText = true
