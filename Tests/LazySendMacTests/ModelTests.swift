@@ -175,7 +175,6 @@ final class ModelTests: XCTestCase {
         model.askToRemove(phone: phone.id)
         XCTAssertEqual(model.removalAsked?.id, phone.id)
         XCTAssertEqual(fixture.service.devices.devices.count, 1)
-        XCTAssertEqual(fixture.service.devices.devices.count, 1)
     }
 
     func testAWindowsGuestCountsAsAComputer() {

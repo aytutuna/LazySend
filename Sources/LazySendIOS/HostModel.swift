@@ -598,7 +598,7 @@ final class HostModel: ObservableObject {
                               check: code.checkCode, expires: Date().addingTimeInterval(PairingSession.lifetime))
         listening = true
         if ProcessInfo.processInfo.arguments.contains("-demoApproval") {
-            approval = HostApproval(name: "Pixel 9", platform: "android", match: code.checkCode)
+            approval = HostApproval(name: "Pixel 9", platform: "Android", match: code.checkCode)
         }
     }
 }

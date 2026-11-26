@@ -43,7 +43,7 @@ final class PairingLinkTests: XCTestCase {
         _ = try await LinkClient(endpoint: harness.endpoint, pin: harness.service.fingerprint)
             .pair(token: code.token, phoneId: newId(), phoneName: "Phone", appVersion: "1", platform: String(repeating: "x", count: 8000))
         let device = try XCTUnwrap(harness.service.devices.devices.first)
-        XCTAssertEqual(PairedDeviceStore.knownPlatform(device.platform), "")
+        XCTAssertLessThanOrEqual(device.platform.utf8.count, DisplayName.maxBytes)
     }
 
     func testOnlyTheHashOfTheSecretIsStored() async throws {
