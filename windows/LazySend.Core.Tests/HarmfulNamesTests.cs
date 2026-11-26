@@ -52,4 +52,13 @@ public class HarmfulNamesTests
         }
         Assert.True(failures.Count == 0, string.Join("\n", failures));
     }
+
+    [Fact]
+    public void AHugeNameIsCutInOnePass()
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        string clean = FileNames.Clean(new string('a', 5_000_000) + ".txt");
+        Assert.True(clean.EndsWith(".txt") && Encoding.UTF8.GetByteCount(clean) <= FileNames.MaxBytes);
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(5));
+    }
 }

@@ -125,9 +125,14 @@ public static class FileNames
         if (Encoding.UTF8.GetByteCount(extension) > 32) extension = "";
         // Windows reads everything before the first dot as the device name, so NUL.tar.gz is as reserved as NUL.
         if (ReservedDeviceNames.Contains(cleaned.Split('.')[0].TrimEnd(' '), StringComparer.OrdinalIgnoreCase)) stem = "_" + stem;
-        while (Encoding.UTF8.GetByteCount(stem) + Encoding.UTF8.GetByteCount(extension) > MaxBytes) stem = stem[..^1];
-        // A cut can leave half a surrogate pair.
-        if (stem.Length > 0 && char.IsHighSurrogate(stem[^1])) stem = stem[..^1];
+        int budget = MaxBytes - Encoding.UTF8.GetByteCount(extension), bytes = 0, length = 0;
+        foreach (var rune in stem.EnumerateRunes())
+        {
+            if (bytes + rune.Utf8SequenceLength > budget) break;
+            bytes += rune.Utf8SequenceLength;
+            length += rune.Utf16SequenceLength;
+        }
+        stem = stem[..length];
         stem = stem.TrimEnd('.', ' ');
         return (stem.Length == 0 ? fallback : stem) + extension;
     }
