@@ -43,6 +43,37 @@ public class PairingTests
         Assert.Equal(["192.168.1.5", "192.168.42.10"], (await Harness.ReadAsync<HelloResponse>(hello)).Addresses);
     }
 
+    [Theory]
+    [InlineData("ios", "iPhone")]
+    [InlineData("iPad", "iPad")]
+    [InlineData(" Android ", "Android")]
+    [InlineData("mac", "Mac")]
+    [InlineData("windows", "Windows")]
+    [InlineData("Pixel 9 -- tap Allow, the code is 123456", "")]
+    [InlineData("", "")]
+    public void TheQuestionShowsOnlyAKnownType(string sent, string shown) =>
+        Assert.Equal(shown, PairedDeviceStore.KnownPlatform(sent));
+
+    [Fact]
+    public async Task AnEightThousandCharacterTypeIsNeverShown()
+    {
+        await using var h = new Harness();
+        PairRequest? asked = null;
+        h.Service.Router.ApprovePairing = (request, _, _) =>
+        {
+            asked = request;
+            return Task.FromResult(true);
+        };
+        var uri = h.Service.OpenPairing(["127.0.0.1"]);
+        using var phone = new Phone(h, uri.FingerprintBytes!, Protocol.NewId());
+
+        using var response = await phone.SendAsync(HttpMethod.Post, Protocol.PairPath,
+            Harness.Json(new PairRequest(uri.Token, phone.Id, "Phone", new string('x', 8000), "1")), authenticated: false);
+
+        Assert.NotNull(asked);
+        Assert.Equal("", PairedDeviceStore.KnownPlatform(asked!.Platform));
+    }
+
     [Fact]
     public async Task DeclinedPairingStoresNothing()
     {

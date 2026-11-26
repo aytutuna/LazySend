@@ -182,4 +182,15 @@ public sealed class PairedDeviceStore
         }
         return text.ToString().Trim();
     }
+
+    /// <summary>The device type as the pairing question shows it: one of four known names, or empty.</summary>
+    public static string KnownPlatform(string? platform) => (platform ?? "").Trim().ToLowerInvariant() switch
+    {
+        "ios" or "iphone" => "iPhone",
+        "ipad" or "ipados" => "iPad",
+        "android" => "Android",
+        "windows" => "Windows",
+        "mac" or "macos" => "Mac",
+        _ => "",
+    };
 }

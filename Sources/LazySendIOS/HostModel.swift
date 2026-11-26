@@ -376,7 +376,7 @@ final class HostModel: ObservableObject {
             await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
                 settleApproval(false)
                 approvalAnswer = continuation
-                approval = HostApproval(name: PairedDeviceStore.cleanName(request.phoneName), platform: request.platform, match: match)
+                approval = HostApproval(name: PairedDeviceStore.cleanName(request.phoneName), platform: PairedDeviceStore.knownPlatform(request.platform), match: match)
             }
         } onCancel: {
             Task { @MainActor in self.settleApproval(false) }

@@ -346,7 +346,7 @@ public final class AppModel: ObservableObject {
                 Task { @MainActor in
                     self.settleApproval(false)
                     self.approvalAnswer = continuation
-                    self.approval = PairApproval(name: PairedDeviceStore.cleanName(request.phoneName), platform: request.platform, match: match)
+                    self.approval = PairApproval(name: PairedDeviceStore.cleanName(request.phoneName), platform: PairedDeviceStore.knownPlatform(request.platform), match: match)
                     NSApplication.shared.activate(ignoringOtherApps: true)
                 }
             }

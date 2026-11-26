@@ -29,6 +29,23 @@ final class PairingLinkTests: XCTestCase {
         XCTAssertEqual(device.platform, "ios")
     }
 
+    func testTheQuestionShowsOnlyAKnownType() {
+        XCTAssertEqual(PairedDeviceStore.knownPlatform("ios"), "iPhone")
+        XCTAssertEqual(PairedDeviceStore.knownPlatform("iPad"), "iPad")
+        XCTAssertEqual(PairedDeviceStore.knownPlatform(" Android "), "Android")
+        XCTAssertEqual(PairedDeviceStore.knownPlatform("mac"), "Mac")
+        XCTAssertEqual(PairedDeviceStore.knownPlatform("Pixel 9 -- tap Allow, the code is 123456"), "")
+        XCTAssertEqual(PairedDeviceStore.knownPlatform(nil), "")
+    }
+
+    func testAnEightThousandCharacterTypeIsNeverShown() async throws {
+        let code = harness.service.openPairing(addresses: ["127.0.0.1"])
+        _ = try await LinkClient(endpoint: harness.endpoint, pin: harness.service.fingerprint)
+            .pair(token: code.token, phoneId: newId(), phoneName: "Phone", appVersion: "1", platform: String(repeating: "x", count: 8000))
+        let device = try XCTUnwrap(harness.service.devices.devices.first)
+        XCTAssertEqual(PairedDeviceStore.knownPlatform(device.platform), "")
+    }
+
     func testOnlyTheHashOfTheSecretIsStored() async throws {
         let phone = try await harness.pair()
         let text = try String(contentsOf: harness.paths.devicesFile, encoding: .utf8)

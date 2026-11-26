@@ -137,4 +137,16 @@ public final class PairedDeviceStore: @unchecked Sendable {
     public static func cleanName(_ name: String?) -> String {
         DisplayName.clean(name)
     }
+
+    /// The device type as the pairing question shows it: one of four known names, or empty.
+    public static func knownPlatform(_ platform: String?) -> String {
+        switch (platform ?? "").trimmingCharacters(in: .whitespaces).lowercased() {
+        case "ios", "iphone": return "iPhone"
+        case "ipad", "ipados": return "iPad"
+        case "android": return "Android"
+        case "windows": return "Windows"
+        case "mac", "macos": return "Mac"
+        default: return ""
+        }
+    }
 }
