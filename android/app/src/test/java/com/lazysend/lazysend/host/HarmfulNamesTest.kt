@@ -38,7 +38,7 @@ class HarmfulNamesTest {
             if (clean.isEmpty() || clean.toByteArray().size > maxBytes) failures += "$label: empty or too long"
             if (clean.trim('.').isEmpty()) failures += "$label: only dots"
             if (clean.any { it == '/' || it == '\\' || it == ':' || it < ' ' || it in '\u007F'..'\u009F' }) failures += "$label: a separator or control character is left"
-            if (clean.any { it == '؜' || it == '‎' || it == '‏' || it in '‪'..'‮' || it in '⁦'..'⁩' }) failures += "$label: a direction control is left"
+            if (clean.any { it == '\u061c' || it == '\u200e' || it == '\u200f' || it in '\u202a'..'\u202e' || it in '\u2066'..'\u2069' }) failures += "$label: a direction control is left"
             if (clean.endsWith('.') || clean.endsWith(' ')) failures += "$label: ends with a dot or space"
             if (!wellFormed(clean)) failures += "$label: not well-formed"
             case.jsonObject["keep"]?.jsonPrimitive?.content?.let { if (!clean.endsWith(it)) failures += "$label: lost the extension" }

@@ -114,7 +114,7 @@ inline fun <reified T> loadJson(file: File, empty: () -> T): T {
 
 inline fun <reified T> File.saveJson(value: T) = writeAtomically(LinkJson.encodeToString(value))
 
-// A right-to-left override makes "invoice‮fdp.exe" read as "invoiceexe.pdf".
+// A right-to-left override makes "invoice\u202efdp.exe" read as "invoiceexe.pdf".
 private fun isBidiControl(cp: Int) = cp == 0x061C || cp == 0x200E || cp == 0x200F || cp in 0x202A..0x202E || cp in 0x2066..0x2069
 
 /** A file name made safe for any file system: separators and characters some refuse become `_`, cut to 240 UTF-8 bytes keeping the extension. */

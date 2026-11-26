@@ -101,7 +101,7 @@ public static class FileNames
         ["CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$", .. Enumerable.Range(0, 10).Select(i => $"COM{i}"), .. Enumerable.Range(0, 10).Select(i => $"LPT{i}"),
          .. "¹²³".SelectMany(d => new[] { $"COM{d}", $"LPT{d}" })];
 
-    // A right-to-left override makes "invoice‮fdp.exe" read as "invoiceexe.pdf".
+    // A right-to-left override makes "invoice\u202efdp.exe" read as "invoiceexe.pdf".
     private static bool IsBidiControl(int value) => value is 0x061C or 0x200E or 0x200F or (>= 0x202A and <= 0x202E) or (>= 0x2066 and <= 0x2069);
 
     /// <summary>
