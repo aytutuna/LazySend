@@ -451,6 +451,35 @@
           "expect": "accepted"
         }
       ]
+    },
+    {
+      "name": "a clock that goes back does not revive an expired session",
+      "attempts": [
+        {
+          "token": "ZZZZZZZZ",
+          "at": 100,
+          "peer": "10.0.0.1",
+          "expect": "wrongToken"
+        },
+        {
+          "token": "$token",
+          "at": 300,
+          "peer": "10.0.0.1",
+          "expect": "expired"
+        },
+        {
+          "token": "$token",
+          "at": 100,
+          "peer": "10.0.0.1",
+          "expect": "expired"
+        },
+        {
+          "token": "$shortCode",
+          "at": 0,
+          "peer": "10.0.0.1",
+          "expect": "expired"
+        }
+      ]
     }
   ]
 }
