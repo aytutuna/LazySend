@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Loads the Rust link core through its generated C# bindings. Not part of LazySend.sln: it needs the native library
+       and the bindings built first (scripts/rust_link_cs.sh), with RustLinkDir pointing at the folder that holds both. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);CS8981;CS1591;CS0108</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="$(RustLinkDir)/lazy_link_ffi.cs" />
+    <None Include="$(RustLinkDir)/lazy_link_ffi.dll" CopyToOutputDirectory="PreserveNewest" Link="lazy_link_ffi.dll" />
+  </ItemGroup>
+
+</Project>
