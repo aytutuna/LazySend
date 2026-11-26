@@ -320,7 +320,7 @@ class MainActivity : ComponentActivity() {
     private fun open(entry: TimelineEntry) {
         val intent = if (entry.kind == EntryKind.Link) {
             if (!isWebLink(entry.title)) return
-            Intent(Intent.ACTION_VIEW, Uri.parse(entry.title))
+            Intent(Intent.ACTION_VIEW, Uri.parse(entry.title.trim()).normalizeScheme())
         } else {
             Intent(Intent.ACTION_VIEW).setDataAndType(shareableUri(this, Uri.parse(entry.uri ?: return)), entry.mime ?: "*/*")
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
